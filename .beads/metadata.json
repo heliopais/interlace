@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "interlace",
+  "project_id": "bf1d58ec-8433-4767-bcb3-bf052fcede1f"
+}
