@@ -45,11 +45,11 @@ html_title = "interlace"
 
 html_theme_options = {
     "light_css_variables": {
-        "font-stack": "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        "font-stack": "'Lora', Georgia, 'Times New Roman', serif",
         "font-stack--monospace": "'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace",
     },
     "dark_css_variables": {
-        "font-stack": "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        "font-stack": "'Lora', Georgia, 'Times New Roman', serif",
         "font-stack--monospace": "'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace",
     },
     "sidebar_hide_name": False,
