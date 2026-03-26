@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "interlace"
+name = "interlace-lme"
 version = "0.1.0"
 description = "Joint REML estimation for linear mixed models with crossed random intercepts using sparse design matrices"
 readme = "README.md"
