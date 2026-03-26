@@ -9,6 +9,9 @@ subtrees:
   - file: installation
   - file: quickstart
   - file: examples
+- caption: Releases
+  entries:
+  - file: changelog
 - caption: Development
   entries:
   - file: contributing
