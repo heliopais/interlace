@@ -70,3 +70,13 @@ class CrossedLMEResult:
     # gpgap compatibility
     _gpgap_group_col: str
     _gpgap_vc_cols: list[str] = field(default_factory=list)
+
+    def predict(
+        self,
+        newdata: pd.DataFrame | None = None,
+        include_re: bool = True,
+    ) -> np.ndarray:
+        """Return predictions; see :func:`interlace.predict.predict`."""
+        from interlace.predict import predict
+
+        return predict(self, newdata=newdata, include_re=include_re)
