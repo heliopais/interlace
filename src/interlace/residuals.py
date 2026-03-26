@@ -47,7 +47,7 @@ def hlm_resid(
     type: str = "marginal",  # noqa: A002
     standardized: bool = False,
     level: int | str = 1,
-) -> pd.DataFrame:
+) -> Any:
     """Extract residuals from a fitted linear mixed model.
 
     Parameters
@@ -88,10 +88,10 @@ def hlm_resid(
             # For statsmodels, .frame is already a pandas DataFrame.
             pd_frame = getattr(model.model.data, "_pandas_frame", None)
             if pd_frame is None:
-                pd_frame = native_frame  # type: ignore[assignment]
+                pd_frame = native_frame
             result_df = pd.concat(
                 [pd_frame.reset_index(drop=True), res_df],
-                axis=1,  # type: ignore[arg-type]
+                axis=1,
             )
             return _to_native(result_df, like=native_frame)
 

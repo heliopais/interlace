@@ -14,7 +14,7 @@ from interlace.residuals import hlm_resid
 
 def hlm_augment(
     model: Any, level: int = 1, include_influence: bool = True
-) -> pd.DataFrame:
+) -> Any:
     """Combine residuals and (optionally) influence diagnostics into one DataFrame.
 
     Parameters

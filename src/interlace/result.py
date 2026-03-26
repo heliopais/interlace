@@ -7,6 +7,7 @@ exposing all attributes accessed by the gpgap diagnostics pipeline.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -21,7 +22,7 @@ class _DataWrapper:
     ``_pandas_frame`` caches the pandas version for internal use.
     """
 
-    frame: object  # native type as passed by the caller
+    frame: Any  # native type as passed by the caller (pandas, polars, etc.)
     _pandas_frame: pd.DataFrame = field(repr=False, default=None)  # type: ignore[assignment]
 
 
