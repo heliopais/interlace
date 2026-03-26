@@ -1,18 +1,20 @@
 """Formula parsing for interlace — statsmodels-compatible API.
 
-Uses statsmodels FormulaManager (which wraps formulaic) to build the
-fixed-effects design matrix from a standard patsy-syntax formula string.
-Groups are a separate parameter, mirroring MixedLM.from_formula().
+Uses formulaic to build the fixed-effects design matrix from a standard
+formula string. Groups are a separate parameter, mirroring
+MixedLM.from_formula(). Any narwhals-compatible frame (pandas, polars, …)
+is accepted via narwhals column extraction.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
+import formulaic  # type: ignore[import-untyped]
+import narwhals as nw
 import numpy as np
-import pandas as pd
-import patsy
 
 
 @dataclass
@@ -133,13 +135,14 @@ class ParsedFormula:
 
 
 def extract_group_factors(
-    data: pd.DataFrame,
+    data: Any,
     group_cols: list[str],
 ) -> list[tuple[str, np.ndarray, int]]:
     """Extract grouping factor integer codes from a DataFrame.
 
-    Uses ``pd.factorize`` (the same mechanism as statsmodels internally) to
-    convert each group column into sorted integer codes.
+    Accepts any narwhals-compatible frame (pandas, polars, …). Uses
+    ``np.unique`` with ``return_inverse=True`` to produce sorted integer codes
+    equivalent to ``pd.factorize(..., sort=True)``.
 
     Parameters
     ----------
@@ -154,24 +157,29 @@ def extract_group_factors(
         ``codes`` is a 1-D integer array of length ``n_obs``;
         ``n_levels`` is the number of unique levels.
     """
+    nw_data = nw.from_native(data, eager_only=True)
     result = []
     for col in group_cols:
-        codes, uniques = pd.factorize(data[col], sort=True)
-        result.append((col, codes.astype(np.intp), len(uniques)))
+        arr = nw_data[col].to_numpy()
+        _, inverse = np.unique(arr, return_inverse=True)
+        n_levels = int(np.max(inverse)) + 1
+        result.append((col, inverse.astype(np.intp), n_levels))
     return result
 
 
 def parse_formula(
     formula: str,
-    data: pd.DataFrame,
+    data: Any,
     groups: str | np.ndarray,
 ) -> ParsedFormula:
     """Parse a fixed-effects formula and extract response + groups.
 
+    Accepts any narwhals-compatible frame (pandas, polars, …).
+
     Parameters
     ----------
     formula:
-        Patsy-syntax formula string, e.g. ``"y ~ x1 + x2"``.
+        Formula string, e.g. ``"y ~ x1 + x2"``.
     data:
         DataFrame containing all variables referenced in *formula* and *groups*.
     groups:
@@ -182,25 +190,27 @@ def parse_formula(
     ParsedFormula
         Dataclass with ``X``, ``y``, ``groups``, and ``term_names``.
     """
+    nw_data = nw.from_native(data, eager_only=True)
+
     # Validate groups
     if isinstance(groups, str):
-        if groups not in data.columns:
+        if groups not in nw_data.columns:
             raise ValueError(
                 f"groups column '{groups}' not found in data "
-                f"(available: {list(data.columns)})"
+                f"(available: {nw_data.columns})"
             )
-        groups_arr: np.ndarray = np.asarray(data[groups])
+        groups_arr: np.ndarray = nw_data[groups].to_numpy()
     else:
         groups_arr = np.asarray(groups)
 
-    # Use patsy.dmatrices (the same call statsmodels MixedLM.from_formula uses)
-    endog_dm, exog_dm = patsy.dmatrices(formula, data, return_type="dataframe")
+    # formulaic accepts narwhals DataFrames natively
+    matrices = formulaic.model_matrix(formula, nw_data)
 
-    term_names = list(exog_dm.columns)
+    term_names = list(matrices.rhs.columns)
 
     return ParsedFormula(
-        X=np.asarray(exog_dm),
-        y=np.asarray(endog_dm).squeeze(),
+        X=np.asarray(matrices.rhs),
+        y=np.asarray(matrices.lhs).squeeze(),
         groups=groups_arr,
         term_names=term_names,
     )

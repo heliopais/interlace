@@ -6,10 +6,10 @@ and horizontally stacks them into the joint random-effects design matrix Z.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+import narwhals as nw
 import numpy as np
-import pandas as pd
 import scipy.sparse as sp
 
 if TYPE_CHECKING:
@@ -59,7 +59,7 @@ def build_joint_z(
 
 def build_z_block(
     spec: RandomEffectSpec,
-    data: pd.DataFrame,
+    data: Any,
     codes: np.ndarray,
     n_levels: int,
 ) -> sp.csc_matrix:
@@ -91,8 +91,9 @@ def build_z_block(
     if spec.intercept:
         col_blocks.append(build_indicator_matrix(codes, n_levels))
 
+    nw_data = nw.from_native(data, eager_only=True)
     for pred in spec.predictors:
-        x = np.asarray(data[pred], dtype=float)
+        x = nw_data[pred].to_numpy().astype(float)
         Z_slope = sp.csc_matrix((x, (rows, codes)), shape=(n_obs, n_levels))
         col_blocks.append(Z_slope)
 
@@ -101,7 +102,7 @@ def build_z_block(
 
 def build_joint_z_from_specs(
     specs: list[RandomEffectSpec],
-    data: pd.DataFrame,
+    data: Any,
 ) -> sp.csc_matrix:
     """Build the joint Z matrix from a list of RandomEffectSpec objects.
 
@@ -119,10 +120,12 @@ def build_joint_z_from_specs(
     -------
     scipy.sparse.csc_matrix of shape (n_obs, sum(spec.n_terms * n_levels_j)).
     """
+    nw_data = nw.from_native(data, eager_only=True)
     col_blocks: list[sp.csc_matrix] = []
     for spec in specs:
-        codes, uniques = pd.factorize(data[spec.group], sort=True)
+        arr = nw_data[spec.group].to_numpy()
+        _, codes = np.unique(arr, return_inverse=True)
         codes = codes.astype(np.intp)
-        n_levels = len(uniques)
-        col_blocks.append(build_z_block(spec, data, codes, n_levels))
+        n_levels = int(np.max(codes)) + 1
+        col_blocks.append(build_z_block(spec, nw_data, codes, n_levels))
     return sp.hstack(col_blocks, format="csc")
