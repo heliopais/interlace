@@ -19,9 +19,9 @@ import pandas as pd
 from interlace import fit
 
 result = fit(
-    formula="wage ~ age + experience",
+    formula="score ~ hours_studied + prior_gpa",
     data=df,
-    groups=["worker_id", "company_id"],   # crossed random intercepts
+    groups=["student_id", "school_id"],   # crossed random intercepts
 )
 
 print(result.fe_params)          # fixed-effect coefficients
