@@ -44,9 +44,6 @@ html_theme = "furo"
 html_title = "interlace"
 
 html_theme_options = {
-    "source_repository": "https://github.com/heliopais/interlace",
-    "source_branch": "main",
-    "source_directory": "docs/source/",
     "light_css_variables": {
         "font-stack": "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
         "font-stack--monospace": "'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace",

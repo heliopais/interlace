@@ -15,68 +15,6 @@ code, pre, kbd, samp {
     font-family: var(--font-stack--monospace);
 }
 
-/* --- Flares: subtle gradient accents in the sidebar header area --- */
-
-.sidebar-brand {
-    position: relative;
-    overflow: hidden;
-}
-
-.sidebar-brand::before {
-    content: "";
-    position: absolute;
-    top: -60px;
-    right: -40px;
-    width: 180px;
-    height: 180px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(100, 160, 255, 0.18) 0%, transparent 70%);
-    pointer-events: none;
-    z-index: 0;
-}
-
-.sidebar-brand::after {
-    content: "";
-    position: absolute;
-    bottom: -30px;
-    left: -20px;
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(180, 100, 255, 0.12) 0%, transparent 70%);
-    pointer-events: none;
-    z-index: 0;
-}
-
-/* Flare behind the page title on the main content area */
-article > .section:first-child h1,
-article > section:first-child h1 {
-    position: relative;
-}
-
-article > .section:first-child h1::before,
-article > section:first-child h1::before {
-    content: "";
-    position: absolute;
-    top: -20px;
-    left: -30px;
-    width: 300px;
-    height: 120px;
-    border-radius: 50%;
-    background: radial-gradient(ellipse, rgba(100, 160, 255, 0.10) 0%, transparent 70%);
-    pointer-events: none;
-    z-index: -1;
-}
-
-/* Dark mode variants */
-[data-theme="dark"] .sidebar-brand::before {
-    background: radial-gradient(circle, rgba(100, 160, 255, 0.12) 0%, transparent 70%);
-}
-
-[data-theme="dark"] .sidebar-brand::after {
-    background: radial-gradient(circle, rgba(180, 100, 255, 0.10) 0%, transparent 70%);
-}
-
 /* --- GitHub link badge in the sidebar --- */
 .github-link {
     display: inline-flex;
