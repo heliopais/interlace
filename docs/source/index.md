@@ -5,8 +5,8 @@
 [![Docs](https://github.com/heliopais/interlace/actions/workflows/docs.yml/badge.svg)](https://github.com/heliopais/interlace/actions/workflows/docs.yml)
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue)](https://github.com/heliopais/interlace/blob/main/LICENSE)
 
-**interlace** is a pure-Python implementation of profiled restricted maximum likelihood
-(REML) estimation for linear mixed models with **crossed random intercepts** — targeting
+**interlace** is a pure-Python implementation of profiled [restricted maximum likelihood
+(REML)](https://en.wikipedia.org/wiki/Restricted_maximum_likelihood) estimation for linear mixed models with **crossed random intercepts** — targeting
 parity with R's [`lme4::lmer()`](https://lme4.r-lib.org/reference/lmer.html) and
 designed as a drop-in replacement for
 [`statsmodels.MixedLM`](https://www.statsmodels.org/stable/generated/statsmodels.regression.mixed_linear_model.MixedLM.html)
