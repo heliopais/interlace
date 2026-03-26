@@ -70,7 +70,7 @@ not the standard deviation).
 ## Estimation
 
 Both lme4 and interlace use **profiled REML** by default, with the same
-Lambda-theta parameterisation described in Bates et al. (2015). The sparse Cholesky
+Lambda-theta parameterisation described in [Bates et al. (2015)](https://doi.org/10.18637/jss.v067.i01). The sparse Cholesky
 factor is the core computational primitive in both implementations — lme4 uses the
 Eigen C++ library; interlace uses `scipy.sparse.linalg`.
 
