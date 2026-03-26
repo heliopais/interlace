@@ -1,0 +1,237 @@
+"""Tests for result.py (CrossedLMEResult, ModelInfo) and fit() entry point."""
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from interlace import fit
+from interlace.result import CrossedLMEResult
+
+# ---------------------------------------------------------------------------
+# Shared fixture
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def simple_df() -> pd.DataFrame:
+    rng = np.random.default_rng(7)
+    n, q = 120, 6
+    group_codes = np.tile(np.arange(q), n // q)
+    b = rng.normal(scale=1.0, size=q)
+    x1 = rng.normal(size=n)
+    y = 2.0 + 0.5 * x1 + b[group_codes] + rng.normal(scale=1.0, size=n)
+    return pd.DataFrame({"y": y, "x1": x1, "group": group_codes.astype(str)})
+
+
+@pytest.fixture()
+def crossed_df() -> pd.DataFrame:
+    """Two crossed RE factors: 8 firms x 4 depts, 160 obs."""
+    rng = np.random.default_rng(13)
+    n_firm, n_dept = 8, 4
+    n = 160
+    firm = np.tile(np.arange(n_firm), n // n_firm)
+    dept = np.repeat(np.arange(n_dept), n // n_dept)
+    b_firm = rng.normal(scale=1.2, size=n_firm)
+    b_dept = rng.normal(scale=0.8, size=n_dept)
+    x1 = rng.normal(size=n)
+    y = 1.0 + 0.7 * x1 + b_firm[firm] + b_dept[dept] + rng.normal(scale=1.0, size=n)
+    return pd.DataFrame(
+        {
+            "y": y,
+            "x1": x1,
+            "firm": firm.astype(str),
+            "dept": dept.astype(str),
+        }
+    )
+
+
+# ---------------------------------------------------------------------------
+# ModelInfo
+# ---------------------------------------------------------------------------
+
+
+class TestModelInfo:
+    def test_has_required_attrs(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        m = result.model
+        assert hasattr(m, "exog")
+        assert hasattr(m, "endog")
+        assert hasattr(m, "groups")
+        assert hasattr(m, "endog_names")
+        assert hasattr(m, "formula")
+
+    def test_data_frame_attr(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.model.data.frame is simple_df
+
+    def test_exog_shape(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.model.exog.shape == (120, 2)  # intercept + x1
+
+    def test_endog_names(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.model.endog_names == "y"
+
+    def test_formula_stored(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.model.formula == "y ~ x1"
+
+
+# ---------------------------------------------------------------------------
+# CrossedLMEResult — structure
+# ---------------------------------------------------------------------------
+
+
+class TestCrossedLMEResultStructure:
+    def test_returns_crossed_lme_result(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert isinstance(result, CrossedLMEResult)
+
+    def test_converged(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.converged
+
+    def test_fe_params_is_series(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert isinstance(result.fe_params, pd.Series)
+        assert "Intercept" in result.fe_params.index
+        assert "x1" in result.fe_params.index
+
+    def test_fe_bse_shape(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.fe_bse.shape == result.fe_params.shape
+
+    def test_fe_pvalues_in_01(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert (result.fe_pvalues >= 0).all()
+        assert (result.fe_pvalues <= 1).all()
+
+    def test_fe_conf_int_shape(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.fe_conf_int.shape == (2, 2)  # 2 params, lower/upper
+
+    def test_resid_shape(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.resid.shape == (120,)
+
+    def test_fittedvalues_shape(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.fittedvalues.shape == (120,)
+
+    def test_resid_plus_fitted_equals_y(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        np.testing.assert_allclose(
+            result.resid + result.fittedvalues,
+            simple_df["y"].values,
+            rtol=1e-10,
+        )
+
+    def test_scale_positive(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.scale > 0
+
+    def test_random_effects_keys(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert "group" in result.random_effects
+        re = result.random_effects["group"]
+        assert isinstance(re, pd.Series)
+        assert len(re) == 6  # 6 unique group levels
+
+    def test_variance_components(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert "group" in result.variance_components
+        assert result.variance_components["group"] > 0
+
+    def test_nobs(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.nobs == 120
+
+    def test_ngroups(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result.ngroups["group"] == 6
+
+
+# ---------------------------------------------------------------------------
+# CrossedLMEResult — statistical correctness
+# ---------------------------------------------------------------------------
+
+
+class TestCrossedLMEResultStats:
+    def test_fe_params_close_to_truth(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert abs(result.fe_params["Intercept"] - 2.0) < 0.5
+        assert abs(result.fe_params["x1"] - 0.5) < 0.3
+
+    def test_matches_statsmodels_fe(self, simple_df: pd.DataFrame) -> None:
+        import statsmodels.formula.api as smf
+
+        result = fit("y ~ x1", simple_df, groups="group")
+        sm = smf.mixedlm("y ~ x1", simple_df, groups=simple_df["group"]).fit(
+            reml=True, method="lbfgs"
+        )
+        np.testing.assert_allclose(
+            result.fe_params.values,
+            [sm.fe_params["Intercept"], sm.fe_params["x1"]],
+            rtol=1e-2,
+        )
+        assert abs(result.scale - sm.scale) / sm.scale < 0.02
+
+    def test_blups_shrink_toward_zero(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        re = result.random_effects["group"]
+        # BLUPs should have smaller variance than raw group means
+        raw_means = (
+            simple_df.groupby("group")["y"].mean() - result.fe_params["Intercept"]
+        )
+        assert re.std() < raw_means.std()
+
+
+# ---------------------------------------------------------------------------
+# Crossed RE (two factors)
+# ---------------------------------------------------------------------------
+
+
+class TestCrossedRE:
+    def test_two_re_groups(self, crossed_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", crossed_df, groups=["firm", "dept"])
+        assert "firm" in result.random_effects
+        assert "dept" in result.random_effects
+        assert len(result.random_effects["firm"]) == 8
+        assert len(result.random_effects["dept"]) == 4
+
+    def test_two_re_variance_components(self, crossed_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", crossed_df, groups=["firm", "dept"])
+        assert result.variance_components["firm"] > 0
+        assert result.variance_components["dept"] > 0
+
+    def test_two_re_resid_plus_fitted(self, crossed_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", crossed_df, groups=["firm", "dept"])
+        np.testing.assert_allclose(
+            result.resid + result.fittedvalues,
+            crossed_df["y"].values,
+            rtol=1e-10,
+        )
+
+
+# ---------------------------------------------------------------------------
+# statsmodels compatibility attributes (h0j)
+# ---------------------------------------------------------------------------
+
+
+class TestStatsmodelsCompat:
+    def test_gpgap_group_col(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result._gpgap_group_col == "group"
+
+    def test_gpgap_vc_cols_single(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert result._gpgap_vc_cols == []
+
+    def test_gpgap_vc_cols_crossed(self, crossed_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", crossed_df, groups=["firm", "dept"])
+        assert result._gpgap_group_col == "firm"
+        assert result._gpgap_vc_cols == ["dept"]
+
+    def test_model_groups_attr(self, simple_df: pd.DataFrame) -> None:
+        result = fit("y ~ x1", simple_df, groups="group")
+        np.testing.assert_array_equal(result.model.groups, simple_df["group"].values)
