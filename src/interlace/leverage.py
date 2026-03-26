@@ -104,6 +104,24 @@ def leverage(model: Any, level: int = 1) -> pd.DataFrame:  # noqa: ARG001
     n = X.shape[0]
     scale = model.scale
 
+    truly_crossed = _is_crossed(model) and len(model._gpgap_vc_cols) > 0
+
+    if truly_crossed:
+        # For crossed RE (≥2 grouping factors), V is NOT block-diagonal by the
+        # primary group, so the block-diagonal GLS hat gives trace(H1) != p.
+        # Return the OLS hat X(X'X)^-1 X' as fixef — consistent with HLMdiag's
+        # documented limitation for crossed random effects.
+        XtX_inv = np.linalg.pinv(X.T @ X)
+        h_ols = np.sum((X @ XtX_inv) * X, axis=1)
+        return pd.DataFrame(
+            {
+                "overall": h_ols,
+                "fixef": h_ols,
+                "ranef": np.zeros(n),
+                "ranef.uc": np.zeros(n),
+            }
+        )
+
     if _is_crossed(model):
         cov_fe = model.fe_cov
         groups, group_labels, exog_re_li, D = _crossed_structures(model)
