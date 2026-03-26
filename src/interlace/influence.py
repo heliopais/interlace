@@ -119,7 +119,7 @@ def hlm_influence(
     level: int | str = 1,
     vc_formula: Any = None,
     optimizer: str = "lbfgsb",
-) -> pd.DataFrame:
+) -> Any:
     """Calculate multiple influence diagnostics via exact deletion.
 
     Parameters
