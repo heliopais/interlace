@@ -5,6 +5,9 @@ subtrees:
   - file: installation
   - file: quickstart
   - file: examples
+- caption: Development
+  entries:
+  - file: contributing
 - caption: API Reference
   entries:
   - glob: api/*
