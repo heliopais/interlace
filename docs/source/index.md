@@ -10,3 +10,4 @@ designed as a drop-in replacement for `statsmodels.MixedLM` in production pipeli
 - Sparse throughout — Z is never materialised as a dense matrix
 - Full suite of HLM diagnostics: residuals, leverage, Cook's D, MDFFITS, influence plots
 - Compatible result object exposing the same attributes as `statsmodels.MixedLMResults`
+- Validated against R's `lme4::lmer()` to tight tolerances (fixed effects abs diff < 1e-4)
