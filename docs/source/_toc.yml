@@ -1,0 +1,10 @@
+root: index
+subtrees:
+- caption: Getting Started
+  entries:
+  - file: installation
+  - file: quickstart
+  - file: examples
+- caption: API Reference
+  entries:
+  - glob: api/*
