@@ -81,7 +81,9 @@ def test_cooksd_nonnegative(sm_influence, il_influence):
 
 
 def test_cooksd_match_across_models(sm_influence, il_influence):
-    corr = np.corrcoef(sm_influence["cooksd"].values, il_influence["cooksd"].values)[0, 1]
+    corr = np.corrcoef(sm_influence["cooksd"].values, il_influence["cooksd"].values)[
+        0, 1
+    ]
     assert corr > 0.9, f"Cook's D correlation={corr:.4f}"
 
 

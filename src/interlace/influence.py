@@ -28,7 +28,9 @@ def _is_crossed(model) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _full_params(model) -> tuple[pd.Series, np.ndarray, np.ndarray, np.ndarray, list[str], int]:
+def _full_params(
+    model,
+) -> tuple[pd.Series, np.ndarray, np.ndarray, np.ndarray, list[str], int]:
     """Return ``(beta, V, V_inv, theta, theta_names, p)`` from either model type."""
     if _is_crossed(model):
         beta = model.fe_params
@@ -134,7 +136,11 @@ def hlm_influence(model, level: int | str = 1, vc_formula=None) -> pd.DataFrame:
     det_V = np.linalg.det(V)
 
     data = model.model.data.frame.reset_index(drop=True)
-    groups = np.asarray(data[model._gpgap_group_col]) if _is_crossed(model) else model.model.groups
+    groups = (
+        np.asarray(data[model._gpgap_group_col])
+        if _is_crossed(model)
+        else model.model.groups
+    )
 
     if level == 1:
         units = data.index.tolist()
@@ -173,7 +179,9 @@ def hlm_influence(model, level: int | str = 1, vc_formula=None) -> pd.DataFrame:
                     import interlace
 
                     groups_arg = _refit_groups_arg(model)
-                    model_i = interlace.fit(model.model.formula, data_i, groups=groups_arg)
+                    model_i = interlace.fit(
+                        model.model.formula, data_i, groups=groups_arg
+                    )
                 else:
                     model_class = model.model.__class__
                     groups_col = model.model.groups
@@ -305,12 +313,13 @@ def tau_gap(model, threshold: float | None = None) -> dict[str, float]:
             import interlace
 
             groups_arg = _refit_groups_arg(model)
-            model_reduced = interlace.fit(model.model.formula, data_reduced, groups=groups_arg)
+            model_reduced = interlace.fit(
+                model.model.formula, data_reduced, groups=groups_arg
+            )
             vc_full = model.variance_components
             vc_reduced = model_reduced.variance_components
         else:
             # Use the original groups array aligned to the reset_index data
-            groups_full = np.asarray(model.model.data.frame.reset_index(drop=True).iloc[:, :].index)
             # Refit by passing the groups column values from reduced data
             # so that cov_re retains the same positional structure.
             groups_reduced_arr = model.model.groups[~influential_mask]
@@ -322,7 +331,10 @@ def tau_gap(model, threshold: float | None = None) -> dict[str, float]:
             # were passed as an array (the refitted cov_re may have a
             # different index name than the original).
             full_names = list(model.cov_re.index)
-            vc_full = {name: float(model.cov_re.iloc[i, i]) for i, name in enumerate(full_names)}
+            vc_full = {
+                name: float(model.cov_re.iloc[i, i])
+                for i, name in enumerate(full_names)
+            }
             vc_reduced = {
                 full_names[i]: float(model_reduced.cov_re.iloc[i, i])
                 for i in range(len(full_names))

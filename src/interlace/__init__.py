@@ -10,10 +10,15 @@ import scipy.stats as stats
 
 from interlace.augment import hlm_augment
 from interlace.formula import extract_group_factors, parse_formula
-from interlace.influence import cooks_distance, hlm_influence, mdffits, n_influential, tau_gap
+from interlace.influence import (
+    cooks_distance,
+    hlm_influence,
+    mdffits,
+    n_influential,
+    tau_gap,
+)
 from interlace.leverage import leverage
 from interlace.plotting import dotplot_diag, plot_influence, plot_resid
-from interlace.residuals import hlm_resid
 from interlace.profiled_reml import (
     _build_A11,
     _precompute,
@@ -21,6 +26,7 @@ from interlace.profiled_reml import (
     fit_reml,
     make_lambda_diag,
 )
+from interlace.residuals import hlm_resid
 from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper
 from interlace.sparse_z import build_joint_z
 

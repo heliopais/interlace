@@ -35,7 +35,9 @@ def single_re_data() -> pd.DataFrame:
 
 @pytest.fixture(scope="module")
 def models_single_re(single_re_data):
-    sm = MixedLM.from_formula("y ~ x", groups="group", data=single_re_data).fit(reml=True)
+    sm = MixedLM.from_formula("y ~ x", groups="group", data=single_re_data).fit(
+        reml=True
+    )
     il = interlace.fit("y ~ x", data=single_re_data, groups="group")
     return sm, il
 
@@ -100,8 +102,7 @@ def test_tau_gap_abs_diff_lt_0001(models_single_re):
 
     abs_diff = abs(gap_il - gap_sm)
     assert abs_diff < 0.001, (
-        f"tau_gap abs_diff={abs_diff:.6f} ≥ 0.001 "
-        f"(il={gap_il:.6f}, sm={gap_sm:.6f})"
+        f"tau_gap abs_diff={abs_diff:.6f} ≥ 0.001 (il={gap_il:.6f}, sm={gap_sm:.6f})"
     )
 
 

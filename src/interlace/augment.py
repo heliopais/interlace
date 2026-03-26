@@ -31,6 +31,8 @@ def hlm_augment(model, level: int = 1, include_influence: bool = True) -> pd.Dat
 
     if include_influence:
         infl_df = hlm_influence(model, level=1)
-        return pd.concat([res_df.reset_index(drop=True), infl_df.reset_index(drop=True)], axis=1)
+        return pd.concat(
+            [res_df.reset_index(drop=True), infl_df.reset_index(drop=True)], axis=1
+        )
 
     return res_df

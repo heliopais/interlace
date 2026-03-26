@@ -25,7 +25,8 @@ def _is_crossed(model) -> bool:
 
 
 def _crossed_structures(model: CrossedLMEResult):
-    """Extract (groups, group_labels, exog_re_li, D, fe_cov, scale) from a CrossedLMEResult.
+    """Extract (groups, group_labels, exog_re_li, D, fe_cov, scale) from a
+    CrossedLMEResult.
 
     Builds the per-primary-group Z_i matrices using the full joint random-effects
     structure so that V_i = Z_i D Z_i' + σ²I is correct for any number of
@@ -51,9 +52,7 @@ def _crossed_structures(model: CrossedLMEResult):
     q_total = int(q_offsets[-1])
 
     # Integer codes for each factor (sorted, matching build_joint_z)
-    codes_per_col = [
-        pd.factorize(data[col], sort=True)[0] for col in all_group_cols
-    ]
+    codes_per_col = [pd.factorize(data[col], sort=True)[0] for col in all_group_cols]
 
     # Build Z_i for each level of the primary group
     exog_re_li = []
@@ -132,4 +131,6 @@ def leverage(model, level: int = 1) -> pd.DataFrame:  # noqa: ARG001
         # H2_uc_i = Z_i D Z_i' / σ²  (Nobre & Singer unconfounded)
         h2_uc[idx] = np.diagonal(ZDZt / scale)
 
-    return pd.DataFrame({"overall": h1 + h2, "fixef": h1, "ranef": h2, "ranef.uc": h2_uc})
+    return pd.DataFrame(
+        {"overall": h1 + h2, "fixef": h1, "ranef": h2, "ranef.uc": h2_uc}
+    )

@@ -30,10 +30,12 @@ def _marginal(model) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _conditional(model) -> tuple[np.ndarray, np.ndarray]:
-    """Return ``(conditional_resid, conditional_fitted)`` = ``(y - Xβ - Zu, Xβ + Zu)``."""
+    """Return ``(conditional_resid, conditional_fitted)`` = ``(y - Xβ - Zu, Xβ + Zu)``."""  # noqa: E501
     # Both CrossedLMEResult and statsmodels MixedLMResults store conditional
     # residuals / fitted values in .resid / .fittedvalues.
-    return np.asarray(model.resid, dtype=float), np.asarray(model.fittedvalues, dtype=float)
+    return np.asarray(model.resid, dtype=float), np.asarray(
+        model.fittedvalues, dtype=float
+    )
 
 
 def hlm_resid(

@@ -40,7 +40,9 @@ def plot_resid(resid_df, type: str = "resid_vs_fitted") -> ggplot:  # noqa: A002
             ggplot(resid_df, aes(sample=".resid"))
             + stat_qq()
             + stat_qq_line()
-            + labs(title="Normal Q-Q Plot", x="Theoretical Quantiles", y="Sample Quantiles")
+            + labs(
+                title="Normal Q-Q Plot", x="Theoretical Quantiles", y="Sample Quantiles"
+            )
             + theme_bw()
         )
     msg = "type must be 'resid_vs_fitted' or 'qq'"
@@ -48,7 +50,8 @@ def plot_resid(resid_df, type: str = "resid_vs_fitted") -> ggplot:  # noqa: A002
 
 
 def plot_influence(influence_df, diag: str = "cooksd") -> ggplot:
-    """Index plot of an influence diagnostic from :func:`~interlace.influence.hlm_influence`.
+    """Index plot of an influence diagnostic from
+    :func:`~interlace.influence.hlm_influence`.
 
     Parameters
     ----------
@@ -94,7 +97,9 @@ def dotplot_diag(
     df = influence_df.copy()
 
     if name is None:
-        candidates = [c for c in df.columns if c not in _metric_cols and "rvc." not in c]
+        candidates = [
+            c for c in df.columns if c not in _metric_cols and "rvc." not in c
+        ]
         label_col = candidates[0] if candidates else "_label"
         if label_col == "_label":
             df["_label"] = range(len(df))

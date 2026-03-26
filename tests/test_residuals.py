@@ -113,8 +113,12 @@ def test_conditional_smaller_variance_than_marginal(models):
 
 def test_standardized_scales_by_sqrt_scale(models):
     _, il = models
-    raw = hlm_resid(il, type="marginal", standardized=False, full_data=False)[".resid"].values
-    std = hlm_resid(il, type="marginal", standardized=True, full_data=False)[".resid"].values
+    raw = hlm_resid(il, type="marginal", standardized=False, full_data=False)[
+        ".resid"
+    ].values
+    std = hlm_resid(il, type="marginal", standardized=True, full_data=False)[
+        ".resid"
+    ].values
     expected = raw / np.sqrt(il.scale)
     np.testing.assert_allclose(std, expected, rtol=1e-10)
 

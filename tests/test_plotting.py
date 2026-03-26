@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import pytest
 from plotnine import ggplot
-from statsmodels.regression.mixed_linear_model import MixedLM
 
 import interlace
 from interlace.influence import hlm_influence

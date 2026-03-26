@@ -1,4 +1,5 @@
-"""Integration test: all diagnostic functions accept both CrossedLMEResult and MixedLMResults."""
+"""Integration test: all diagnostic functions accept both CrossedLMEResult and
+MixedLMResults."""
 
 from __future__ import annotations
 
