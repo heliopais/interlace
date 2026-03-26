@@ -58,10 +58,22 @@ def predict(
             continue
         blup_re = result.random_effects[col]
         if isinstance(blup_re, pd.DataFrame):
-            # Random slopes prediction not yet implemented (interlace-85j); skip.
-            continue
-        # Unknown levels map to 0.0 (shrinkage to population mean)
-        contrib = newdata[col].map(blup_re).fillna(0.0).to_numpy(dtype=float)
+            # Random slopes: contribution = blup_intercept + sum(blup_slope_k * x_k)
+            # re_df columns: ["(Intercept)", predictor1, predictor2, ...]
+            predictors = list(blup_re.columns[1:])
+            n_obs = len(newdata)
+            contrib = np.zeros(n_obs)
+            for i, level in enumerate(newdata[col]):
+                if level not in blup_re.index:
+                    continue  # unseen level → 0 (shrink to mean)
+                blup_vec = blup_re.loc[level].to_numpy(dtype=float)
+                z_row = np.array(
+                    [1.0] + [float(newdata[p].iloc[i]) for p in predictors]
+                )
+                contrib[i] = blup_vec @ z_row
+        else:
+            # Intercept-only: map group level → scalar BLUP
+            contrib = newdata[col].map(blup_re).fillna(0.0).to_numpy(dtype=float)
         pred = pred + contrib
 
     return np.asarray(pred)

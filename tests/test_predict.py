@@ -83,3 +83,87 @@ def test_predict_returns_numpy_array(data_and_result):
     pred = result.predict(newdata=df)
     assert isinstance(pred, np.ndarray)
     assert pred.shape == (len(df),)
+
+
+# ---------------------------------------------------------------------------
+# Random slopes prediction (interlace-85j)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def slope_data_and_result():
+    rng = np.random.default_rng(77)
+    n_groups = 10
+    n_per = 20
+    n = n_groups * n_per
+    group_ids = np.repeat([f"g{i}" for i in range(n_groups)], n_per)
+    x = rng.standard_normal(n)
+    b_int = rng.normal(0, 0.8, n_groups)
+    b_slope = rng.normal(0, 0.4, n_groups)
+    idx = np.repeat(np.arange(n_groups), n_per)
+    y = 1.0 + 0.5 * x + b_int[idx] + b_slope[idx] * x + rng.normal(0, 0.5, n)
+    df = pd.DataFrame({"y": y, "x": x, "g": group_ids})
+    result = interlace.fit("y ~ x", data=df, random=["(1 + x | g)"])
+    return df, result
+
+
+def test_predict_slopes_no_args_returns_fittedvalues(slope_data_and_result):
+    _, result = slope_data_and_result
+    pred = result.predict()
+    np.testing.assert_allclose(pred, result.fittedvalues, rtol=1e-10)
+
+
+def test_predict_slopes_insample_matches_fittedvalues(slope_data_and_result):
+    df, result = slope_data_and_result
+    pred = result.predict(newdata=df)
+    np.testing.assert_allclose(pred, result.fittedvalues, rtol=1e-6)
+
+
+def test_predict_slopes_include_re_false(slope_data_and_result):
+    df, result = slope_data_and_result
+    pred_fe = result.predict(newdata=df, include_re=False)
+    import patsy
+
+    fe_formula = result.model.formula.split("~", 1)[1].strip()
+    X_new = np.asarray(patsy.dmatrix(fe_formula, df, return_type="dataframe"))
+    expected = X_new @ result.fe_params.values
+    np.testing.assert_allclose(pred_fe, expected, rtol=1e-10)
+
+
+def test_predict_slopes_known_groups_manual(slope_data_and_result):
+    """Manually verify: pred = X@beta + blup_int[g] + blup_slope[g]*x."""
+    df, result = slope_data_and_result
+    import patsy
+
+    newdata = df.iloc[-20:].reset_index(drop=True)
+    pred = result.predict(newdata=newdata)
+
+    fe_formula = result.model.formula.split("~", 1)[1].strip()
+    X_new = np.asarray(patsy.dmatrix(fe_formula, newdata, return_type="dataframe"))
+    expected_fe = X_new @ result.fe_params.values
+
+    re_df = result.random_effects["g"]
+    blup_int = newdata["g"].map(re_df["(Intercept)"]).to_numpy(dtype=float)
+    blup_slope = newdata["g"].map(re_df["x"]).to_numpy(dtype=float)
+    expected = expected_fe + blup_int + blup_slope * newdata["x"].to_numpy()
+
+    np.testing.assert_allclose(pred, expected, rtol=1e-8)
+
+
+def test_predict_slopes_unseen_group_contributes_zero(slope_data_and_result):
+    df, result = slope_data_and_result
+    import patsy
+
+    newdata = pd.DataFrame({"x": [1.0, -0.5], "g": ["UNSEEN_A", "UNSEEN_B"]})
+    pred = result.predict(newdata=newdata)
+    fe_formula = result.model.formula.split("~", 1)[1].strip()
+    X_new = np.asarray(patsy.dmatrix(fe_formula, newdata, return_type="dataframe"))
+    expected = X_new @ result.fe_params.values
+    np.testing.assert_allclose(pred, expected, rtol=1e-10)
+
+
+def test_predict_slopes_returns_numpy_array(slope_data_and_result):
+    df, result = slope_data_and_result
+    pred = result.predict(newdata=df)
+    assert isinstance(pred, np.ndarray)
+    assert pred.shape == (len(df),)
