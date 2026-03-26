@@ -5,10 +5,13 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
+from interlace.formula import RandomEffectSpec
 from interlace.profiled_reml import (
     REMLResult,
     fit_reml,
+    make_lambda,
     make_lambda_diag,
+    n_theta_for_spec,
     reml_objective,
     sparse_chol_logdet,
 )
@@ -228,3 +231,120 @@ def _make_Z(codes: np.ndarray, n_levels: int) -> sp.csc_matrix:
     from interlace.sparse_z import build_indicator_matrix
 
     return build_indicator_matrix(codes, n_levels)
+
+
+# ---------------------------------------------------------------------------
+# n_theta_for_spec
+# ---------------------------------------------------------------------------
+
+
+class TestNThetaForSpec:
+    def test_intercept_only(self) -> None:
+        assert n_theta_for_spec(1, correlated=True) == 1
+
+    def test_intercept_only_independent(self) -> None:
+        assert n_theta_for_spec(1, correlated=False) == 1
+
+    def test_correlated_two_terms(self) -> None:
+        assert n_theta_for_spec(2, correlated=True) == 3  # l11, l21, l22
+
+    def test_independent_two_terms(self) -> None:
+        assert n_theta_for_spec(2, correlated=False) == 2
+
+    def test_correlated_three_terms(self) -> None:
+        assert n_theta_for_spec(3, correlated=True) == 6
+
+    def test_independent_three_terms(self) -> None:
+        assert n_theta_for_spec(3, correlated=False) == 3
+
+
+# ---------------------------------------------------------------------------
+# make_lambda
+# ---------------------------------------------------------------------------
+
+
+class TestMakeLambda:
+    def test_intercept_only_is_diagonal(self) -> None:
+        spec = RandomEffectSpec(
+            group="g", predictors=[], intercept=True, correlated=True
+        )
+        theta = np.array([2.0])
+        L = make_lambda(theta, [spec], n_levels=[4])
+        assert L.shape == (4, 4)
+        dense = L.toarray()
+        np.testing.assert_allclose(dense, 2.0 * np.eye(4))
+
+    def test_intercept_only_matches_make_lambda_diag(self) -> None:
+        specs = [
+            RandomEffectSpec(
+                group="g1", predictors=[], intercept=True, correlated=True
+            ),
+            RandomEffectSpec(
+                group="g2", predictors=[], intercept=True, correlated=True
+            ),
+        ]
+        theta = np.array([3.0, 0.5])
+        L = make_lambda(theta, specs, n_levels=[2, 4])
+        diag_expected = make_lambda_diag(theta, [2, 4])
+        np.testing.assert_allclose(L.diagonal(), diag_expected)
+
+    def test_correlated_two_terms_structure(self) -> None:
+        # L_j = [[l11, 0], [l21, l22]] ⊗ I_3
+        spec = RandomEffectSpec(
+            group="g", predictors=["x"], intercept=True, correlated=True
+        )
+        l11, l21, l22 = 1.5, 0.3, 0.8
+        theta = np.array([l11, l21, l22])
+        q = 3
+        L = make_lambda(theta, [spec], n_levels=[q])
+        assert L.shape == (6, 6)
+        dense = L.toarray()
+        # Top-left 3×3 block: l11 * I_3
+        np.testing.assert_allclose(dense[:3, :3], l11 * np.eye(3))
+        # Top-right 3×3 block: zeros
+        np.testing.assert_allclose(dense[:3, 3:], np.zeros((3, 3)))
+        # Bottom-left 3×3 block: l21 * I_3
+        np.testing.assert_allclose(dense[3:, :3], l21 * np.eye(3))
+        # Bottom-right 3×3 block: l22 * I_3
+        np.testing.assert_allclose(dense[3:, 3:], l22 * np.eye(3))
+
+    def test_independent_two_terms_is_block_diagonal(self) -> None:
+        spec = RandomEffectSpec(
+            group="g", predictors=["x"], intercept=True, correlated=False
+        )
+        t0, t1 = 1.2, 0.6
+        theta = np.array([t0, t1])
+        q = 3
+        L = make_lambda(theta, [spec], n_levels=[q])
+        assert L.shape == (6, 6)
+        dense = L.toarray()
+        # Top-left 3×3: t0 * I_3
+        np.testing.assert_allclose(dense[:3, :3], t0 * np.eye(3))
+        # Bottom-right 3×3: t1 * I_3
+        np.testing.assert_allclose(dense[3:, 3:], t1 * np.eye(3))
+        # Off-diagonal blocks: zeros
+        np.testing.assert_allclose(dense[:3, 3:], np.zeros((3, 3)))
+        np.testing.assert_allclose(dense[3:, :3], np.zeros((3, 3)))
+
+    def test_total_size(self) -> None:
+        specs = [
+            RandomEffectSpec(
+                group="g1", predictors=["x"], intercept=True, correlated=True
+            ),
+            RandomEffectSpec(
+                group="g2", predictors=[], intercept=True, correlated=True
+            ),
+        ]
+        # g1: 2 terms × 3 levels = 6; g2: 1 term × 4 levels = 4 → total 10
+        theta = np.array([1.0, 0.5, 0.8, 1.2])  # 3 for g1 (corr) + 1 for g2
+        L = make_lambda(theta, specs, n_levels=[3, 4])
+        assert L.shape == (10, 10)
+
+    def test_returns_sparse_csc(self) -> None:
+        spec = RandomEffectSpec(
+            group="g", predictors=["x"], intercept=True, correlated=True
+        )
+        theta = np.array([1.0, 0.0, 1.0])
+        L = make_lambda(theta, [spec], n_levels=[3])
+        assert sp.issparse(L)
+        assert isinstance(L, sp.csc_matrix)

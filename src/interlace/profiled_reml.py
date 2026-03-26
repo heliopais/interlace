@@ -1,7 +1,8 @@
-"""Profiled REML estimation for linear mixed models with crossed random intercepts.
+"""Profiled REML estimation for linear mixed models with crossed random effects.
 
 Implements the Bates et al. (2015) profiled REML criterion using:
-- Lambda_theta diagonal parameterisation
+- Lambda_theta parameterisation (diagonal for intercept-only; Cholesky Kronecker
+  product or block-diagonal for random slopes)
 - Sparse Cholesky factorisation (scipy.sparse.linalg.splu)
 - L-BFGS-B optimisation over theta
 
@@ -15,12 +16,16 @@ Journal of Statistical Software, 67(1), 1-48.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 import scipy.linalg as la
 import scipy.optimize as opt
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
+
+if TYPE_CHECKING:
+    from interlace.formula import RandomEffectSpec
 
 # ---------------------------------------------------------------------------
 # Public dataclass for fit results
@@ -43,6 +48,93 @@ class REMLResult:
 # ---------------------------------------------------------------------------
 # Lambda_theta parameterisation
 # ---------------------------------------------------------------------------
+
+
+def n_theta_for_spec(n_terms: int, correlated: bool) -> int:
+    """Number of theta parameters for a single random effect spec.
+
+    Parameters
+    ----------
+    n_terms:
+        Total number of random effect terms per group level (intercept + slopes).
+    correlated:
+        True → full lower-triangular Cholesky; False → diagonal (independent).
+
+    Returns
+    -------
+    int
+        ``1`` when n_terms == 1 (regardless of correlated flag);
+        ``n_terms * (n_terms + 1) // 2`` for correlated multi-term;
+        ``n_terms`` for independent multi-term.
+    """
+    if n_terms == 1:
+        return 1
+    return n_terms * (n_terms + 1) // 2 if correlated else n_terms
+
+
+def make_lambda(
+    theta: np.ndarray,
+    specs: list[RandomEffectSpec],
+    n_levels: list[int],
+) -> sp.csc_matrix:
+    """Build the block-diagonal Lambda_theta sparse matrix.
+
+    For each spec j with ``p_j = spec.n_terms`` terms and ``q_j`` group levels:
+
+    * ``p_j == 1``: ``Lambda_j = theta_j * I_{q_j}`` (scalar, unchanged behaviour)
+    * ``p_j > 1``, correlated: ``Lambda_j = L_j ⊗ I_{q_j}`` where ``L_j`` is a
+      ``p_j × p_j`` lower-triangular matrix whose entries are the
+      ``p_j*(p_j+1)/2`` theta parameters in row-major lower-tri order.
+    * ``p_j > 1``, independent (``||``): ``Lambda_j = blkdiag(theta_j[0] * I_{q_j},
+      theta_j[1] * I_{q_j}, ...)`` — one scalar per term.
+
+    Column ordering within each Z block is assumed to be term-first (all ``q_j``
+    intercept columns, then all ``q_j`` columns per slope predictor), matching
+    :func:`interlace.sparse_z.build_z_block`.
+
+    Parameters
+    ----------
+    theta:
+        Flat array of all variance parameters (concatenated across specs).
+    specs:
+        Random effect specifications in the same order as the Z blocks.
+    n_levels:
+        Number of group levels for each spec (``q_j``).
+
+    Returns
+    -------
+    scipy.sparse.csc_matrix of shape
+    ``(sum(p_j * q_j), sum(p_j * q_j))``.
+    """
+    blocks: list[sp.csc_matrix] = []
+    theta_idx = 0
+    for spec, q_j in zip(specs, n_levels, strict=True):
+        p_j = spec.n_terms
+        n_theta_j = n_theta_for_spec(p_j, spec.correlated)
+        theta_j = theta[theta_idx : theta_idx + n_theta_j]
+        theta_idx += n_theta_j
+
+        if p_j == 1:
+            block: sp.csc_matrix = (theta_j[0] * sp.eye(q_j, format="csc")).tocsc()
+        elif spec.correlated:
+            # Build lower-triangular L_j from theta_j (row-major lower-tri order)
+            L_j = np.zeros((p_j, p_j))
+            idx = 0
+            for row in range(p_j):
+                for col in range(row + 1):
+                    L_j[row, col] = theta_j[idx]
+                    idx += 1
+            block = sp.kron(sp.csc_matrix(L_j), sp.eye(q_j, format="csc"), format="csc")
+        else:
+            # Independent: blkdiag(theta_j[k] * I_{q_j}) for each term k
+            sub_blocks = [
+                (theta_j[k] * sp.eye(q_j, format="csc")).tocsc() for k in range(p_j)
+            ]
+            block = sp.block_diag(sub_blocks, format="csc")
+
+        blocks.append(block)
+
+    return sp.block_diag(blocks, format="csc")
 
 
 def make_lambda_diag(theta: np.ndarray, q_sizes: list[int]) -> np.ndarray:
