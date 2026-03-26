@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+from interlace._frame import to_native as _to_native
 from interlace.result import CrossedLMEResult
 
 
@@ -151,7 +152,13 @@ def hlm_influence(
     beta, V, V_inv, theta, theta_names, p = _full_params(model)
     det_V = np.linalg.det(V)
 
-    data = model.model.data.frame.reset_index(drop=True)
+    # Use the cached pandas frame for internal operations (index-based slicing).
+    # For non-CrossedLMEResult (statsmodels), data.frame is already pandas.
+    native_frame = model.model.data.frame
+    _pandas_frame = getattr(model.model.data, "_pandas_frame", None)
+    data = (_pandas_frame if _pandas_frame is not None else native_frame).reset_index(
+        drop=True
+    )
     groups = (
         np.asarray(data[model._gpgap_group_col])
         if _is_crossed(model)
@@ -262,7 +269,7 @@ def hlm_influence(
     for j, name in enumerate(theta_names):
         res[f"rvc.{name}"] = rvc_val[:, j]
 
-    return pd.DataFrame(res)
+    return _to_native(pd.DataFrame(res), like=native_frame)
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +353,11 @@ def tau_gap(
     cd = cooks_distance(model, optimizer=optimizer)
     influential_mask = cd > threshold
 
-    data = model.model.data.frame.reset_index(drop=True)
+    _pandas_frame = getattr(model.model.data, "_pandas_frame", None)
+    _raw_frame = model.model.data.frame
+    data = (_pandas_frame if _pandas_frame is not None else _raw_frame).reset_index(
+        drop=True
+    )
     data_reduced = data[~influential_mask].reset_index(drop=True)
 
     with warnings.catch_warnings():

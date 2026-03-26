@@ -12,9 +12,7 @@ from interlace.influence import hlm_influence
 from interlace.residuals import hlm_resid
 
 
-def hlm_augment(
-    model: Any, level: int = 1, include_influence: bool = True
-) -> Any:
+def hlm_augment(model: Any, level: int = 1, include_influence: bool = True) -> Any:
     """Combine residuals and (optionally) influence diagnostics into one DataFrame.
 
     Parameters
@@ -38,10 +36,14 @@ def hlm_augment(
 
     if include_influence:
         infl_df = hlm_influence(model, level=1)
-        # Normalise both to pandas for concat, then convert back to native type.
-        pd_res = _to_pandas(res_df)
+        # Both res_df and infl_df are in the native type; normalise to pandas,
+        # concat, then convert back so the output type matches the input.
         combined = pd.concat(
-            [pd_res.reset_index(drop=True), infl_df.reset_index(drop=True)], axis=1
+            [
+                _to_pandas(res_df).reset_index(drop=True),
+                _to_pandas(infl_df).reset_index(drop=True),
+            ],
+            axis=1,
         )
         return _to_native(combined, like=native_frame)
 
