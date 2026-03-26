@@ -15,6 +15,8 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.12",
     "pandas>=2.0",
+    "tqdm>=4.67.3",
+    "plotnine>=0.15.3",
 ]
 
 [project.urls]

@@ -55,6 +55,9 @@ class CrossedLMEResult:
     fittedvalues: np.ndarray
     scale: float
 
+    # Fixed-effects covariance matrix (p×p): scale * (X'Ω⁻¹X)⁻¹
+    fe_cov: np.ndarray
+
     # Model matrices
     model: ModelInfo
 

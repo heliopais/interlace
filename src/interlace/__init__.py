@@ -8,7 +8,12 @@ import scipy.linalg as la
 import scipy.sparse as sp
 import scipy.stats as stats
 
+from interlace.augment import hlm_augment
 from interlace.formula import extract_group_factors, parse_formula
+from interlace.influence import cooks_distance, hlm_influence, mdffits, n_influential, tau_gap
+from interlace.leverage import leverage
+from interlace.plotting import dotplot_diag, plot_influence, plot_resid
+from interlace.residuals import hlm_resid
 from interlace.profiled_reml import (
     _build_A11,
     _precompute,
@@ -19,7 +24,26 @@ from interlace.profiled_reml import (
 from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper
 from interlace.sparse_z import build_joint_z
 
-__all__ = ["fit", "CrossedLMEResult"]
+__all__ = [
+    "fit",
+    "CrossedLMEResult",
+    # Residuals
+    "hlm_resid",
+    # Leverage
+    "leverage",
+    # Influence diagnostics
+    "hlm_influence",
+    "cooks_distance",
+    "mdffits",
+    "n_influential",
+    "tau_gap",
+    # Combined
+    "hlm_augment",
+    # Plotting
+    "plot_resid",
+    "plot_influence",
+    "dotplot_diag",
+]
 
 
 def fit(
@@ -100,6 +124,7 @@ def fit(
     # --- 8. Standard errors (Wald) ---
     sigma2 = reml.sigma2
     MX_inv = np.linalg.inv(MX)
+    fe_cov = sigma2 * MX_inv  # p×p FE covariance: scale * (X'Ω⁻¹X)⁻¹
     fe_bse = np.sqrt(sigma2 * np.diag(MX_inv))
     z_scores = beta / fe_bse
     fe_pvalues = 2.0 * (1.0 - stats.norm.cdf(np.abs(z_scores)))
@@ -147,6 +172,7 @@ def fit(
         resid=np.asarray(resid),
         fittedvalues=np.asarray(fittedvalues),
         scale=sigma2,
+        fe_cov=fe_cov,
         model=model_info,
         converged=reml.converged,
         nobs=n,
