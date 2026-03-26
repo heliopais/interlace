@@ -15,7 +15,7 @@ Designed as a drop-in replacement for `statsmodels.MixedLM` in diagnostics pipel
 ## Installation
 
 ```bash
-pip install interlace
+pip install interlace-lme
 ```
 
 Requires Python ≥ 3.13.
@@ -39,7 +39,7 @@ print(result.scale)              # residual variance σ²
 
 `groups` accepts a single string (one random intercept) or a list (crossed intercepts). The first entry is the primary grouping factor.
 
-## API
+## Usage
 
 ### Fitting
 
@@ -64,7 +64,68 @@ Returns a `CrossedLMEResult` with the following attributes:
 | `resid` | Conditional residuals |
 | `llf`, `aic`, `bic` | Log-likelihood and information criteria |
 
-See the **[full API reference](https://heliopais.github.io/interlace/)** for prediction, residuals, leverage, influence diagnostics, augmentation, and plotting.
+### Prediction
+
+```python
+# In-sample (uses BLUPs)
+result.predict()
+
+# New data (unseen group levels shrink to zero)
+result.predict(newdata=df_new)
+
+# Fixed effects only
+result.predict(newdata=df_new, include_re=False)
+```
+
+### Residuals
+
+```python
+from interlace import hlm_resid
+
+resid_df = hlm_resid(result, type="conditional")  # or "marginal"
+# Returns DataFrame with .resid, .fitted, and original data columns
+```
+
+### Leverage
+
+```python
+from interlace import leverage
+
+lev = leverage(result)  # array of hat-matrix diagonal values
+```
+
+### Influence diagnostics
+
+```python
+from interlace import hlm_influence, cooks_distance, mdffits, n_influential, tau_gap
+
+infl = hlm_influence(result, level=1)   # Cook's D, MDFFITS, COVTRACE, COVRATIO, RVC per obs
+
+# Scalar summaries
+n = n_influential(result)   # count of high-influence observations
+gap = tau_gap(result)        # gap statistic between influential and non-influential groups
+```
+
+### Combined augment
+
+```python
+from interlace import hlm_augment
+
+aug = hlm_augment(result)
+# DataFrame: original data + conditional residuals + influence statistics
+```
+
+### Plotting
+
+```python
+from interlace import plot_resid, plot_influence, dotplot_diag
+
+plot_resid(resid_df, type="resid_vs_fitted")  # or "qq"
+plot_influence(infl_df, measure="cooks_d")
+dotplot_diag(infl_df, variable="cooks_d", cutoff="internal")
+```
+
+All plots return `plotnine.ggplot` objects.
 
 ## statsmodels compatibility
 
@@ -82,16 +143,6 @@ Results are validated against R's `lme4::lmer()` to the following tolerances:
 | Variance components | rel diff < 5% |
 | BLUP correlation | > 0.99 |
 | Conditional residual correlation | > 0.999 |
-
-## Development
-
-```bash
-make install      # create venv and install all dev deps via uv
-make test         # run pytest
-make lint         # ruff format + ruff check --fix
-make typecheck    # mypy
-make check        # lint + typecheck + test (full CI gate)
-```
 
 ## Contributing
 
