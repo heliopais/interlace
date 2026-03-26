@@ -8,8 +8,8 @@ sys.path.insert(0, str(Path(__file__).parents[2] / "src"))
 
 # -- Project information -------------------------------------------------------
 project = "interlace"
-copyright = "2025, interlace contributors"
-author = "interlace contributors"
+copyright = "2026, Helio Pais and interlace contributors"
+author = "Helio Pais and interlace contributors"
 
 # -- General configuration -----------------------------------------------------
 extensions = [
