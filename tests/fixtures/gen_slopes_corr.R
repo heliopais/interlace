@@ -4,6 +4,7 @@
 # Outputs: slopes_corr_data.csv, slopes_corr_r_results.json
 
 library(lme4)
+library(HLMdiag)
 library(jsonlite)
 
 set.seed(42)
@@ -63,12 +64,48 @@ names(blups_g) <- rownames(re_g)
 # Conditional residuals
 resid_cond <- residuals(fit, type = "response")
 
+# Marginal residuals: y - X*beta
+resid_marg <- as.numeric(df$y - model.matrix(fit) %*% fixef(fit))
+
+# Leverage via full V matrix
+{
+  X_mat    <- model.matrix(fit)
+  n_obs    <- nrow(X_mat)
+  sigma2   <- sigma(fit)^2
+  cov_beta <- as.matrix(vcov(fit))
+  Lambda   <- getME(fit, "Lambda")
+  Z_mat    <- t(as.matrix(getME(fit, "Zt")))
+  D_mat    <- sigma2 * as.matrix(Lambda %*% t(Lambda))
+  ZDZt     <- Z_mat %*% D_mat %*% t(Z_mat)
+  V_mat    <- sigma2 * diag(n_obs) + ZDZt
+  V_inv    <- solve(V_mat)
+  H1_mat   <- X_mat %*% cov_beta %*% t(X_mat) %*% V_inv
+  H2_mat   <- ZDZt %*% V_inv %*% (diag(n_obs) - H1_mat)
+  lev_fixef    <- diag(H1_mat)
+  lev_ranef    <- diag(H2_mat)
+  lev_ranef_uc <- diag(ZDZt) / sigma2
+}
+
+# Cook's D and MDFFITS via HLMdiag
+infl      <- hlm_influence(fit, level = 1)
+cooksd    <- as.numeric(infl$cooksd)
+mdffits_v <- as.numeric(infl$mdffits)
+
 results <- list(
   fe_params  = as.list(fe),
   cov_g      = lapply(seq_len(nrow(vc_g)), function(i) as.list(vc_g[i, ])),
   var_resid  = var_resid,
   blups_g    = blups_g,
-  resid_cond = as.numeric(resid_cond)
+  resid_cond = as.numeric(resid_cond),
+  resid_marg = resid_marg,
+  leverage   = list(
+    overall  = lev_fixef + lev_ranef,
+    fixef    = lev_fixef,
+    ranef    = lev_ranef,
+    ranef.uc = lev_ranef_uc
+  ),
+  cooksd  = cooksd,
+  mdffits = mdffits_v
 )
 # Add row names to cov_g
 names(results$cov_g) <- rownames(vc_g)
