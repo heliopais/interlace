@@ -35,6 +35,6 @@ and sparse Cholesky machinery as R's [`lme4::lmer()`](https://lme4.r-lib.org/ref
 
 - Fit models with multiple crossed grouping factors, e.g. `(1|subject) + (1|item)`
 - Sparse throughout — Z is never materialised as a dense matrix
-- Full suite of HLM diagnostics: residuals, leverage, Cook's D, MDFFITS, influence plots
+- Full suite of diagnostics: residuals, leverage, Cook's D, MDFFITS, influence plots
 - Compatible result object exposing the same attributes as `statsmodels.MixedLMResults`
 - Validated against R's [`lme4::lmer()`](https://lme4.r-lib.org/reference/lmer.html) to tight tolerances (fixed effects abs diff < 1e-4)
