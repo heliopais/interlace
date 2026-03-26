@@ -42,7 +42,9 @@ def pd_model(base_data):
 
 @pytest.fixture(scope="module")
 def pl_data(base_data) -> polars.DataFrame:
-    return polars.DataFrame({col: base_data[col].to_numpy() for col in base_data.columns})
+    return polars.DataFrame(
+        {col: base_data[col].to_numpy() for col in base_data.columns}
+    )
 
 
 @pytest.fixture(scope="module")
@@ -112,5 +114,5 @@ def test_hlm_augment_with_influence_numerical_parity(pd_model, pl_model, base_da
             pl_aug[col].to_numpy(),
             np.asarray(pd_aug[col]),
             atol=1e-10,
-            err_msg=f"Column '{col}' differs between polars and pandas augmented frames",
+            err_msg=f"Column '{col}' differs between polars and pandas augmented frames",  # noqa: E501
         )
