@@ -210,3 +210,7 @@ __marimo__/
 .dolt/
 *.db
 .beads-credential-key
+
+# AI assistant instructions
+CLAUDE.md
+AGENTS.md
