@@ -20,7 +20,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/paishe01/interlace"
+Homepage = "https://github.com/heliopais/interlace"
+Documentation = "https://heliopais.github.io/interlace/"
 Issues = "https://github.com/heliopais/interlace/issues"
 
 [dependency-groups]

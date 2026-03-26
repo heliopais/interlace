@@ -1,5 +1,7 @@
 # interlace
 
+**[Documentation](https://heliopais.github.io/interlace/)**
+
 Pure-Python profiled REML estimation for linear mixed models with **crossed random intercepts**, validated to match R's `lme4::lmer()`.
 
 Designed as a drop-in replacement for `statsmodels.MixedLM` in diagnostics pipelines that require crossed grouping factors (e.g. `(1|worker) + (1|company)`), which statsmodels does not support.
