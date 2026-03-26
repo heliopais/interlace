@@ -207,6 +207,12 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db
