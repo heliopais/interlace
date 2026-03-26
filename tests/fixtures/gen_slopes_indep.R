@@ -50,15 +50,13 @@ cov_g <- list(
   "x"           = list("(Intercept)" = 0.0,    "x" = var_slp)
 )
 
-# BLUPs: ranef returns two separate data frames for || models
-re_list <- ranef(fit)
-# re_list$g has (Intercept), re_list$g.1 has x
-re_int  <- re_list$g
-re_slp  <- re_list$`g.1`
-blups_g <- lapply(rownames(re_int), function(lv) {
-  list("(Intercept)" = re_int[lv, 1], "x" = re_slp[lv, 1])
+# BLUPs: for || models lme4 still returns a single data frame with both columns
+re_g    <- ranef(fit)$g
+blups_g <- lapply(rownames(re_g), function(lv) {
+  list("(Intercept)" = as.numeric(re_g[lv, "(Intercept)"]),
+       "x"           = as.numeric(re_g[lv, "x"]))
 })
-names(blups_g) <- rownames(re_int)
+names(blups_g) <- rownames(re_g)
 
 # Conditional residuals
 resid_cond <- residuals(fit, type = "response")
