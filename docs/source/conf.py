@@ -43,6 +43,8 @@ napoleon_use_rtype = False
 # -- HTML output ---------------------------------------------------------------
 html_theme = "furo"
 html_title = "interlace"
+html_logo = "_static/interlace_logo.png"
+html_favicon = "_static/interlace.ico"
 
 html_theme_options = {
     "light_css_variables": {

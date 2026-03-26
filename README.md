@@ -1,10 +1,16 @@
 # interlace
 
+<p align="center">
+  <img src="docs/source/_static/interlace_logo.png" alt="interlace" width="220">
+</p>
+
 **[Documentation](https://heliopais.github.io/interlace/)**
 
 Pure-Python profiled REML estimation for linear mixed models with **crossed random intercepts**, validated to match R's `lme4::lmer()`.
 
 Designed as a drop-in replacement for `statsmodels.MixedLM` in diagnostics pipelines that require crossed grouping factors (e.g. `(1|worker) + (1|company)`), which statsmodels does not support.
+
+**Scope:** interlace fits models with random intercepts only — it does not support random slopes, generalised outcomes (GLMM), or nested random effects with `/` syntax. For those cases, use R's `lme4` directly or a Python GLMM library.
 
 ## Installation
 
@@ -58,68 +64,7 @@ Returns a `CrossedLMEResult` with the following attributes:
 | `resid` | Conditional residuals |
 | `llf`, `aic`, `bic` | Log-likelihood and information criteria |
 
-### Prediction
-
-```python
-# In-sample (uses BLUPs)
-result.predict()
-
-# New data (unseen group levels shrink to zero)
-result.predict(newdata=df_new)
-
-# Fixed effects only
-result.predict(newdata=df_new, include_re=False)
-```
-
-### Residuals
-
-```python
-from interlace import hlm_resid
-
-resid_df = hlm_resid(result, type="conditional")  # or "marginal"
-# Returns DataFrame with .resid, .fitted, and original data columns
-```
-
-### Leverage
-
-```python
-from interlace import leverage
-
-lev = leverage(result)  # array of hat-matrix diagonal values
-```
-
-### Influence diagnostics
-
-```python
-from interlace import hlm_influence, cooks_distance, mdffits, n_influential, tau_gap
-
-infl = hlm_influence(result, level=1)   # Cook's D, MDFFITS, COVTRACE, COVRATIO, RVC per obs
-
-# Scalar summaries
-n = n_influential(result)   # count of high-influence observations
-gap = tau_gap(result)        # gap statistic between influential and non-influential groups
-```
-
-### Combined augment
-
-```python
-from interlace import hlm_augment
-
-aug = hlm_augment(result)
-# DataFrame: original data + conditional residuals + influence statistics
-```
-
-### Plotting
-
-```python
-from interlace import plot_resid, plot_influence, dotplot_diag
-
-plot_resid(resid_df, type="resid_vs_fitted")  # or "qq"
-plot_influence(infl_df, measure="cooks_d")
-dotplot_diag(infl_df, variable="cooks_d", cutoff="internal")
-```
-
-All plots return `plotnine.ggplot` objects.
+See the **[full API reference](https://heliopais.github.io/interlace/)** for prediction, residuals, leverage, influence diagnostics, augmentation, and plotting.
 
 ## statsmodels compatibility
 
@@ -147,6 +92,10 @@ make lint         # ruff format + ruff check --fix
 make typecheck    # mypy
 make check        # lint + typecheck + test (full CI gate)
 ```
+
+## Contributing
+
+Bug reports, documentation fixes, and new features are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started. To open an issue or ask a question, use the [GitHub issue tracker](https://github.com/heliopais/interlace/issues).
 
 ## Attribution
 

@@ -1,5 +1,7 @@
 # Contributing
 
+Contributions are welcome — whether that's bug reports, documentation improvements, or new features. To get started, open an issue on the [GitHub issue tracker](https://github.com/heliopais/interlace/issues) or submit a pull request.
+
 ## Development setup
 
 ```bash
