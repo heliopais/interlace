@@ -21,7 +21,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/paishe01/interlace"
-Issues = "https://github.com/paishe01/interlace/issues"
+Issues = "https://github.com/heliopais/interlace/issues"
 
 [dependency-groups]
 dev = [
