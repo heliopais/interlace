@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from interlace._frame import to_native as _to_native
 from interlace.result import CrossedLMEResult
 
 
@@ -81,11 +82,19 @@ def hlm_resid(
 
         res_df = pd.DataFrame({".resid": res, ".fitted": fitted})
 
+        native_frame = model.model.data.frame
         if full_data:
-            data = model.model.data.frame.reset_index(drop=True)
-            return pd.concat([data, res_df], axis=1)
+            # For CrossedLMEResult, _pandas_frame holds the cached pandas copy.
+            # For statsmodels, .frame is already a pandas DataFrame.
+            pd_frame = getattr(model.model.data, "_pandas_frame", None)
+            if pd_frame is None:
+                pd_frame = native_frame  # type: ignore[assignment]
+            result_df = pd.concat(
+                [pd_frame.reset_index(drop=True), res_df], axis=1  # type: ignore[arg-type]
+            )
+            return _to_native(result_df, like=native_frame)
 
-        return res_df
+        return _to_native(res_df, like=native_frame)
 
     # --- group-level: return random effects ---
     if _is_crossed(model):

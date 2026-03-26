@@ -8,11 +8,13 @@ include_re: if False, return X_new@beta only (fixed-effects prediction).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 import patsy
+
+from interlace._frame import to_pandas as _to_pandas
 
 if TYPE_CHECKING:
     from interlace.result import CrossedLMEResult
@@ -20,7 +22,7 @@ if TYPE_CHECKING:
 
 def predict(
     result: CrossedLMEResult,
-    newdata: pd.DataFrame | None = None,
+    newdata: Any | None = None,
     include_re: bool = True,
 ) -> np.ndarray:
     """Return predictions from a fitted CrossedLMEResult.
@@ -42,6 +44,8 @@ def predict(
     """
     if newdata is None:
         return np.asarray(result.fittedvalues)
+
+    newdata = _to_pandas(newdata)
 
     # Build fixed-effects design matrix for newdata using the same formula
     fe_formula = result.model.formula.split("~", 1)[1].strip()

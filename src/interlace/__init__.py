@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import scipy.linalg as la
@@ -31,6 +33,7 @@ from interlace.profiled_reml import (
     make_lambda,
 )
 from interlace.residuals import hlm_resid
+from interlace._frame import to_pandas as _to_pandas
 from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper
 from interlace.sparse_z import build_joint_z_from_specs
 
@@ -58,7 +61,7 @@ __all__ = [
 
 def fit(
     formula: str,
-    data: pd.DataFrame,
+    data: Any,
     groups: str | list[str] | None = None,
     method: str = "REML",
     random: list[str] | None = None,
@@ -105,6 +108,10 @@ def fit(
     if random is None and groups is None:
         raise ValueError("Either 'groups' or 'random' must be provided.")
 
+    # Convert to pandas once; all internal operations use pd_data.
+    # The original native frame is preserved for output type matching.
+    pd_data = _to_pandas(data)
+
     # --- Build RandomEffectSpec list ---
     if random is not None:
         specs = parse_random_effects(random)
@@ -114,17 +121,17 @@ def fit(
     group_cols = [s.group for s in specs]
 
     # --- 1. Parse fixed-effects formula ---
-    parsed = parse_formula(formula, data, groups=group_cols[0])
+    parsed = parse_formula(formula, pd_data, groups=group_cols[0])
     y = parsed.y
     X = parsed.X
     term_names = parsed.term_names
     n, p = X.shape
 
     # --- 2. Build joint sparse Z and collect n_levels per spec ---
-    Z = build_joint_z_from_specs(specs, data)
+    Z = build_joint_z_from_specs(specs, pd_data)
     n_levels_list: list[int] = []
     for spec in specs:
-        _codes, _uniques = pd.factorize(data[spec.group], sort=True)
+        _codes, _uniques = pd.factorize(pd_data[spec.group], sort=True)
         n_levels_list.append(len(_uniques))
 
     # --- 3. Fit REML ---
@@ -195,7 +202,7 @@ def fit(
         n_theta_j = n_theta_for_spec(spec.n_terms, spec.correlated)
         n_blups_j = spec.n_terms * q_j
         blup_block = blups[blup_offset : blup_offset + n_blups_j]
-        uniques: list[object] = sorted(data[spec.group].unique())
+        uniques: list[object] = sorted(pd_data[spec.group].unique())
 
         if spec.n_terms == 1:
             # Intercept-only: backward-compatible Series + scalar variance
@@ -243,10 +250,10 @@ def fit(
     model_info = ModelInfo(
         exog=X,
         endog=y,
-        groups=np.asarray(data[group_cols[0]]),
+        groups=np.asarray(pd_data[group_cols[0]]),
         endog_names=formula.split("~")[0].strip(),
         formula=formula,
-        data=_DataWrapper(frame=data),
+        data=_DataWrapper(frame=data, _pandas_frame=pd_data),
     )
 
     return CrossedLMEResult(

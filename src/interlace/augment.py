@@ -6,6 +6,7 @@ from typing import Any
 
 import pandas as pd
 
+from interlace._frame import to_native as _to_native, to_pandas as _to_pandas
 from interlace.influence import hlm_influence
 from interlace.residuals import hlm_resid
 
@@ -31,12 +32,16 @@ def hlm_augment(
         Conditional residuals + original data + (optionally) influence stats.
     """
     _ = level  # reserved for future multi-level support
+    native_frame = model.model.data.frame
     res_df = hlm_resid(model, type="conditional", full_data=True)
 
     if include_influence:
         infl_df = hlm_influence(model, level=1)
-        return pd.concat(
-            [res_df.reset_index(drop=True), infl_df.reset_index(drop=True)], axis=1
+        # Normalise both to pandas for concat, then convert back to native type.
+        pd_res = _to_pandas(res_df)
+        combined = pd.concat(
+            [pd_res.reset_index(drop=True), infl_df.reset_index(drop=True)], axis=1
         )
+        return _to_native(combined, like=native_frame)
 
     return res_df

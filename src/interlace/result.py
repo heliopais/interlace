@@ -14,9 +14,15 @@ import pandas as pd
 
 @dataclass
 class _DataWrapper:
-    """Thin wrapper so result.model.data.frame mirrors statsmodels."""
+    """Thin wrapper so result.model.data.frame mirrors statsmodels.
 
-    frame: pd.DataFrame
+    ``frame`` holds the caller's original native frame (pandas, polars, etc.)
+    so that downstream diagnostics can return results in the same type.
+    ``_pandas_frame`` caches the pandas version for internal use.
+    """
+
+    frame: object  # native type as passed by the caller
+    _pandas_frame: pd.DataFrame = field(repr=False, default=None)  # type: ignore[assignment]
 
 
 @dataclass
@@ -76,7 +82,7 @@ class CrossedLMEResult:
 
     def predict(
         self,
-        newdata: pd.DataFrame | None = None,
+        newdata: object | None = None,
         include_re: bool = True,
     ) -> np.ndarray:
         """Return predictions; see :func:`interlace.predict.predict`."""
