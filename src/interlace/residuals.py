@@ -90,7 +90,8 @@ def hlm_resid(
             if pd_frame is None:
                 pd_frame = native_frame  # type: ignore[assignment]
             result_df = pd.concat(
-                [pd_frame.reset_index(drop=True), res_df], axis=1  # type: ignore[arg-type]
+                [pd_frame.reset_index(drop=True), res_df],
+                axis=1,  # type: ignore[arg-type]
             )
             return _to_native(result_df, like=native_frame)
 

@@ -20,9 +20,9 @@ import pytest
 
 polars = pytest.importorskip("polars")
 
-import interlace
-from interlace.augment import hlm_augment
-from interlace.residuals import hlm_resid
+import interlace  # noqa: E402
+from interlace.augment import hlm_augment  # noqa: E402
+from interlace.residuals import hlm_resid  # noqa: E402
 
 
 @pytest.fixture(scope="module")

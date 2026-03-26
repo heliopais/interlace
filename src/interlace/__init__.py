@@ -10,6 +10,7 @@ import scipy.linalg as la
 import scipy.sparse as sp
 import scipy.stats as stats
 
+from interlace._frame import to_pandas as _to_pandas
 from interlace.augment import hlm_augment
 from interlace.formula import (
     groups_to_random_effects,
@@ -33,7 +34,6 @@ from interlace.profiled_reml import (
     make_lambda,
 )
 from interlace.residuals import hlm_resid
-from interlace._frame import to_pandas as _to_pandas
 from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper
 from interlace.sparse_z import build_joint_z_from_specs
 

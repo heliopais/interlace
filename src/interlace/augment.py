@@ -6,7 +6,8 @@ from typing import Any
 
 import pandas as pd
 
-from interlace._frame import to_native as _to_native, to_pandas as _to_pandas
+from interlace._frame import to_native as _to_native
+from interlace._frame import to_pandas as _to_pandas
 from interlace.influence import hlm_influence
 from interlace.residuals import hlm_resid
 

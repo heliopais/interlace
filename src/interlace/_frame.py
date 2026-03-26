@@ -22,9 +22,7 @@ def to_pandas(frame: Any) -> pd.DataFrame:
     if isinstance(frame, pd.DataFrame):
         return frame
     nw_frame = nw.from_native(frame, eager_only=True)
-    return pd.DataFrame(
-        {col: nw_frame[col].to_numpy() for col in nw_frame.columns}
-    )
+    return pd.DataFrame({col: nw_frame[col].to_numpy() for col in nw_frame.columns})
 
 
 def to_native(df_pandas: pd.DataFrame, like: Any) -> Any:
