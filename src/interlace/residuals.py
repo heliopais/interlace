@@ -10,17 +10,19 @@ computed explicitly from the stored endog and fixed-effects design matrix.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
 from interlace.result import CrossedLMEResult
 
 
-def _is_crossed(model) -> bool:
+def _is_crossed(model: Any) -> bool:
     return isinstance(model, CrossedLMEResult)
 
 
-def _marginal(model) -> tuple[np.ndarray, np.ndarray]:
+def _marginal(model: Any) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(marginal_resid, marginal_fitted)`` = ``(y - Xβ, Xβ)``."""
     # Works for both CrossedLMEResult and statsmodels MixedLMResults since both
     # expose model.model.exog, model.model.endog, and model.fe_params.
@@ -29,7 +31,7 @@ def _marginal(model) -> tuple[np.ndarray, np.ndarray]:
     return endog - xbeta, xbeta
 
 
-def _conditional(model) -> tuple[np.ndarray, np.ndarray]:
+def _conditional(model: Any) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(conditional_resid, conditional_fitted)`` = ``(y - Xβ - Zu, Xβ + Zu)``."""  # noqa: E501
     # Both CrossedLMEResult and statsmodels MixedLMResults store conditional
     # residuals / fitted values in .resid / .fittedvalues.
@@ -39,7 +41,7 @@ def _conditional(model) -> tuple[np.ndarray, np.ndarray]:
 
 
 def hlm_resid(
-    model,
+    model: Any,
     full_data: bool = True,
     type: str = "marginal",  # noqa: A002
     standardized: bool = False,

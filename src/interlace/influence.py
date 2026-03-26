@@ -11,6 +11,7 @@ mixed-effects models. Statistics in Medicine, 24(6), 893–909.
 from __future__ import annotations
 
 import warnings
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -19,7 +20,7 @@ from tqdm import tqdm
 from interlace.result import CrossedLMEResult
 
 
-def _is_crossed(model) -> bool:
+def _is_crossed(model: Any) -> bool:
     return isinstance(model, CrossedLMEResult)
 
 
@@ -29,7 +30,7 @@ def _is_crossed(model) -> bool:
 
 
 def _full_params(
-    model,
+    model: Any,
 ) -> tuple[pd.Series, np.ndarray, np.ndarray, np.ndarray, list[str], int]:
     """Return ``(beta, V, V_inv, theta, theta_names, p)`` from either model type."""
     if _is_crossed(model):
@@ -54,7 +55,7 @@ def _full_params(
     return beta, V, V_inv, theta, theta_names, p
 
 
-def _refit(model, data_i: pd.DataFrame):
+def _refit(model: Any, data_i: pd.DataFrame) -> Any:
     """Refit the model on the reduced dataset *data_i*.
 
     Returns a lightweight namespace with ``fe_params``, ``fe_cov``,
@@ -78,7 +79,7 @@ def _refit(model, data_i: pd.DataFrame):
 
 
 def _reduced_params(
-    model_i,
+    model_i: Any,
     p: int,
     theta_names: list[str],
 ) -> tuple[pd.Series, np.ndarray, np.ndarray]:
@@ -99,7 +100,7 @@ def _reduced_params(
     return beta_i, Vi, theta_i
 
 
-def _refit_groups_arg(model):
+def _refit_groups_arg(model: Any) -> Any:
     """Return the groups argument string/list for interlace.fit refits."""
     if not _is_crossed(model):
         return None
@@ -112,7 +113,9 @@ def _refit_groups_arg(model):
 # ---------------------------------------------------------------------------
 
 
-def hlm_influence(model, level: int | str = 1, vc_formula=None) -> pd.DataFrame:
+def hlm_influence(
+    model: Any, level: int | str = 1, vc_formula: Any = None
+) -> pd.DataFrame:
     """Calculate multiple influence diagnostics via exact deletion.
 
     Parameters
@@ -223,7 +226,7 @@ def hlm_influence(model, level: int | str = 1, vc_formula=None) -> pd.DataFrame:
         except Exception:  # noqa: BLE001
             pass  # leave as nan
 
-    res: dict = {
+    res: dict[str, Any] = {
         level if isinstance(level, str) else "index": units,
         "cooksd": cooks_d,
         "mdffits": mdffits_val,
@@ -241,14 +244,14 @@ def hlm_influence(model, level: int | str = 1, vc_formula=None) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def cooks_distance(model) -> np.ndarray:
+def cooks_distance(model: Any) -> np.ndarray:
     """Return Cook's distance for each observation."""
-    return hlm_influence(model, level=1)["cooksd"].values
+    return np.asarray(hlm_influence(model, level=1)["cooksd"].values)
 
 
-def mdffits(model) -> np.ndarray:
+def mdffits(model: Any) -> np.ndarray:
     """Return MDFFITS for each observation."""
-    return hlm_influence(model, level=1)["mdffits"].values
+    return np.asarray(hlm_influence(model, level=1)["mdffits"].values)
 
 
 # ---------------------------------------------------------------------------
@@ -256,7 +259,7 @@ def mdffits(model) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-def n_influential(model, threshold: float | None = None) -> int:
+def n_influential(model: Any, threshold: float | None = None) -> int:
     """Count observations whose Cook's distance exceeds *threshold*.
 
     Parameters
@@ -278,7 +281,7 @@ def n_influential(model, threshold: float | None = None) -> int:
     return int(np.sum(cd > threshold))
 
 
-def tau_gap(model, threshold: float | None = None) -> dict[str, float]:
+def tau_gap(model: Any, threshold: float | None = None) -> dict[str, float]:
     """Absolute difference in random-effects std devs after removing influential obs.
 
     Refits the model excluding all observations where Cook's D > *threshold*,

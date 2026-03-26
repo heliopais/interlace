@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from plotnine import (
     aes,
     geom_hline,
@@ -16,7 +18,7 @@ from plotnine import (
 )
 
 
-def plot_resid(resid_df, type: str = "resid_vs_fitted") -> ggplot:  # noqa: A002
+def plot_resid(resid_df: Any, type: str = "resid_vs_fitted") -> ggplot:  # noqa: A002
     """Residual plot from the output of :func:`~interlace.residuals.hlm_resid`.
 
     Parameters
@@ -49,7 +51,7 @@ def plot_resid(resid_df, type: str = "resid_vs_fitted") -> ggplot:  # noqa: A002
     raise ValueError(msg)
 
 
-def plot_influence(influence_df, diag: str = "cooksd") -> ggplot:
+def plot_influence(influence_df: Any, diag: str = "cooksd") -> ggplot:
     """Index plot of an influence diagnostic from
     :func:`~interlace.influence.hlm_influence`.
 
@@ -73,7 +75,7 @@ def plot_influence(influence_df, diag: str = "cooksd") -> ggplot:
 
 
 def dotplot_diag(
-    influence_df,
+    influence_df: Any,
     diag: str = "cooksd",
     cutoff: str | float = "internal",
     name: str | None = None,

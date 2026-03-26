@@ -1,4 +1,4 @@
-.PHONY: install test lint typecheck format check build clean
+.PHONY: install test lint typecheck format check build clean hooks
 
 install:
 	uv sync --group dev
@@ -14,6 +14,9 @@ typecheck:
 	uv run mypy
 
 check: lint typecheck test
+
+hooks:
+	git config core.hooksPath .githooks
 
 build:
 	uv build

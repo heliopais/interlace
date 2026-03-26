@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
 
 from interlace.influence import hlm_influence
 from interlace.residuals import hlm_resid
 
 
-def hlm_augment(model, level: int = 1, include_influence: bool = True) -> pd.DataFrame:
+def hlm_augment(
+    model: Any, level: int = 1, include_influence: bool = True
+) -> pd.DataFrame:
     """Combine residuals and (optionally) influence diagnostics into one DataFrame.
 
     Parameters

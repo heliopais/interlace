@@ -13,6 +13,8 @@ mixed models. Biometrical Journal, 49(6), 863–875.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import scipy.linalg as la
@@ -20,11 +22,13 @@ import scipy.linalg as la
 from interlace.result import CrossedLMEResult
 
 
-def _is_crossed(model) -> bool:
+def _is_crossed(model: Any) -> bool:
     return isinstance(model, CrossedLMEResult)
 
 
-def _crossed_structures(model: CrossedLMEResult):
+def _crossed_structures(
+    model: CrossedLMEResult,
+) -> tuple[np.ndarray, list[Any], list[np.ndarray], np.ndarray]:
     """Extract (groups, group_labels, exog_re_li, D, fe_cov, scale) from a
     CrossedLMEResult.
 
@@ -69,7 +73,7 @@ def _crossed_structures(model: CrossedLMEResult):
     return groups, group_labels, exog_re_li, D
 
 
-def _statsmodels_structures(model):
+def _statsmodels_structures(model: Any) -> tuple[Any, Any, Any, Any, Any]:
     """Extract leverage structures from a statsmodels MixedLMResults object."""
     cov_fe = model.cov_params().iloc[: model.k_fe, : model.k_fe].values
     D = model.cov_re.values
@@ -79,7 +83,7 @@ def _statsmodels_structures(model):
     return groups, group_labels, exog_re_li, D, cov_fe
 
 
-def leverage(model, level: int = 1) -> pd.DataFrame:  # noqa: ARG001
+def leverage(model: Any, level: int = 1) -> pd.DataFrame:  # noqa: ARG001
     """Calculate observation-level leverage for a fitted linear mixed model.
 
     Parameters
