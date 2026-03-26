@@ -114,7 +114,10 @@ def _refit_groups_arg(model: Any) -> Any:
 
 
 def hlm_influence(
-    model: Any, level: int | str = 1, vc_formula: Any = None
+    model: Any,
+    level: int | str = 1,
+    vc_formula: Any = None,
+    optimizer: str = "lbfgsb",
 ) -> pd.DataFrame:
     """Calculate multiple influence diagnostics via exact deletion.
 
@@ -128,6 +131,13 @@ def hlm_influence(
     vc_formula:
         Variance-components formula passed through to statsmodels refits
         (3-level models only; ignored for ``CrossedLMEResult``).
+    optimizer:
+        Optimizer used for each case-deletion refit.  ``"lbfgsb"``
+        (default) uses L-BFGS-B via scipy.  ``"bobyqa"`` uses
+        ``pybobyqa`` and routes single-RE statsmodels refits through
+        interlace REML, which is more robust near variance-parameter
+        boundaries and reduces the Cook's D gap relative to R/HLMdiag.
+        Requires the ``bobyqa`` optional extra when set to ``"bobyqa"``.
 
     Returns
     -------
@@ -135,6 +145,9 @@ def hlm_influence(
         Columns: ``cooksd``, ``mdffits``, ``covtrace``, ``covratio``,
         ``rvc.<name>`` for each variance component.
     """
+    if optimizer not in ("lbfgsb", "bobyqa"):
+        msg = f"optimizer must be 'lbfgsb' or 'bobyqa', got {optimizer!r}"
+        raise ValueError(msg)
     beta, V, V_inv, theta, theta_names, p = _full_params(model)
     det_V = np.linalg.det(V)
 
@@ -183,7 +196,19 @@ def hlm_influence(
 
                     groups_arg = _refit_groups_arg(model)
                     model_i = interlace.fit(
-                        model.model.formula, data_i, groups=groups_arg
+                        model.model.formula,
+                        data_i,
+                        groups=groups_arg,
+                        optimizer=optimizer,
+                    )
+                elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
+                    import interlace
+
+                    model_i = interlace.fit(
+                        model.model.formula,
+                        data_i,
+                        groups=model._gpgap_group_col,
+                        optimizer=optimizer,
                     )
                 else:
                     model_class = model.model.__class__
@@ -244,14 +269,18 @@ def hlm_influence(
 # ---------------------------------------------------------------------------
 
 
-def cooks_distance(model: Any) -> np.ndarray:
+def cooks_distance(model: Any, optimizer: str = "lbfgsb") -> np.ndarray:
     """Return Cook's distance for each observation."""
-    return np.asarray(hlm_influence(model, level=1)["cooksd"].values)
+    return np.asarray(
+        hlm_influence(model, level=1, optimizer=optimizer)["cooksd"].values
+    )
 
 
-def mdffits(model: Any) -> np.ndarray:
+def mdffits(model: Any, optimizer: str = "lbfgsb") -> np.ndarray:
     """Return MDFFITS for each observation."""
-    return np.asarray(hlm_influence(model, level=1)["mdffits"].values)
+    return np.asarray(
+        hlm_influence(model, level=1, optimizer=optimizer)["mdffits"].values
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +288,9 @@ def mdffits(model: Any) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-def n_influential(model: Any, threshold: float | None = None) -> int:
+def n_influential(
+    model: Any, threshold: float | None = None, optimizer: str = "lbfgsb"
+) -> int:
     """Count observations whose Cook's distance exceeds *threshold*.
 
     Parameters
@@ -269,6 +300,8 @@ def n_influential(model: Any, threshold: float | None = None) -> int:
     threshold:
         Cut-off value.  Defaults to ``4 / n`` where ``n`` is the number of
         observations (the standard heuristic).
+    optimizer:
+        Optimizer used for case-deletion refits.  See :func:`hlm_influence`.
 
     Returns
     -------
@@ -277,11 +310,13 @@ def n_influential(model: Any, threshold: float | None = None) -> int:
     n = model.nobs if hasattr(model, "nobs") else model.model.nobs
     if threshold is None:
         threshold = 4.0 / n
-    cd = cooks_distance(model)
+    cd = cooks_distance(model, optimizer=optimizer)
     return int(np.sum(cd > threshold))
 
 
-def tau_gap(model: Any, threshold: float | None = None) -> dict[str, float]:
+def tau_gap(
+    model: Any, threshold: float | None = None, optimizer: str = "lbfgsb"
+) -> dict[str, float]:
     """Absolute difference in random-effects std devs after removing influential obs.
 
     Refits the model excluding all observations where Cook's D > *threshold*,
@@ -294,6 +329,9 @@ def tau_gap(model: Any, threshold: float | None = None) -> dict[str, float]:
         A ``CrossedLMEResult`` or statsmodels ``MixedLMResults`` object.
     threshold:
         Cook's D cut-off.  Defaults to ``4 / n``.
+    optimizer:
+        Optimizer used for the reduced-data refit and for Cook's D
+        computation.  See :func:`hlm_influence` for details.
 
     Returns
     -------
@@ -304,7 +342,7 @@ def tau_gap(model: Any, threshold: float | None = None) -> dict[str, float]:
     if threshold is None:
         threshold = 4.0 / n
 
-    cd = cooks_distance(model)
+    cd = cooks_distance(model, optimizer=optimizer)
     influential_mask = cd > threshold
 
     data = model.model.data.frame.reset_index(drop=True)
@@ -317,9 +355,27 @@ def tau_gap(model: Any, threshold: float | None = None) -> dict[str, float]:
 
             groups_arg = _refit_groups_arg(model)
             model_reduced = interlace.fit(
-                model.model.formula, data_reduced, groups=groups_arg
+                model.model.formula,
+                data_reduced,
+                groups=groups_arg,
+                optimizer=optimizer,
             )
             vc_full = model.variance_components
+            vc_reduced = model_reduced.variance_components
+        elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
+            import interlace
+
+            model_reduced = interlace.fit(
+                model.model.formula,
+                data_reduced,
+                groups=model._gpgap_group_col,
+                optimizer=optimizer,
+            )
+            full_names = list(model.cov_re.index)
+            vc_full = {
+                name: float(model.cov_re.iloc[i, i])
+                for i, name in enumerate(full_names)
+            }
             vc_reduced = model_reduced.variance_components
         else:
             # Use the original groups array aligned to the reset_index data

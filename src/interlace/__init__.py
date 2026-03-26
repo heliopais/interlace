@@ -62,6 +62,7 @@ def fit(
     groups: str | list[str] | None = None,
     method: str = "REML",
     random: list[str] | None = None,
+    optimizer: str = "lbfgsb",
 ) -> CrossedLMEResult:
     """Fit a linear mixed model with crossed random effects via profiled REML.
 
@@ -82,6 +83,12 @@ def fit(
         *groups* when both are provided.
     method:
         Estimation method; only ``"REML"`` is currently supported.
+    optimizer:
+        Optimizer for the REML criterion.  ``"lbfgsb"`` (default) uses
+        ``scipy.optimize.minimize`` with L-BFGS-B.  ``"bobyqa"`` uses
+        ``pybobyqa`` (requires the ``bobyqa`` optional extra), a
+        gradient-free trust-region method that is more robust near
+        variance-parameter boundaries and matches lme4's default.
 
     Returns
     -------
@@ -116,7 +123,9 @@ def fit(
         n_levels_list.append(len(_uniques))
 
     # --- 3. Fit REML ---
-    reml = fit_reml(y, X, Z, q_sizes=[], specs=specs, n_levels=n_levels_list)
+    reml = fit_reml(
+        y, X, Z, q_sizes=[], specs=specs, n_levels=n_levels_list, optimizer=optimizer
+    )
 
     # --- 4. Recover quantities at optimum ---
     Lambda = make_lambda(reml.theta, specs, n_levels_list)

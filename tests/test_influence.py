@@ -13,6 +13,8 @@ Acceptance criteria:
 
 from __future__ import annotations
 
+from unittest import mock
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -117,3 +119,50 @@ def test_mdffits_wrapper(models, data):
         mf = mdffits(model)
         assert isinstance(mf, np.ndarray)
         assert len(mf) == len(data)
+
+
+# ---------------------------------------------------------------------------
+# BOBYQA routing for single-RE statsmodels models
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def sm_with_group_col(data):
+    """MixedLMResults with _gpgap_group_col set (as gpgap pipeline does)."""
+    sm = MixedLM.from_formula("y ~ x", groups="group", data=data).fit(reml=True)
+    sm._gpgap_group_col = "group"
+    return sm
+
+
+class TestBobyqaRouting:
+    def test_hlm_influence_bobyqa_routes_through_interlace(
+        self, sm_with_group_col
+    ) -> None:
+        pytest.importorskip("pybobyqa")
+        with mock.patch("interlace.fit", wraps=interlace.fit) as mock_fit:
+            hlm_influence(sm_with_group_col, optimizer="bobyqa")
+        assert mock_fit.called, (
+            "interlace.fit was not called for single-RE BOBYQA refit"
+        )
+
+    def test_hlm_influence_bobyqa_returns_valid_dataframe(
+        self, sm_with_group_col, data
+    ) -> None:
+        pytest.importorskip("pybobyqa")
+        result = hlm_influence(sm_with_group_col, optimizer="bobyqa")
+        assert isinstance(result, pd.DataFrame)
+        assert set(result.columns) >= {"cooksd", "mdffits", "covtrace", "covratio"}
+        assert len(result) == len(data)
+        assert (result["cooksd"].fillna(0) >= -1e-10).all()
+
+    def test_hlm_influence_lbfgsb_does_not_route_through_interlace(
+        self, sm_with_group_col
+    ) -> None:
+        """Default optimizer must not change routing (backward compat)."""
+        with mock.patch("interlace.fit", wraps=interlace.fit) as mock_fit:
+            hlm_influence(sm_with_group_col, optimizer="lbfgsb")
+        assert not mock_fit.called, "interlace.fit should not be called for lbfgsb path"
+
+    def test_unknown_optimizer_raises(self, sm_with_group_col) -> None:
+        with pytest.raises(ValueError, match="optimizer"):
+            hlm_influence(sm_with_group_col, optimizer="invalid")
