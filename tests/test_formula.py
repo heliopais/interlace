@@ -5,7 +5,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from interlace.formula import extract_group_factors, parse_formula
+from interlace.formula import (
+    RandomEffectSpec,
+    extract_group_factors,
+    groups_to_random_effects,
+    parse_formula,
+    parse_random_effects,
+)
 
 
 @pytest.fixture()
@@ -96,3 +102,144 @@ class TestExtractGroupFactors:
         assert factors[0][0] == "group"
         assert factors[1][0] == "group2"
         assert factors[1][2] == 2  # x, y
+
+
+class TestRandomEffectSpec:
+    def test_dataclass_fields(self) -> None:
+        spec = RandomEffectSpec(
+            group="g", predictors=["x"], intercept=True, correlated=True
+        )
+        assert spec.group == "g"
+        assert spec.predictors == ["x"]
+        assert spec.intercept is True
+        assert spec.correlated is True
+
+    def test_intercept_only_has_no_predictors(self) -> None:
+        spec = RandomEffectSpec(
+            group="g", predictors=[], intercept=True, correlated=True
+        )
+        assert spec.predictors == []
+
+    def test_n_terms_intercept_only(self) -> None:
+        spec = RandomEffectSpec(
+            group="g", predictors=[], intercept=True, correlated=True
+        )
+        assert spec.n_terms == 1
+
+    def test_n_terms_slope_only(self) -> None:
+        spec = RandomEffectSpec(
+            group="g", predictors=["x"], intercept=False, correlated=True
+        )
+        assert spec.n_terms == 1
+
+    def test_n_terms_intercept_and_slope(self) -> None:
+        spec = RandomEffectSpec(
+            group="g", predictors=["x"], intercept=True, correlated=True
+        )
+        assert spec.n_terms == 2
+
+    def test_n_terms_two_slopes(self) -> None:
+        spec = RandomEffectSpec(
+            group="g", predictors=["x1", "x2"], intercept=True, correlated=True
+        )
+        assert spec.n_terms == 3
+
+
+class TestParseRandomEffects:
+    def test_intercept_only(self) -> None:
+        specs = parse_random_effects(["(1 | g)"])
+        assert len(specs) == 1
+        s = specs[0]
+        assert s.group == "g"
+        assert s.predictors == []
+        assert s.intercept is True
+        assert s.correlated is True
+
+    def test_correlated_intercept_and_slope(self) -> None:
+        specs = parse_random_effects(["(1 + x | g)"])
+        assert len(specs) == 1
+        s = specs[0]
+        assert s.group == "g"
+        assert s.predictors == ["x"]
+        assert s.intercept is True
+        assert s.correlated is True
+
+    def test_independent_intercept_and_slope(self) -> None:
+        specs = parse_random_effects(["(1 + x || g)"])
+        assert len(specs) == 1
+        s = specs[0]
+        assert s.group == "g"
+        assert s.predictors == ["x"]
+        assert s.intercept is True
+        assert s.correlated is False
+
+    def test_slope_only_explicit_zero(self) -> None:
+        specs = parse_random_effects(["(0 + x | g)"])
+        assert len(specs) == 1
+        s = specs[0]
+        assert s.intercept is False
+        assert s.predictors == ["x"]
+
+    def test_slope_only_no_intercept_term(self) -> None:
+        # (x | g) — no 1 means no intercept
+        specs = parse_random_effects(["(x | g)"])
+        assert len(specs) == 1
+        s = specs[0]
+        assert s.intercept is False
+        assert s.predictors == ["x"]
+
+    def test_multiple_slopes(self) -> None:
+        specs = parse_random_effects(["(1 + x1 + x2 | g)"])
+        assert len(specs) == 1
+        s = specs[0]
+        assert s.predictors == ["x1", "x2"]
+        assert s.intercept is True
+
+    def test_multiple_specs(self) -> None:
+        specs = parse_random_effects(["(1 + x | g1)", "(1 | g2)"])
+        assert len(specs) == 2
+        assert specs[0].group == "g1"
+        assert specs[0].predictors == ["x"]
+        assert specs[1].group == "g2"
+        assert specs[1].predictors == []
+
+    def test_whitespace_tolerance(self) -> None:
+        specs = parse_random_effects(["( 1 + x | g )"])
+        assert specs[0].group == "g"
+        assert specs[0].predictors == ["x"]
+
+    def test_invalid_syntax_raises(self) -> None:
+        with pytest.raises(ValueError, match="random"):
+            parse_random_effects(["not valid syntax"])
+
+    def test_missing_pipe_raises(self) -> None:
+        with pytest.raises(ValueError, match="random"):
+            parse_random_effects(["(1 + x)"])
+
+
+class TestGroupsToRandomEffects:
+    def test_single_group_string(self) -> None:
+        specs = groups_to_random_effects("g")
+        assert len(specs) == 1
+        s = specs[0]
+        assert s.group == "g"
+        assert s.predictors == []
+        assert s.intercept is True
+        assert s.correlated is True
+
+    def test_list_of_groups(self) -> None:
+        specs = groups_to_random_effects(["g1", "g2"])
+        assert len(specs) == 2
+        assert specs[0].group == "g1"
+        assert specs[1].group == "g2"
+        for s in specs:
+            assert s.predictors == []
+            assert s.intercept is True
+
+    def test_matches_parse_random_effects(self) -> None:
+        via_groups = groups_to_random_effects("g")
+        via_random = parse_random_effects(["(1 | g)"])
+        assert via_groups[0].group == via_random[0].group
+        assert via_groups[0].predictors == via_random[0].predictors
+        assert via_groups[0].intercept == via_random[0].intercept
+        assert via_groups[0].correlated == via_random[0].correlated

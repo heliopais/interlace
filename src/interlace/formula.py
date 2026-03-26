@@ -7,11 +7,121 @@ Groups are a separate parameter, mirroring MixedLM.from_formula().
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
 import patsy
+
+
+@dataclass
+class RandomEffectSpec:
+    """Specification for a single random effect term.
+
+    Parameters
+    ----------
+    group:
+        Column name of the grouping factor.
+    predictors:
+        Names of slope predictor columns (empty for intercept-only).
+    intercept:
+        Whether a random intercept is included.
+    correlated:
+        True = full Cholesky (correlated intercept/slopes);
+        False = diagonal (independent, ``||`` syntax).
+    """
+
+    group: str
+    predictors: list[str] = field(default_factory=list)
+    intercept: bool = True
+    correlated: bool = True
+
+    @property
+    def n_terms(self) -> int:
+        """Total number of random effect columns per group level."""
+        return int(self.intercept) + len(self.predictors)
+
+
+# Regex: optional outer parens, effects side, pipe (single or double), group name
+_RE_SPEC = re.compile(
+    r"^\(\s*(?P<effects>.+?)\s*(?P<pipe>\|\|?)\s*(?P<group>\w+)\s*\)$"
+)
+
+
+def parse_random_effects(random: list[str]) -> list[RandomEffectSpec]:
+    """Parse a list of lme4-style random effect strings into RandomEffectSpec objects.
+
+    Supported syntax examples::
+
+        "(1 | g)"           # random intercept
+        "(1 + x | g)"       # correlated random intercept + slope
+        "(1 + x || g)"      # independent random intercept + slope
+        "(0 + x | g)"       # random slope only (no intercept)
+        "(x | g)"           # random slope only (implicit no intercept)
+
+    Parameters
+    ----------
+    random:
+        List of lme4-style random effect specification strings.
+
+    Returns
+    -------
+    list[RandomEffectSpec]
+    """
+    specs = []
+    for s in random:
+        m = _RE_SPEC.match(s.strip())
+        if m is None:
+            raise ValueError(
+                f"Invalid random effect specification {s!r}. "
+                "Expected lme4-style syntax like '(1 + x | g)' or '(1 + x || g)'."
+            )
+        effects_str = m.group("effects")
+        group = m.group("group")
+        correlated = m.group("pipe") == "|"
+
+        terms = [t.strip() for t in effects_str.split("+")]
+
+        intercept = False
+        predictors: list[str] = []
+        for term in terms:
+            if term == "1":
+                intercept = True
+            elif term == "0":
+                pass  # explicit suppression of intercept — leave intercept=False
+            else:
+                predictors.append(term)
+
+        # If no explicit 1 or 0, intercept defaults to False (slope-only)
+        specs.append(
+            RandomEffectSpec(
+                group=group,
+                predictors=predictors,
+                intercept=intercept,
+                correlated=correlated,
+            )
+        )
+    return specs
+
+
+def groups_to_random_effects(groups: str | list[str]) -> list[RandomEffectSpec]:
+    """Convert the legacy ``groups`` parameter to a list of RandomEffectSpec.
+
+    Produces intercept-only, correlated specs — equivalent to ``(1 | g)`` for
+    each group name.
+
+    Parameters
+    ----------
+    groups:
+        Single group column name or list of group column names.
+    """
+    if isinstance(groups, str):
+        groups = [groups]
+    return [
+        RandomEffectSpec(group=g, predictors=[], intercept=True, correlated=True)
+        for g in groups
+    ]
 
 
 @dataclass
