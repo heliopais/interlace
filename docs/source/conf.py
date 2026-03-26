@@ -19,14 +19,15 @@ extensions = [
     "sphinx_copybutton",
     "sphinx_external_toc",
     "sphinx_autodoc_typehints",
-    "myst_parser",
+    "myst_nb",
 ]
 
 # External TOC
 external_toc_path = "_toc.yml"
 
-# MyST (Markdown support)
+# MyST-NB (notebook execution + Markdown support)
 myst_enable_extensions = ["colon_fence"]
+nb_execution_timeout = 300  # seconds; hlm_influence runs n refits
 
 # autodoc
 autodoc_typehints = "description"
