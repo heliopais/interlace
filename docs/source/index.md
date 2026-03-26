@@ -7,16 +7,18 @@
 
 **interlace** is a pure-Python implementation of profiled restricted maximum likelihood
 (REML) estimation for linear mixed models with **crossed random intercepts** — targeting
-parity with R's `lme4::lmer()` and designed as a drop-in replacement for
-`statsmodels.MixedLM` in production pipelines.
+parity with R's [`lme4::lmer()`](https://lme4.r-lib.org/reference/lmer.html) and
+designed as a drop-in replacement for
+[`statsmodels.MixedLM`](https://www.statsmodels.org/stable/generated/statsmodels.regression.mixed_linear_model.MixedLM.html)
+in production pipelines.
 
 ## Why interlace?
 
-`statsmodels.MixedLM` is built around a single grouping factor. When a model has two
+[`statsmodels.MixedLM`](https://www.statsmodels.org/stable/generated/statsmodels.regression.mixed_linear_model.MixedLM.html) is built around a single grouping factor. When a model has two
 independent sources of variance — say, `subject` *and* `item` — there is no native
 syntax for crossed random intercepts, and the available workarounds produce estimates
 that diverge from REML. `interlace` fills that gap, implementing the same profiled REML
-and sparse Cholesky machinery as R's `lme4::lmer()`.
+and sparse Cholesky machinery as R's [`lme4::lmer()`](https://lme4.r-lib.org/reference/lmer.html).
 
 - **Coming from Python / statsmodels?** See [For Python users](why-python.md) for a
   side-by-side comparison and explanation of the limitation.
@@ -29,4 +31,4 @@ and sparse Cholesky machinery as R's `lme4::lmer()`.
 - Sparse throughout — Z is never materialised as a dense matrix
 - Full suite of HLM diagnostics: residuals, leverage, Cook's D, MDFFITS, influence plots
 - Compatible result object exposing the same attributes as `statsmodels.MixedLMResults`
-- Validated against R's `lme4::lmer()` to tight tolerances (fixed effects abs diff < 1e-4)
+- Validated against R's [`lme4::lmer()`](https://lme4.r-lib.org/reference/lmer.html) to tight tolerances (fixed effects abs diff < 1e-4)
