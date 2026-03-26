@@ -227,6 +227,112 @@ class TestFitReml:
 # ---------------------------------------------------------------------------
 
 
+class TestFitRemlWithSlopes:
+    """fit_reml wired to use generalised Z and Lambda via specs."""
+
+    @pytest.fixture()
+    def slope_dataset(self) -> dict:
+        """200 obs, 10 groups, independent random intercept + slope."""
+        rng = np.random.default_rng(99)
+        n, q = 200, 10
+        group_codes = np.repeat(np.arange(q), n // q)
+        x = rng.normal(size=n)
+        b_int = rng.normal(scale=0.8, size=q)
+        b_slope = rng.normal(scale=0.4, size=q)
+        X = np.column_stack([np.ones(n), x])
+        y = X @ np.array([1.0, 0.5]) + b_int[group_codes] + b_slope[group_codes] * x
+        y += rng.normal(scale=1.0, size=n)
+        import pandas as pd
+
+        from interlace.formula import RandomEffectSpec
+        from interlace.sparse_z import build_joint_z_from_specs
+
+        df = pd.DataFrame({"g": group_codes.astype(str), "x": x})
+        spec = RandomEffectSpec(
+            group="g", predictors=["x"], intercept=True, correlated=True
+        )
+        Z = build_joint_z_from_specs([spec], df)
+        return {"y": y, "X": X, "Z": Z, "spec": spec, "q": q}
+
+    def test_converges_correlated_slope(self, slope_dataset: dict) -> None:
+
+        d = slope_dataset
+        spec = d["spec"]
+        result = fit_reml(
+            d["y"],
+            d["X"],
+            d["Z"],
+            q_sizes=[],
+            specs=[spec],
+            n_levels=[d["q"]],
+        )
+        assert result.converged
+
+    def test_finite_llf_correlated_slope(self, slope_dataset: dict) -> None:
+        d = slope_dataset
+        result = fit_reml(
+            d["y"],
+            d["X"],
+            d["Z"],
+            q_sizes=[],
+            specs=[d["spec"]],
+            n_levels=[d["q"]],
+        )
+        assert np.isfinite(result.llf)
+
+    def test_theta_length_matches_specs(self, slope_dataset: dict) -> None:
+        d = slope_dataset
+        spec = d["spec"]
+        result = fit_reml(
+            d["y"],
+            d["X"],
+            d["Z"],
+            q_sizes=[],
+            specs=[spec],
+            n_levels=[d["q"]],
+        )
+        # correlated intercept+slope: 3 theta params (l11, l21, l22)
+        assert len(result.theta) == 3
+
+    def test_specs_stored_on_result(self, slope_dataset: dict) -> None:
+        d = slope_dataset
+        spec = d["spec"]
+        result = fit_reml(
+            d["y"],
+            d["X"],
+            d["Z"],
+            q_sizes=[],
+            specs=[spec],
+            n_levels=[d["q"]],
+        )
+        assert result.specs is not None
+        assert result.n_levels == [d["q"]]
+
+    def test_backward_compat_intercept_only_specs_matches_original(
+        self, single_re_dataset: dict
+    ) -> None:
+        # fit_reml with intercept-only specs gives same result as plain q_sizes path
+        from interlace.formula import RandomEffectSpec
+
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        result_old = fit_reml(d["y"], d["X"], Z, d["q_sizes"])
+
+        spec = RandomEffectSpec(
+            group="g", predictors=[], intercept=True, correlated=True
+        )
+        result_new = fit_reml(
+            d["y"],
+            d["X"],
+            Z,
+            q_sizes=[],
+            specs=[spec],
+            n_levels=[d["q_sizes"][0]],
+        )
+        np.testing.assert_allclose(result_old.beta, result_new.beta, rtol=1e-5)
+        np.testing.assert_allclose(result_old.sigma2, result_new.sigma2, rtol=1e-5)
+
+
 def _make_Z(codes: np.ndarray, n_levels: int) -> sp.csc_matrix:
     from interlace.sparse_z import build_indicator_matrix
 

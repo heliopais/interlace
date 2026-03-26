@@ -43,6 +43,8 @@ class REMLResult:
     bic: float
     nobs: int
     nparams: int  # p (FE) + k (RE variances) + 1 (sigma²)
+    specs: list[RandomEffectSpec] | None = None
+    n_levels: list[int] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -210,15 +212,47 @@ def _precompute(
     return dict(ZtZ=ZtZ, ZtX=ZtX, Zty=Zty, XtX=XtX, Xty=Xty, yty=yty)
 
 
+def _build_theta_bounds(
+    specs: list[RandomEffectSpec],
+) -> list[tuple[float | None, float | None]]:
+    """Build L-BFGS-B bounds for the theta vector given a list of specs.
+
+    Diagonal elements of L (positive definiteness) are bounded below at 1e-8.
+    Off-diagonal elements (correlated only) are unconstrained.
+    Independent-spec elements are all bounded below at 1e-8.
+    """
+    bounds: list[tuple[float | None, float | None]] = []
+    for spec in specs:
+        p_j = spec.n_terms
+        if p_j == 1:
+            bounds.append((1e-8, None))
+        elif spec.correlated:
+            for row in range(p_j):
+                for col in range(row + 1):
+                    bounds.append((1e-8, None) if row == col else (None, None))
+        else:
+            for _ in range(p_j):
+                bounds.append((1e-8, None))
+    return bounds
+
+
 def _build_A11(
     ZtZ: sp.csc_matrix,
-    lambda_diag: np.ndarray,
+    lambda_diag_or_matrix: np.ndarray | sp.csc_matrix,
 ) -> sp.csc_matrix:
     """Build A11 = Lambda' Z'Z Lambda + I_q.
 
-    Scales the stored non-zeros of Z'Z by lambda_i * lambda_j for the
-    corresponding row/col indices, then adds the identity.
+    Accepts either a 1-D diagonal vector (legacy path, fast element-wise
+    scaling) or a full sparse Lambda matrix (generalised path using sparse
+    matrix multiplication).
     """
+    if sp.issparse(lambda_diag_or_matrix):
+        Lambda = lambda_diag_or_matrix
+        A = (Lambda.T @ ZtZ @ Lambda).tocsc()
+        q = A.shape[0]
+        return (A + sp.eye(q, format="csc")).tocsc()
+    # Legacy diagonal path
+    lambda_diag = lambda_diag_or_matrix
     coo = ZtZ.tocoo()
     scaled_data = coo.data * lambda_diag[coo.row] * lambda_diag[coo.col]
     q = ZtZ.shape[0]
@@ -240,6 +274,9 @@ def reml_objective(
     Z: sp.csc_matrix,
     q_sizes: list[int],
     _cache: dict[str, np.ndarray | sp.csc_matrix | float] | None = None,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
 ) -> float:
     """Profiled REML deviance (to minimise over theta).
 
@@ -252,14 +289,21 @@ def reml_objective(
     Parameters
     ----------
     theta:
-        Relative covariance parameters, one per grouping factor (>= 0).
+        Relative covariance parameters. When *specs* is ``None``: one scalar
+        per grouping factor. When *specs* is provided: concatenated per-spec
+        theta blocks as returned by :func:`make_lambda`.
     y, X, Z:
-        Response, fixed-effects matrix, random-effects indicator matrix.
+        Response, fixed-effects matrix, random-effects design matrix.
     q_sizes:
-        Number of levels per grouping factor.
+        Number of levels per grouping factor (legacy path; ignored when
+        *specs* is provided).
     _cache:
-        Optional dict of precomputed cross-products (avoids recomputation
-        when called repeatedly with the same y/X/Z).
+        Optional dict of precomputed cross-products.
+    specs:
+        If provided, use :func:`make_lambda` to build a full sparse Lambda
+        (supports random slopes). Otherwise fall back to the diagonal path.
+    n_levels:
+        Number of group levels per spec. Required when *specs* is not ``None``.
 
     Returns
     -------
@@ -276,18 +320,24 @@ def reml_objective(
     yty = float(_cache["yty"])  # noqa: PGH003
 
     n, p = X.shape
-    lambda_diag = make_lambda_diag(theta, q_sizes)
 
-    # --- Augmented inner matrix and its log-determinant ---
-    A11 = _build_A11(ZtZ, lambda_diag)
+    # --- Build Lambda and A11 ---
+    if specs is not None:
+        Lambda = make_lambda(theta, specs, n_levels)  # type: ignore[arg-type]
+        A11 = _build_A11(ZtZ, Lambda)
+        lZty = np.asarray(Lambda.T @ Zty).squeeze()
+        lZtX = np.asarray(Lambda.T @ ZtX)
+    else:
+        lambda_diag = make_lambda_diag(theta, q_sizes)
+        A11 = _build_A11(ZtZ, lambda_diag)
+        lZty = lambda_diag * Zty  # (q,)
+        lZtX = lambda_diag[:, None] * ZtX  # (q, p)
+
     log_det_A11 = sparse_chol_logdet(A11)
 
     # --- Woodbury pieces: solve A11 c = Lambda' Z' (y, X) ---
-    lZty = lambda_diag * Zty  # (q,)
-    lZtX = lambda_diag[:, None] * ZtX  # (q, p)
-
-    c1 = _sparse_solve(A11, lZty)  # (q,) — A11^{-1} Lambda' Z' y
-    C_X = _sparse_solve(A11, lZtX)  # (q, p) — A11^{-1} Lambda' Z' X
+    c1 = _sparse_solve(A11, lZty)  # (q,)
+    C_X = _sparse_solve(A11, lZtX)  # (q, p)
 
     # --- X'Omega^{-1}X and X'Omega^{-1}y ---
     MX = XtX - lZtX.T @ C_X  # (p, p)
@@ -319,37 +369,50 @@ def fit_reml(
     Z: sp.csc_matrix,
     q_sizes: list[int],
     theta0: np.ndarray | None = None,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
 ) -> REMLResult:
     """Fit a linear mixed model by profiled REML.
 
     Parameters
     ----------
-    y:      Response vector, shape (n,).
-    X:      Fixed-effects design matrix, shape (n, p). Must include intercept.
-    Z:      Joint random-effects indicator matrix, shape (n, q).
-    q_sizes:Number of levels for each grouping factor (must sum to q).
-    theta0: Initial theta (defaults to ones).
+    y:        Response vector, shape (n,).
+    X:        Fixed-effects design matrix, shape (n, p). Must include intercept.
+    Z:        Joint random-effects design matrix, shape (n, q).
+    q_sizes:  Number of levels for each grouping factor (legacy path; ignored
+              when *specs* is provided).
+    theta0:   Initial theta (defaults to ones of the appropriate length).
+    specs:    Random effect specifications. When provided, uses
+              :func:`make_lambda` to build a full block-diagonal Lambda
+              (supports random slopes). ``n_levels`` must also be provided.
+    n_levels: Number of group levels per spec.
 
     Returns
     -------
     REMLResult
     """
     n, p = X.shape
-    k = len(q_sizes)
+
+    if specs is not None:
+        n_theta = sum(n_theta_for_spec(s.n_terms, s.correlated) for s in specs)
+        bounds = _build_theta_bounds(specs)
+    else:
+        n_theta = len(q_sizes)
+        bounds = [(1e-8, None)] * n_theta
 
     if theta0 is None:
-        theta0 = np.ones(k)
+        theta0 = np.ones(n_theta)
 
     cache = _precompute(y, X, Z)
 
     def obj(theta: np.ndarray) -> float:
-        return reml_objective(theta, y, X, Z, q_sizes, _cache=cache)
+        return reml_objective(
+            theta, y, X, Z, q_sizes, _cache=cache, specs=specs, n_levels=n_levels
+        )
 
-    bounds = [(1e-8, None)] * k
     res = opt.minimize(obj, theta0, method="L-BFGS-B", bounds=bounds)
-
     theta_hat = res.x
-    lambda_diag = make_lambda_diag(theta_hat, q_sizes)
 
     # --- Recover beta and sigma2 at optimum ---
     ZtZ = cache["ZtZ"]
@@ -359,9 +422,17 @@ def fit_reml(
     Xty = cache["Xty"]
     yty = cache["yty"]
 
-    A11 = _build_A11(ZtZ, lambda_diag)
-    lZty = lambda_diag * Zty
-    lZtX = lambda_diag[:, None] * ZtX
+    if specs is not None:
+        Lambda = make_lambda(theta_hat, specs, n_levels)  # type: ignore[arg-type]
+        A11 = _build_A11(ZtZ, Lambda)
+        lZty = np.asarray(Lambda.T @ Zty).squeeze()
+        lZtX = np.asarray(Lambda.T @ ZtX)
+    else:
+        lambda_diag = make_lambda_diag(theta_hat, q_sizes)
+        A11 = _build_A11(ZtZ, lambda_diag)
+        lZty = lambda_diag * Zty
+        lZtX = lambda_diag[:, None] * ZtX
+
     c1 = _sparse_solve(A11, lZty)
     C_X = _sparse_solve(A11, lZtX)
     MX = XtX - lZtX.T @ C_X
@@ -378,9 +449,8 @@ def fit_reml(
         log_det_A11 + log_det_MX + (n - p) * (1.0 + np.log(2.0 * np.pi * sigma2))
     )
 
-    # --- Information criteria (based on number of REML parameters) ---
-    # AIC/BIC for REML use the marginal likelihood with k + 1 variance params
-    nparams = p + k + 1
+    # --- Information criteria ---
+    nparams = p + n_theta + 1
     aic = -2.0 * llf + 2.0 * nparams
     bic = -2.0 * llf + np.log(n) * nparams
 
@@ -394,4 +464,6 @@ def fit_reml(
         bic=float(bic),
         nobs=n,
         nparams=nparams,
+        specs=specs,
+        n_levels=n_levels,
     )
