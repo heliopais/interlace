@@ -5,17 +5,18 @@
 [![Docs](https://github.com/heliopais/interlace/actions/workflows/docs.yml/badge.svg)](https://github.com/heliopais/interlace/actions/workflows/docs.yml)
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue)](https://github.com/heliopais/interlace/blob/main/LICENSE)
 
-**interlace** is a pure-Python implementation of profiled REML estimation for linear mixed
-models with **crossed random intercepts** — targeting parity with R's `lme4::lmer()` and
-designed as a drop-in replacement for `statsmodels.MixedLM` in production pipelines.
+**interlace** is a pure-Python implementation of profiled restricted maximum likelihood
+(REML) estimation for linear mixed models with **crossed random intercepts** — targeting
+parity with R's `lme4::lmer()` and designed as a drop-in replacement for
+`statsmodels.MixedLM` in production pipelines.
 
 ## Why interlace?
 
 `statsmodels.MixedLM` is built around a single grouping factor. When a model has two
 independent sources of variance — say, `subject` *and* `item` — there is no native
 syntax for crossed random intercepts, and the available workarounds produce estimates
-that diverge from REML. `interlace` fills that gap, implementing the same profiled
-restricted maximum likelihood (REML) and sparse Cholesky machinery as R's `lme4::lmer()`.
+that diverge from REML. `interlace` fills that gap, implementing the same profiled REML
+and sparse Cholesky machinery as R's `lme4::lmer()`.
 
 - **Coming from Python / statsmodels?** See [For Python users](why-python.md) for a
   side-by-side comparison and explanation of the limitation.
