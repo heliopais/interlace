@@ -166,3 +166,36 @@ class TestBobyqaRouting:
     def test_unknown_optimizer_raises(self, sm_with_group_col) -> None:
         with pytest.raises(ValueError, match="optimizer"):
             hlm_influence(sm_with_group_col, optimizer="invalid")
+
+
+# ---------------------------------------------------------------------------
+# Warm-start: theta0 passed through interlace.fit and used in hlm_influence
+# ---------------------------------------------------------------------------
+
+
+class TestWarmStart:
+    def test_fit_accepts_theta0(self, data) -> None:
+        """interlace.fit() should accept theta0 and pass it to fit_reml."""
+        import interlace
+        from interlace.profiled_reml import fit_reml
+
+        theta0 = np.array([1.5])
+        with mock.patch("interlace.fit_reml", wraps=fit_reml) as mock_fit_reml:
+            interlace.fit("y ~ x", data=data, groups="group", theta0=theta0)
+        call_kwargs = mock_fit_reml.call_args
+        passed_theta0 = call_kwargs.kwargs.get("theta0") or (
+            call_kwargs.args[4] if len(call_kwargs.args) > 4 else None
+        )
+        assert passed_theta0 is not None, "theta0 was not forwarded to fit_reml"
+        np.testing.assert_array_equal(passed_theta0, theta0)
+
+    def test_hlm_influence_warm_starts_from_full_model_theta(self, models) -> None:
+        """hlm_influence should pass model.theta as theta0 for each interlace refit."""
+        _, il = models
+        with mock.patch("interlace.fit", wraps=interlace.fit) as mock_fit:
+            hlm_influence(il, level=1)
+        assert mock_fit.called
+        for call in mock_fit.call_args_list:
+            theta0_passed = call.kwargs.get("theta0")
+            assert theta0_passed is not None, "theta0 not passed to interlace.fit refit"
+            np.testing.assert_array_equal(theta0_passed, il.theta)

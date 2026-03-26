@@ -200,6 +200,7 @@ def hlm_influence(
                         data_i,
                         groups=groups_arg,
                         optimizer=optimizer,
+                        theta0=model.theta,
                     )
                 elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
                     import interlace

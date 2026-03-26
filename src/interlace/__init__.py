@@ -63,6 +63,7 @@ def fit(
     method: str = "REML",
     random: list[str] | None = None,
     optimizer: str = "lbfgsb",
+    theta0: np.ndarray | None = None,
 ) -> CrossedLMEResult:
     """Fit a linear mixed model with crossed random effects via profiled REML.
 
@@ -89,6 +90,10 @@ def fit(
         ``pybobyqa`` (requires the ``bobyqa`` optional extra), a
         gradient-free trust-region method that is more robust near
         variance-parameter boundaries and matches lme4's default.
+    theta0:
+        Initial theta for the optimizer.  Defaults to ``np.ones(n_theta)``.
+        Pass the ``theta`` attribute of a previously fitted model to
+        warm-start the optimizer (e.g. for case-deletion refits).
 
     Returns
     -------
@@ -124,7 +129,14 @@ def fit(
 
     # --- 3. Fit REML ---
     reml = fit_reml(
-        y, X, Z, q_sizes=[], specs=specs, n_levels=n_levels_list, optimizer=optimizer
+        y,
+        X,
+        Z,
+        q_sizes=[],
+        specs=specs,
+        n_levels=n_levels_list,
+        optimizer=optimizer,
+        theta0=theta0,
     )
 
     # --- 4. Recover quantities at optimum ---
