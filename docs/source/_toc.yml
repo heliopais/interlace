@@ -1,5 +1,9 @@
 root: index
 subtrees:
+- caption: Background
+  entries:
+  - file: why-python
+  - file: why-r
 - caption: Getting Started
   entries:
   - file: installation
