@@ -24,6 +24,9 @@ Homepage = "https://github.com/heliopais/interlace"
 Documentation = "https://heliopais.github.io/interlace/"
 Issues = "https://github.com/heliopais/interlace/issues"
 
+[project.optional-dependencies]
+bobyqa = ["Py-BOBYQA>=1.4"]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
@@ -72,6 +75,10 @@ disallow_untyped_calls = false
 
 [[tool.mypy.overrides]]
 module = ["tqdm", "tqdm.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["pybobyqa"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

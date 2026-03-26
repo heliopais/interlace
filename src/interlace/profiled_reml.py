@@ -372,6 +372,7 @@ def fit_reml(
     *,
     specs: list[RandomEffectSpec] | None = None,
     n_levels: list[int] | None = None,
+    optimizer: str = "lbfgsb",
 ) -> REMLResult:
     """Fit a linear mixed model by profiled REML.
 
@@ -387,11 +388,21 @@ def fit_reml(
               :func:`make_lambda` to build a full block-diagonal Lambda
               (supports random slopes). ``n_levels`` must also be provided.
     n_levels: Number of group levels per spec.
+    optimizer:
+        ``"lbfgsb"`` (default) uses ``scipy.optimize.minimize`` with
+        ``method="L-BFGS-B"``.  ``"bobyqa"`` uses ``pybobyqa`` (must be
+        installed via the ``bobyqa`` optional extra), a gradient-free
+        trust-region method that is more robust near variance-parameter
+        boundaries and is the same algorithm used by lme4.
 
     Returns
     -------
     REMLResult
     """
+    if optimizer not in ("lbfgsb", "bobyqa"):
+        msg = f"optimizer must be 'lbfgsb' or 'bobyqa', got {optimizer!r}"
+        raise ValueError(msg)
+
     n, p = X.shape
 
     if specs is not None:
@@ -411,8 +422,18 @@ def fit_reml(
             theta, y, X, Z, q_sizes, _cache=cache, specs=specs, n_levels=n_levels
         )
 
-    res = opt.minimize(obj, theta0, method="L-BFGS-B", bounds=bounds)
-    theta_hat = res.x
+    if optimizer == "bobyqa":
+        import pybobyqa
+
+        lower = np.array([lo if lo is not None else -np.inf for lo, _ in bounds])
+        upper = np.array([hi if hi is not None else np.inf for _, hi in bounds])
+        soln = pybobyqa.solve(obj, theta0, bounds=(lower, upper))
+        theta_hat = soln.x
+        converged = soln.msg == "Success: rho has reached rhoend"
+    else:
+        res = opt.minimize(obj, theta0, method="L-BFGS-B", bounds=bounds)
+        theta_hat = res.x
+        converged = bool(res.success)
 
     # --- Recover beta and sigma2 at optimum ---
     ZtZ = cache["ZtZ"]
@@ -458,7 +479,7 @@ def fit_reml(
         beta=beta_hat,
         theta=theta_hat,
         sigma2=sigma2,
-        converged=bool(res.success),
+        converged=converged,
         llf=float(llf),
         aic=float(aic),
         bic=float(bic),

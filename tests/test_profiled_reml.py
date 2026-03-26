@@ -454,3 +454,66 @@ class TestMakeLambda:
         L = make_lambda(theta, [spec], n_levels=[3])
         assert sp.issparse(L)
         assert isinstance(L, sp.csc_matrix)
+
+
+# ---------------------------------------------------------------------------
+# BOBYQA optimizer
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("n_groups,n_obs", [(10, 200), (20, 400)])
+class TestFitREMLBobyqa:
+    """BOBYQA path produces results consistent with L-BFGS-B."""
+
+    def _make_dataset(
+        self, rng: np.random.Generator, n_obs: int, n_groups: int
+    ) -> dict:
+        sigma2, sigma2_b = 2.0, 1.0
+        group_codes = np.repeat(np.arange(n_groups), n_obs // n_groups)
+        b_true = rng.normal(scale=np.sqrt(sigma2_b), size=n_groups)
+        X = np.column_stack([np.ones(n_obs), rng.normal(size=n_obs)])
+        beta_true = np.array([1.5, 0.8])
+        y = (
+            X @ beta_true
+            + b_true[group_codes]
+            + rng.normal(scale=np.sqrt(sigma2), size=n_obs)
+        )
+        from interlace.sparse_z import build_indicator_matrix
+
+        Z = build_indicator_matrix(group_codes, n_groups)
+        q_sizes = [n_groups]
+        return {"y": y, "X": X, "Z": Z, "q_sizes": q_sizes}
+
+    def test_bobyqa_converges(
+        self, rng: np.random.Generator, n_groups: int, n_obs: int
+    ) -> None:
+        pytest.importorskip("pybobyqa")
+        d = self._make_dataset(rng, n_obs, n_groups)
+        result = fit_reml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="bobyqa")
+        assert isinstance(result, REMLResult)
+        assert result.converged
+
+    def test_bobyqa_theta_close_to_lbfgsb(
+        self, rng: np.random.Generator, n_groups: int, n_obs: int
+    ) -> None:
+        pytest.importorskip("pybobyqa")
+        d = self._make_dataset(rng, n_obs, n_groups)
+        r_lbfgsb = fit_reml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="lbfgsb")
+        r_bobyqa = fit_reml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="bobyqa")
+        np.testing.assert_allclose(r_bobyqa.theta, r_lbfgsb.theta, rtol=0.05)
+
+    def test_bobyqa_beta_close_to_lbfgsb(
+        self, rng: np.random.Generator, n_groups: int, n_obs: int
+    ) -> None:
+        pytest.importorskip("pybobyqa")
+        d = self._make_dataset(rng, n_obs, n_groups)
+        r_lbfgsb = fit_reml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="lbfgsb")
+        r_bobyqa = fit_reml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="bobyqa")
+        np.testing.assert_allclose(r_bobyqa.beta, r_lbfgsb.beta, atol=1e-3)
+
+    def test_unknown_optimizer_raises(
+        self, rng: np.random.Generator, n_groups: int, n_obs: int
+    ) -> None:
+        d = self._make_dataset(rng, n_obs, n_groups)
+        with pytest.raises(ValueError, match="optimizer"):
+            fit_reml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="invalid")
