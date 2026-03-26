@@ -171,10 +171,9 @@ def fit(
 
     # --- 8. Package random effects per spec ---
     # For intercept-only specs (n_terms == 1): Series of q BLUPs (backward compat).
-    # For multi-term specs: flat Series of n_terms*q BLUPs.
-    # NOTE: interlace-hnl will upgrade multi-term to DataFrame + covariance matrix.
-    random_effects: dict[str, pd.Series] = {}
-    variance_components: dict[str, float] = {}
+    # For multi-term specs: DataFrame(index=levels, columns=term_names) + cov matrix.
+    random_effects: dict[str, pd.Series | pd.DataFrame] = {}
+    variance_components: dict[str, float | pd.DataFrame] = {}
     ngroups: dict[str, int] = {}
     theta_idx = 0
     blup_offset = 0
@@ -187,19 +186,43 @@ def fit(
         uniques: list[object] = sorted(data[spec.group].unique())
 
         if spec.n_terms == 1:
-            # Intercept-only: backward-compatible Series
-            re_series = pd.Series(blup_block, index=uniques, name=spec.group)
+            # Intercept-only: backward-compatible Series + scalar variance
+            random_effects[spec.group] = pd.Series(
+                blup_block, index=uniques, name=spec.group
+            )
             theta_j0 = reml.theta[theta_idx]
-            vc_val = float(sigma2 * theta_j0**2)
+            variance_components[spec.group] = float(sigma2 * theta_j0**2)
         else:
-            # Multi-term: flat Series for now (interlace-hnl will upgrade)
-            re_series = pd.Series(blup_block, name=spec.group)
-            # Variance component: variance of intercept term (theta_j[0]^2 * sigma2)
-            theta_j0 = reml.theta[theta_idx]
-            vc_val = float(sigma2 * theta_j0**2)
+            # Multi-term: DataFrame(index=levels, columns=term_names)
+            term_names_j = (["(Intercept)"] if spec.intercept else []) + list(
+                spec.predictors
+            )
+            theta_j = reml.theta[theta_idx : theta_idx + n_theta_j]
 
-        random_effects[spec.group] = re_series
-        variance_components[spec.group] = vc_val
+            # blup_block is term-first: [q_j intercept BLUPs, q_j slope BLUPs, ...]
+            # reshape to (n_terms, q_j) then transpose → (q_j, n_terms)
+            re_mat = blup_block.reshape(spec.n_terms, q_j).T
+            random_effects[spec.group] = pd.DataFrame(
+                re_mat, index=uniques, columns=term_names_j
+            )
+
+            # Covariance matrix: sigma2 * L_j @ L_j.T
+            p_j = spec.n_terms
+            if spec.correlated:
+                L_j = np.zeros((p_j, p_j))
+                idx = 0
+                for row in range(p_j):
+                    for col in range(row + 1):
+                        L_j[row, col] = theta_j[idx]
+                        idx += 1
+                cov_mat = sigma2 * L_j @ L_j.T
+            else:
+                # Independent: diagonal covariance
+                cov_mat = np.diag(sigma2 * theta_j**2)
+            variance_components[spec.group] = pd.DataFrame(
+                cov_mat, index=term_names_j, columns=term_names_j
+            )
+
         ngroups[spec.group] = q_j
         theta_idx += n_theta_j
         blup_offset += n_blups_j

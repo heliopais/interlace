@@ -56,9 +56,12 @@ def predict(
     for col in group_cols:
         if col not in newdata.columns:
             continue
-        blup_map: pd.Series = result.random_effects[col]
+        blup_re = result.random_effects[col]
+        if isinstance(blup_re, pd.DataFrame):
+            # Random slopes prediction not yet implemented (interlace-85j); skip.
+            continue
         # Unknown levels map to 0.0 (shrinkage to population mean)
-        contrib = newdata[col].map(blup_map).fillna(0.0).to_numpy(dtype=float)
+        contrib = newdata[col].map(blup_re).fillna(0.0).to_numpy(dtype=float)
         pred = pred + contrib
 
     return np.asarray(pred)

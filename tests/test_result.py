@@ -239,3 +239,98 @@ class TestStatsmodelsCompat:
     def test_model_groups_attr(self, simple_df: pd.DataFrame) -> None:
         result = fit("y ~ x1", simple_df, groups="group")
         np.testing.assert_array_equal(result.model.groups, simple_df["group"].values)
+
+
+# ---------------------------------------------------------------------------
+# Random slopes — random_effects and variance_components structure (hnl)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def slope_df() -> pd.DataFrame:
+    rng = np.random.default_rng(42)
+    n, q = 200, 10
+    group_codes = np.repeat(np.arange(q), n // q)
+    x = rng.normal(size=n)
+    b_int = rng.normal(scale=0.8, size=q)
+    b_slope = rng.normal(scale=0.4, size=q)
+    y = 1.0 + 0.5 * x + b_int[group_codes] + b_slope[group_codes] * x
+    y += rng.normal(scale=1.0, size=n)
+    return pd.DataFrame({"y": y, "x": x, "g": group_codes.astype(str)})
+
+
+class TestRandomSlopesResult:
+    def test_random_effects_is_dataframe_for_slopes(
+        self, slope_df: pd.DataFrame
+    ) -> None:
+        result = fit("y ~ x", slope_df, random=["(1 + x | g)"])
+        re = result.random_effects["g"]
+        assert isinstance(re, pd.DataFrame)
+
+    def test_random_effects_dataframe_index_is_group_levels(
+        self, slope_df: pd.DataFrame
+    ) -> None:
+        result = fit("y ~ x", slope_df, random=["(1 + x | g)"])
+        re = result.random_effects["g"]
+        expected_levels = sorted(slope_df["g"].unique())
+        assert list(re.index) == expected_levels
+
+    def test_random_effects_dataframe_columns_are_term_names(
+        self, slope_df: pd.DataFrame
+    ) -> None:
+        result = fit("y ~ x", slope_df, random=["(1 + x | g)"])
+        re = result.random_effects["g"]
+        assert list(re.columns) == ["(Intercept)", "x"]
+
+    def test_random_effects_dataframe_shape(self, slope_df: pd.DataFrame) -> None:
+        result = fit("y ~ x", slope_df, random=["(1 + x | g)"])
+        re = result.random_effects["g"]
+        assert re.shape == (10, 2)  # 10 groups, 2 terms
+
+    def test_variance_components_is_dataframe_for_slopes(
+        self, slope_df: pd.DataFrame
+    ) -> None:
+        result = fit("y ~ x", slope_df, random=["(1 + x | g)"])
+        vc = result.variance_components["g"]
+        assert isinstance(vc, pd.DataFrame)
+
+    def test_variance_components_dataframe_shape(self, slope_df: pd.DataFrame) -> None:
+        result = fit("y ~ x", slope_df, random=["(1 + x | g)"])
+        vc = result.variance_components["g"]
+        assert vc.shape == (2, 2)
+
+    def test_variance_components_dataframe_labels(self, slope_df: pd.DataFrame) -> None:
+        result = fit("y ~ x", slope_df, random=["(1 + x | g)"])
+        vc = result.variance_components["g"]
+        assert list(vc.columns) == ["(Intercept)", "x"]
+        assert list(vc.index) == ["(Intercept)", "x"]
+
+    def test_variance_components_is_positive_semidefinite(
+        self, slope_df: pd.DataFrame
+    ) -> None:
+        result = fit("y ~ x", slope_df, random=["(1 + x | g)"])
+        vc = result.variance_components["g"]
+        eigenvalues = np.linalg.eigvalsh(vc.values)
+        assert np.all(eigenvalues >= -1e-10)
+
+    def test_independent_slopes_vc_is_diagonal(self, slope_df: pd.DataFrame) -> None:
+        result = fit("y ~ x", slope_df, random=["(1 + x || g)"])
+        vc = result.variance_components["g"]
+        assert isinstance(vc, pd.DataFrame)
+        # Off-diagonal entries should be zero for independent parameterisation
+        off_diag = vc.values[~np.eye(2, dtype=bool)]
+        np.testing.assert_allclose(off_diag, 0.0, atol=1e-12)
+
+    def test_intercept_only_random_effects_still_series(
+        self, simple_df: pd.DataFrame
+    ) -> None:
+        """Backward compat: intercept-only groups remain pd.Series."""
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert isinstance(result.random_effects["group"], pd.Series)
+
+    def test_intercept_only_variance_components_still_scalar(
+        self, simple_df: pd.DataFrame
+    ) -> None:
+        """Backward compat: intercept-only variance components remain float."""
+        result = fit("y ~ x1", simple_df, groups="group")
+        assert isinstance(result.variance_components["group"], float)

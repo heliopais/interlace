@@ -46,8 +46,8 @@ class CrossedLMEResult:
     fe_conf_int: pd.DataFrame
 
     # Random effects
-    random_effects: dict[str, pd.Series]
-    variance_components: dict[str, float]
+    random_effects: dict[str, pd.Series | pd.DataFrame]
+    variance_components: dict[str, float | pd.DataFrame]
     theta: np.ndarray
 
     # Residuals and fitted values
