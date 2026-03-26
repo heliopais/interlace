@@ -192,6 +192,9 @@ class TestFitReml:
             reml=True, method="lbfgs"
         )
 
+        if abs(sm_res.fe_params["Intercept"]) < 0.1:
+            pytest.skip("statsmodels converged to degenerate solution on this platform")
+
         # Fixed effects
         np.testing.assert_allclose(
             result.beta,
