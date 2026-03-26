@@ -1,10 +1,15 @@
 # Contributing
 
+Contributions are welcome — whether that's bug reports, documentation improvements, or new features. To get started, open an issue on the [GitHub issue tracker](https://github.com/heliopais/interlace/issues) or submit a pull request.
+
 ## Development setup
 
 ```bash
-make install   # create .venv and install all dev + doc dependencies
-make check     # lint + typecheck + test (full CI gate)
+make install      # create venv and install all dev deps via uv
+make test         # run pytest
+make lint         # ruff format + ruff check --fix
+make typecheck    # mypy
+make check        # lint + typecheck + test (full CI gate)
 ```
 
 ## Workflow

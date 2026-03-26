@@ -1,15 +1,21 @@
 # interlace
 
+<p align="center">
+  <img src="docs/source/_static/interlace_logo.png" alt="interlace" width="220">
+</p>
+
 **[Documentation](https://heliopais.github.io/interlace/)**
 
 Pure-Python profiled REML estimation for linear mixed models with **crossed random intercepts**, validated to match R's `lme4::lmer()`.
 
 Designed as a drop-in replacement for `statsmodels.MixedLM` in diagnostics pipelines that require crossed grouping factors (e.g. `(1|worker) + (1|company)`), which statsmodels does not support.
 
+**Scope:** interlace fits models with random intercepts only — it does not support random slopes, generalised outcomes (GLMM), or nested random effects with `/` syntax. For those cases, use R's `lme4` directly or a Python GLMM library.
+
 ## Installation
 
 ```bash
-pip install interlace
+pip install interlace-lme
 ```
 
 Requires Python ≥ 3.13.
@@ -33,7 +39,7 @@ print(result.scale)              # residual variance σ²
 
 `groups` accepts a single string (one random intercept) or a list (crossed intercepts). The first entry is the primary grouping factor.
 
-## API
+## Usage
 
 ### Fitting
 
@@ -138,15 +144,9 @@ Results are validated against R's `lme4::lmer()` to the following tolerances:
 | BLUP correlation | > 0.99 |
 | Conditional residual correlation | > 0.999 |
 
-## Development
+## Contributing
 
-```bash
-make install      # create venv and install all dev deps via uv
-make test         # run pytest
-make lint         # ruff format + ruff check --fix
-make typecheck    # mypy
-make check        # lint + typecheck + test (full CI gate)
-```
+Bug reports, documentation fixes, and new features are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started. To open an issue or ask a question, use the [GitHub issue tracker](https://github.com/heliopais/interlace/issues).
 
 ## Attribution
 
