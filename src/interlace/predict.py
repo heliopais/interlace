@@ -48,7 +48,9 @@ def predict(
 
     # Build fixed-effects design matrix using formulaic (same as fitting path).
     fe_formula = result.model.formula.split("~", 1)[1].strip()
-    X_new = np.asarray(formulaic.model_matrix(fe_formula, nw_new))
+    X_new_df = formulaic.model_matrix(fe_formula, nw_new)
+    # Reindex to fitting column order before dot product (column order can differ).
+    X_new = np.asarray(X_new_df[list(result.fe_params.index)])
     pred = X_new @ np.asarray(result.fe_params)
 
     if not include_re:
