@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import narwhals as nw
 import numpy as np
-import pandas as pd
 import scipy.linalg as la
 
 from interlace.result import CrossedLMEResult
@@ -36,13 +36,15 @@ def _crossed_structures(
     structure so that V_i = Z_i D Z_i' + σ²I is correct for any number of
     crossed random intercepts.
     """
-    data = model.model.data.frame
+    native_frame = model.model.data.frame
+    nw_data = nw.from_native(native_frame, eager_only=True)
+
     primary_col = model._gpgap_group_col
     vc_cols = model._gpgap_vc_cols
     all_group_cols = [primary_col] + vc_cols
 
-    groups = np.asarray(data[primary_col])
-    group_labels = sorted(np.unique(groups))
+    groups = nw_data[primary_col].to_numpy()
+    group_labels = sorted(np.unique(groups).tolist())
 
     # Block-diagonal D: blkdiag(var_j * I_{q_j}, ...)
     vc_blocks = [
@@ -56,7 +58,11 @@ def _crossed_structures(
     q_total = int(q_offsets[-1])
 
     # Integer codes for each factor (sorted, matching build_joint_z)
-    codes_per_col = [pd.factorize(data[col], sort=True)[0] for col in all_group_cols]
+    codes_per_col = []
+    for col in all_group_cols:
+        arr = nw_data[col].to_numpy()
+        _, codes = np.unique(arr, return_inverse=True)
+        codes_per_col.append(codes)
 
     # Build Z_i for each level of the primary group
     exog_re_li = []
@@ -83,7 +89,7 @@ def _statsmodels_structures(model: Any) -> tuple[Any, Any, Any, Any, Any]:
     return groups, group_labels, exog_re_li, D, cov_fe
 
 
-def leverage(model: Any, level: int = 1) -> pd.DataFrame:  # noqa: ARG001
+def leverage(model: Any, level: int = 1) -> Any:  # noqa: ARG001
     """Calculate observation-level leverage for a fitted linear mixed model.
 
     Parameters
@@ -96,10 +102,11 @@ def leverage(model: Any, level: int = 1) -> pd.DataFrame:  # noqa: ARG001
 
     Returns
     -------
-    pd.DataFrame
+    Native DataFrame (pandas, polars, …) matching the model input type.
         Columns: ``overall`` (H1+H2), ``fixef`` (H1), ``ranef`` (H2),
         ``ranef.uc`` (unconfounded H2, Nobre & Singer).
     """
+    native_frame = model.model.data.frame
     X = model.model.exog
     n = X.shape[0]
     scale = model.scale
@@ -113,14 +120,14 @@ def leverage(model: Any, level: int = 1) -> pd.DataFrame:  # noqa: ARG001
         # documented limitation for crossed random effects.
         XtX_inv = np.linalg.pinv(X.T @ X)
         h_ols = np.sum((X @ XtX_inv) * X, axis=1)
-        return pd.DataFrame(
-            {
-                "overall": h_ols,
-                "fixef": h_ols,
-                "ranef": np.zeros(n),
-                "ranef.uc": np.zeros(n),
-            }
-        )
+        result_dict: dict[str, Any] = {
+            "overall": h_ols,
+            "fixef": h_ols,
+            "ranef": np.zeros(n),
+            "ranef.uc": np.zeros(n),
+        }
+        native_ns = nw.get_native_namespace(native_frame)
+        return native_ns.DataFrame(result_dict)
 
     if _is_crossed(model):
         cov_fe = model.fe_cov
@@ -153,6 +160,6 @@ def leverage(model: Any, level: int = 1) -> pd.DataFrame:  # noqa: ARG001
         # H2_uc_i = Z_i D Z_i' / σ²  (Nobre & Singer unconfounded)
         h2_uc[idx] = np.diagonal(ZDZt / scale)
 
-    return pd.DataFrame(
-        {"overall": h1 + h2, "fixef": h1, "ranef": h2, "ranef.uc": h2_uc}
-    )
+    result_dict = {"overall": h1 + h2, "fixef": h1, "ranef": h2, "ranef.uc": h2_uc}
+    native_ns = nw.get_native_namespace(native_frame)
+    return native_ns.DataFrame(result_dict)

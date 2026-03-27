@@ -13,16 +13,29 @@ from __future__ import annotations
 import warnings
 from typing import Any
 
+import narwhals as nw
 import numpy as np
-import pandas as pd
 from tqdm import tqdm
 
-from interlace._frame import to_native as _to_native
+from interlace._frame import filter_rows as _filter_rows
 from interlace.result import CrossedLMEResult
 
 
 def _is_crossed(model: Any) -> bool:
     return isinstance(model, CrossedLMEResult)
+
+
+def _require_pandas() -> Any:
+    """Import and return pandas, raising a helpful error if not installed."""
+    try:
+        import pandas as pd
+
+        return pd
+    except ImportError as exc:
+        raise ImportError(
+            "The statsmodels compat path requires pandas. "
+            "Install it with: pip install interlace-lme[pandas]"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -32,11 +45,11 @@ def _is_crossed(model: Any) -> bool:
 
 def _full_params(
     model: Any,
-) -> tuple[pd.Series, np.ndarray, np.ndarray, np.ndarray, list[str], int]:
+) -> tuple[Any, np.ndarray, np.ndarray, np.ndarray, list[str], int]:
     """Return ``(beta, V, V_inv, theta, theta_names, p)`` from either model type."""
     if _is_crossed(model):
         beta = model.fe_params
-        p = len(beta)
+        p = len(np.asarray(beta))
         V = model.fe_cov
         group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
         theta = np.array(
@@ -44,6 +57,7 @@ def _full_params(
         )
         theta_names = [f"var_{col}" for col in group_cols] + ["error_var"]
     else:
+        pd = _require_pandas()
         p = model.k_fe
         beta = model.fe_params
         V = model.cov_params().iloc[:p, :p].values
@@ -51,12 +65,13 @@ def _full_params(
         re_names = [f"var_{name}" for name in model.cov_re.index]
         theta = np.append(re_vars, model.scale)
         theta_names = list(re_names) + ["error_var"]
+        del pd  # only imported for the statsmodels path
 
     V_inv = np.linalg.inv(V)
     return beta, V, V_inv, theta, theta_names, p
 
 
-def _refit(model: Any, data_i: pd.DataFrame) -> Any:
+def _refit(model: Any, data_i: Any) -> Any:
     """Refit the model on the reduced dataset *data_i*.
 
     Returns a lightweight namespace with ``fe_params``, ``fe_cov``,
@@ -69,6 +84,7 @@ def _refit(model: Any, data_i: pd.DataFrame) -> Any:
         groups_arg = group_cols[0] if len(group_cols) == 1 else group_cols
         return interlace.fit(model.model.formula, data_i, groups=groups_arg)
     else:
+        _require_pandas()
         model_i = model.model.__class__.from_formula(
             model.model.formula,
             data=data_i,
@@ -83,7 +99,7 @@ def _reduced_params(
     model_i: Any,
     p: int,
     theta_names: list[str],
-) -> tuple[pd.Series, np.ndarray, np.ndarray]:
+) -> tuple[Any, np.ndarray, np.ndarray]:
     """Extract ``(beta_i, V_i, theta_i)`` from a refitted model."""
     if _is_crossed(model_i):
         beta_i = model_i.fe_params
@@ -142,37 +158,46 @@ def hlm_influence(
 
     Returns
     -------
-    pd.DataFrame
+    Native DataFrame (pandas, polars, …) in the same type as the model input.
         Columns: ``cooksd``, ``mdffits``, ``covtrace``, ``covratio``,
         ``rvc.<name>`` for each variance component.
     """
     if optimizer not in ("lbfgsb", "bobyqa"):
         msg = f"optimizer must be 'lbfgsb' or 'bobyqa', got {optimizer!r}"
         raise ValueError(msg)
+
+    # Guard statsmodels path: requires pandas.
+    if not _is_crossed(model):
+        _require_pandas()
+
     beta, V, V_inv, theta, theta_names, p = _full_params(model)
     det_V = np.linalg.det(V)
 
-    # Use the cached pandas frame for internal operations (index-based slicing).
-    # For non-CrossedLMEResult (statsmodels), data.frame is already pandas.
     native_frame = model.model.data.frame
+
+    # Choose the working frame: prefer the cached pandas frame when available
+    # (ensures index-based operations work for the statsmodels compat path).
+    # For CrossedLMEResult with polars input and no pandas installed, the
+    # native frame is used directly.
     _pandas_frame = getattr(model.model.data, "_pandas_frame", None)
-    data = (_pandas_frame if _pandas_frame is not None else native_frame).reset_index(
-        drop=True
-    )
+    data_src = _pandas_frame if _pandas_frame is not None else native_frame
+    nw_data = nw.from_native(data_src, eager_only=True)
+    n_rows = len(nw_data)
+
     groups = (
-        np.asarray(data[model._gpgap_group_col])
+        nw_data[model._gpgap_group_col].to_numpy()
         if _is_crossed(model)
         else model.model.groups
     )
 
     if level == 1:
-        units = data.index.tolist()
-        n_units = len(units)
+        units = list(range(n_rows))
+        n_units = n_rows
         desc = "Cook's D (obs)"
     else:
         level_col = level if isinstance(level, str) else None
         if level_col is not None:
-            unit_vals = data[level_col].unique()
+            unit_vals = nw_data[level_col].unique().to_numpy()
         else:
             unit_vals = np.unique(groups)
         units = list(unit_vals)
@@ -185,15 +210,27 @@ def hlm_influence(
     covratio_val = np.full(n_units, np.nan)
     rvc_val = np.full((n_units, len(theta)), np.nan)
 
+    data_native = nw.to_native(nw_data)
+
     for i, unit in tqdm(enumerate(units), total=n_units, desc=desc, disable=True):
         if level == 1:
-            data_i = data.drop(unit).reset_index(drop=True)
-        else:
-            if level_col is not None:
-                mask = data[level_col] == unit
+            # Drop row i: concat slices before and after
+            nw_before = nw_data[:i]
+            nw_after = nw_data[i + 1 :]
+            if i == 0:
+                data_i = nw.to_native(nw_after)
+            elif i == n_rows - 1:
+                data_i = nw.to_native(nw_before)
             else:
-                mask = pd.Series(groups == unit, index=data.index)
-            data_i = data[~mask].reset_index(drop=True)
+                data_i = nw.to_native(nw.concat([nw_before, nw_after]))
+        else:
+            level_col = level if isinstance(level, str) else None
+            if level_col is not None:
+                level_vals = nw_data[level_col].to_numpy()
+                keep_mask = level_vals != unit
+            else:
+                keep_mask = groups != unit
+            data_i = _filter_rows(data_native, keep_mask)
 
         try:
             with warnings.catch_warnings():
@@ -219,13 +256,14 @@ def hlm_influence(
                         optimizer=optimizer,
                     )
                 else:
+                    # statsmodels path — requires pandas (already checked above)
                     model_class = model.model.__class__
                     groups_col = model.model.groups
                     if level == 1:
                         groups_i = np.delete(groups_col, i)
                     else:
                         if level_col is not None:
-                            groups_i = groups_col[data[level_col] != unit]
+                            groups_i = groups_col[data_native[level_col] != unit]
                         else:
                             groups_i = groups_col[groups_col != unit]
                     model_i_obj = model_class.from_formula(
@@ -238,7 +276,7 @@ def hlm_influence(
 
             beta_i, Vi, theta_i = _reduced_params(model_i, p, theta_names)
 
-            diff = (beta - beta_i).values
+            diff = np.asarray(beta) - np.asarray(beta_i)
 
             # Cook's Distance
             cooks_d[i] = (1 / p) * float(diff @ V_inv @ diff)
@@ -269,7 +307,8 @@ def hlm_influence(
     for j, name in enumerate(theta_names):
         res[f"rvc.{name}"] = rvc_val[:, j]
 
-    return _to_native(pd.DataFrame(res), like=native_frame)
+    native_ns = nw.get_native_namespace(native_frame)
+    return native_ns.DataFrame(res)
 
 
 # ---------------------------------------------------------------------------
@@ -279,16 +318,17 @@ def hlm_influence(
 
 def cooks_distance(model: Any, optimizer: str = "lbfgsb") -> np.ndarray:
     """Return Cook's distance for each observation."""
-    return np.asarray(
-        hlm_influence(model, level=1, optimizer=optimizer)["cooksd"].values
-    )
+    result = hlm_influence(model, level=1, optimizer=optimizer)
+    # Support both pandas (.values) and polars (.to_numpy()) result frames
+    col = result["cooksd"]
+    return np.asarray(col.to_numpy() if hasattr(col, "to_numpy") else col.values)
 
 
 def mdffits(model: Any, optimizer: str = "lbfgsb") -> np.ndarray:
     """Return MDFFITS for each observation."""
-    return np.asarray(
-        hlm_influence(model, level=1, optimizer=optimizer)["mdffits"].values
-    )
+    result = hlm_influence(model, level=1, optimizer=optimizer)
+    col = result["mdffits"]
+    return np.asarray(col.to_numpy() if hasattr(col, "to_numpy") else col.values)
 
 
 # ---------------------------------------------------------------------------
@@ -353,12 +393,10 @@ def tau_gap(
     cd = cooks_distance(model, optimizer=optimizer)
     influential_mask = cd > threshold
 
+    native_frame = model.model.data.frame
     _pandas_frame = getattr(model.model.data, "_pandas_frame", None)
-    _raw_frame = model.model.data.frame
-    data = (_pandas_frame if _pandas_frame is not None else _raw_frame).reset_index(
-        drop=True
-    )
-    data_reduced = data[~influential_mask].reset_index(drop=True)
+    data_src = _pandas_frame if _pandas_frame is not None else native_frame
+    data_reduced = _filter_rows(data_src, ~influential_mask)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -390,17 +428,13 @@ def tau_gap(
             }
             vc_reduced = model_reduced.variance_components
         else:
-            # Use the original groups array aligned to the reset_index data
-            # Refit by passing the groups column values from reduced data
-            # so that cov_re retains the same positional structure.
+            # statsmodels path — requires pandas
+            _require_pandas()
             groups_reduced_arr = model.model.groups[~influential_mask]
             model_i_obj = model.model.__class__.from_formula(
                 model.model.formula, data=data_reduced, groups=groups_reduced_arr
             )
             model_reduced = model_i_obj.fit(reml=model.method == "REML")
-            # Use positional indexing to avoid label-mismatch when groups
-            # were passed as an array (the refitted cov_re may have a
-            # different index name than the original).
             full_names = list(model.cov_re.index)
             vc_full = {
                 name: float(model.cov_re.iloc[i, i])
@@ -413,8 +447,15 @@ def tau_gap(
 
     gaps = {}
     for factor in vc_full:
-        tau_f = np.sqrt(max(vc_full[factor], 0.0))
-        tau_r = np.sqrt(max(vc_reduced.get(factor, 0.0), 0.0))
+        vc_f = vc_full[factor]
+        vc_r = vc_reduced.get(factor, 0.0)
+        # variance_components values may be floats or numpy arrays (covariance matrix)
+        tau_f = np.sqrt(
+            max(float(vc_f) if np.ndim(vc_f) == 0 else float(np.trace(vc_f)), 0.0)
+        )  # noqa: E501
+        tau_r = np.sqrt(
+            max(float(vc_r) if np.ndim(vc_r) == 0 else float(np.trace(vc_r)), 0.0)
+        )  # noqa: E501
         gaps[factor] = float(abs(tau_f - tau_r))
 
     return gaps

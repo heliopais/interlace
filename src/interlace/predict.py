@@ -10,11 +10,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import formulaic
+import narwhals as nw
 import numpy as np
-import pandas as pd
-import patsy
-
-from interlace._frame import to_pandas as _to_pandas
 
 if TYPE_CHECKING:
     from interlace.result import CrossedLMEResult
@@ -33,7 +31,8 @@ def predict(
         A fitted ``CrossedLMEResult``.
     newdata:
         DataFrame to predict on.  If ``None``, returns ``result.fittedvalues``
-        (in-sample conditional predictions).
+        (in-sample conditional predictions).  Any narwhals-compatible frame
+        (pandas, polars, …) is accepted.
     include_re:
         If ``True`` (default), add BLUP contributions for known group levels.
         If ``False``, return fixed-effects-only predictions (population mean).
@@ -45,12 +44,12 @@ def predict(
     if newdata is None:
         return np.asarray(result.fittedvalues)
 
-    newdata = _to_pandas(newdata)
+    nw_new = nw.from_native(newdata, eager_only=True)
 
-    # Build fixed-effects design matrix for newdata using the same formula
+    # Build fixed-effects design matrix using formulaic (same as fitting path).
     fe_formula = result.model.formula.split("~", 1)[1].strip()
-    X_new = np.asarray(patsy.dmatrix(fe_formula, newdata, return_type="dataframe"))
-    pred = X_new @ result.fe_params.values
+    X_new = np.asarray(formulaic.model_matrix(fe_formula, nw_new))
+    pred = X_new @ np.asarray(result.fe_params)
 
     if not include_re:
         return np.asarray(pred)
@@ -58,26 +57,47 @@ def predict(
     # Add BLUP contribution for each grouping factor
     group_cols = [result._gpgap_group_col] + list(result._gpgap_vc_cols)
     for col in group_cols:
-        if col not in newdata.columns:
+        if col not in nw_new.columns:
             continue
         blup_re = result.random_effects[col]
-        if isinstance(blup_re, pd.DataFrame):
-            # Random slopes: contribution = blup_intercept + sum(blup_slope_k * x_k)
-            # re_df columns: ["(Intercept)", predictor1, predictor2, ...]
-            predictors = list(blup_re.columns[1:])
-            n_obs = len(newdata)
-            contrib = np.zeros(n_obs)
-            for i, level in enumerate(newdata[col]):
-                if level not in blup_re.index:
-                    continue  # unseen level → 0 (shrink to mean)
-                blup_vec = blup_re.loc[level].to_numpy(dtype=float)
-                z_row = np.array(
-                    [1.0] + [float(newdata[p].iloc[i]) for p in predictors]
-                )
-                contrib[i] = blup_vec @ z_row
+        col_vals = nw_new[col].to_numpy()
+
+        # Detect whether blup_re is a pandas DataFrame (random slopes, pandas path)
+        try:
+            import pandas as pd
+
+            if isinstance(blup_re, pd.DataFrame):
+                # Random slopes: contribution = blup_intercept + sum(blup_slope_k * x_k)
+                predictors = list(blup_re.columns[1:])
+                n_obs = len(col_vals)
+                contrib = np.zeros(n_obs)
+                for i, level in enumerate(col_vals):
+                    if level not in blup_re.index:
+                        continue  # unseen level → 0
+                    blup_vec = blup_re.loc[level].to_numpy(dtype=float)
+                    z_row = np.array(
+                        [1.0] + [float(nw_new[p].to_numpy()[i]) for p in predictors]
+                    )
+                    contrib[i] = blup_vec @ z_row
+                pred = pred + contrib
+                continue
+            if isinstance(blup_re, pd.Series):
+                # Intercept-only, pandas path: map via dict lookup
+                lookup = blup_re.to_dict()
+                contrib = np.array([lookup.get(v, 0.0) for v in col_vals], dtype=float)
+                pred = pred + contrib
+                continue
+        except ImportError:
+            pass
+
+        # Pandas-free path: blup_re is _SimpleRE or numpy array
+        if hasattr(blup_re, "values") and hasattr(blup_re, "index"):
+            # _SimpleRE
+            lookup = dict(zip(blup_re.index, blup_re.values.tolist(), strict=True))
         else:
-            # Intercept-only: map group level → scalar BLUP
-            contrib = newdata[col].map(blup_re).fillna(0.0).to_numpy(dtype=float)
+            # raw numpy array — no index info available, skip
+            continue
+        contrib = np.array([lookup.get(v, 0.0) for v in col_vals], dtype=float)
         pred = pred + contrib
 
     return np.asarray(pred)

@@ -10,7 +10,25 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-import pandas as pd
+
+
+@dataclass
+class _SimpleRE:
+    """Lightweight random-effect store used when pandas is not installed.
+
+    Exposes the same interface as a pandas Series for the attributes used
+    by interlace diagnostics: ``values``, ``index``, ``name``.
+    """
+
+    values: np.ndarray
+    index: list[Any]
+    name: str
+
+    def __len__(self) -> int:
+        return len(self.values)
+
+    def __array__(self, dtype: Any = None) -> np.ndarray:
+        return self.values if dtype is None else self.values.astype(dtype)
 
 
 @dataclass
@@ -19,11 +37,12 @@ class _DataWrapper:
 
     ``frame`` holds the caller's original native frame (pandas, polars, etc.)
     so that downstream diagnostics can return results in the same type.
-    ``_pandas_frame`` caches the pandas version for internal use.
+    ``_pandas_frame`` caches the pandas version for internal use; ``None``
+    when pandas is not installed.
     """
 
     frame: Any  # native type as passed by the caller (pandas, polars, etc.)
-    _pandas_frame: pd.DataFrame = field(repr=False, default=None)  # type: ignore[assignment]
+    _pandas_frame: Any = field(repr=False, default=None)
 
 
 @dataclass
@@ -46,15 +65,16 @@ class CrossedLMEResult:
     this object is a drop-in replacement for the gpgap diagnostics pipeline.
     """
 
-    # Fixed effects
-    fe_params: pd.Series
-    fe_bse: pd.Series
-    fe_pvalues: pd.Series
-    fe_conf_int: pd.DataFrame
+    # Fixed effects — pd.Series when pandas is installed, np.ndarray otherwise
+    fe_params: Any
+    fe_bse: Any
+    fe_pvalues: Any
+    fe_conf_int: Any  # pd.DataFrame (pandas) or np.ndarray shape (p, 2)
 
-    # Random effects
-    random_effects: dict[str, pd.Series | pd.DataFrame]
-    variance_components: dict[str, float | pd.DataFrame]
+    # Random effects — dict values are pd.Series/_SimpleRE (intercept-only)
+    # or pd.DataFrame/np.ndarray (multi-term)
+    random_effects: dict[str, Any]
+    variance_components: dict[str, Any]
     theta: np.ndarray
 
     # Residuals and fitted values

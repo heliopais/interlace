@@ -486,12 +486,12 @@ wheels = [
 
 [[package]]
 name = "interlace-lme"
-version = "0.2.1"
+version = "0.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "formulaic" },
+    { name = "narwhals" },
     { name = "numpy" },
-    { name = "pandas" },
     { name = "plotnine" },
     { name = "scipy" },
     { name = "statsmodels" },
@@ -502,11 +502,15 @@ dependencies = [
 bobyqa = [
     { name = "py-bobyqa" },
 ]
+pandas = [
+    { name = "pandas" },
+]
 
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
     { name = "narwhals" },
+    { name = "pandas" },
     { name = "pandas-stubs" },
     { name = "polars" },
     { name = "pytest" },
@@ -526,20 +530,22 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "formulaic", specifier = ">=0.6" },
+    { name = "narwhals", specifier = ">=1.0" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "pandas", specifier = ">=2.0" },
+    { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.0" },
     { name = "plotnine", specifier = ">=0.15.3" },
     { name = "py-bobyqa", marker = "extra == 'bobyqa'", specifier = ">=1.4" },
     { name = "scipy", specifier = ">=1.12" },
     { name = "statsmodels", specifier = ">=0.14" },
     { name = "tqdm", specifier = ">=4.67.3" },
 ]
-provides-extras = ["bobyqa"]
+provides-extras = ["bobyqa", "pandas"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "mypy", specifier = ">=1.14" },
+    { name = "mypy", specifier = "==1.19.1" },
     { name = "narwhals", specifier = ">=1.0" },
+    { name = "pandas", specifier = ">=2.0" },
     { name = "pandas-stubs", specifier = ">=3.0.0.260204" },
     { name = "polars", specifier = ">=1.0" },
     { name = "pytest", specifier = ">=8.0" },

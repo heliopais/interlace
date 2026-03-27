@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+import narwhals as nw
 import numpy as np
-import pandas as pd
 import scipy.linalg as la
 import scipy.sparse as sp
 import scipy.stats as stats
 
-from interlace._frame import to_pandas as _to_pandas
 from interlace.augment import hlm_augment
 from interlace.formula import (
+    extract_group_factors,
     groups_to_random_effects,
     parse_formula,
     parse_random_effects,
@@ -34,7 +34,7 @@ from interlace.profiled_reml import (
     make_lambda,
 )
 from interlace.residuals import hlm_resid
-from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper
+from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper, _SimpleRE
 from interlace.sparse_z import build_joint_z_from_specs
 
 __all__ = [
@@ -75,7 +75,8 @@ def fit(
     formula:
         Patsy-syntax fixed-effects formula, e.g. ``"y ~ x1 + x2"``.
     data:
-        DataFrame containing all variables.
+        DataFrame containing all variables.  Any narwhals-compatible frame
+        (pandas, polars, …) is accepted.
     groups:
         Column name (str) or list of column names for crossed random
         intercepts. Shorthand for ``random=["(1|g1)", "(1|g2)", ...]``.
@@ -108,9 +109,8 @@ def fit(
     if random is None and groups is None:
         raise ValueError("Either 'groups' or 'random' must be provided.")
 
-    # Convert to pandas once; all internal operations use pd_data.
-    # The original native frame is preserved for output type matching.
-    pd_data = _to_pandas(data)
+    # Wrap with narwhals for uniform column access (pandas, polars, …).
+    nw_data = nw.from_native(data, eager_only=True)
 
     # --- Build RandomEffectSpec list ---
     if random is not None:
@@ -121,18 +121,16 @@ def fit(
     group_cols = [s.group for s in specs]
 
     # --- 1. Parse fixed-effects formula ---
-    parsed = parse_formula(formula, pd_data, groups=group_cols[0])
+    parsed = parse_formula(formula, data, groups=group_cols[0])
     y = parsed.y
     X = parsed.X
     term_names = parsed.term_names
     n, p = X.shape
 
     # --- 2. Build joint sparse Z and collect n_levels per spec ---
-    Z = build_joint_z_from_specs(specs, pd_data)
-    n_levels_list: list[int] = []
-    for spec in specs:
-        _codes, _uniques = pd.factorize(pd_data[spec.group], sort=True)
-        n_levels_list.append(len(_uniques))
+    Z = build_joint_z_from_specs(specs, data)
+    group_factors = extract_group_factors(data, group_cols)
+    n_levels_list: list[int] = [gf[2] for gf in group_factors]
 
     # --- 3. Fit REML ---
     reml = fit_reml(
@@ -180,19 +178,35 @@ def fit(
     sigma2 = reml.sigma2
     MX_inv = np.linalg.inv(MX)
     fe_cov = sigma2 * MX_inv
-    fe_bse = np.sqrt(sigma2 * np.diag(MX_inv))
-    z_scores = beta / fe_bse
-    fe_pvalues = 2.0 * (1.0 - stats.norm.cdf(np.abs(z_scores)))
-    fe_conf_int = pd.DataFrame(
-        {"lower": beta - 1.96 * fe_bse, "upper": beta + 1.96 * fe_bse},
-        index=term_names,
-    )
+    fe_bse_arr = np.sqrt(sigma2 * np.diag(MX_inv))
+    z_scores = beta / fe_bse_arr
+    fe_pvalues_arr = 2.0 * (1.0 - stats.norm.cdf(np.abs(z_scores)))
+
+    # Build FE result objects — pd.Series/pd.DataFrame when pandas is available,
+    # plain numpy arrays otherwise.
+    try:
+        import pandas as _pd
+
+        fe_params: Any = _pd.Series(beta, index=term_names)
+        fe_bse: Any = _pd.Series(fe_bse_arr, index=term_names)
+        fe_pvalues: Any = _pd.Series(fe_pvalues_arr, index=term_names)
+        fe_conf_int: Any = _pd.DataFrame(
+            {"lower": beta - 1.96 * fe_bse_arr, "upper": beta + 1.96 * fe_bse_arr},
+            index=term_names,
+        )
+        _pandas_available = True
+    except ImportError:
+        fe_params = beta
+        fe_bse = fe_bse_arr
+        fe_pvalues = fe_pvalues_arr
+        fe_conf_int = np.column_stack(
+            [beta - 1.96 * fe_bse_arr, beta + 1.96 * fe_bse_arr]
+        )
+        _pandas_available = False
 
     # --- 8. Package random effects per spec ---
-    # For intercept-only specs (n_terms == 1): Series of q BLUPs (backward compat).
-    # For multi-term specs: DataFrame(index=levels, columns=term_names) + cov matrix.
-    random_effects: dict[str, pd.Series | pd.DataFrame] = {}
-    variance_components: dict[str, float | pd.DataFrame] = {}
+    random_effects: dict[str, Any] = {}
+    variance_components: dict[str, Any] = {}
     ngroups: dict[str, int] = {}
     theta_idx = 0
     blup_offset = 0
@@ -202,13 +216,18 @@ def fit(
         n_theta_j = n_theta_for_spec(spec.n_terms, spec.correlated)
         n_blups_j = spec.n_terms * q_j
         blup_block = blups[blup_offset : blup_offset + n_blups_j]
-        uniques: list[object] = sorted(pd_data[spec.group].unique())
+        uniques: list[Any] = sorted(np.unique(nw_data[spec.group].to_numpy()).tolist())
 
         if spec.n_terms == 1:
-            # Intercept-only: backward-compatible Series + scalar variance
-            random_effects[spec.group] = pd.Series(
-                blup_block, index=uniques, name=spec.group
-            )
+            # Intercept-only: backward-compatible Series/SimpleRE + scalar variance
+            if _pandas_available:
+                random_effects[spec.group] = _pd.Series(
+                    blup_block, index=uniques, name=spec.group
+                )
+            else:
+                random_effects[spec.group] = _SimpleRE(
+                    values=blup_block, index=uniques, name=spec.group
+                )
             theta_j0 = reml.theta[theta_idx]
             variance_components[spec.group] = float(sigma2 * theta_j0**2)
         else:
@@ -221,9 +240,13 @@ def fit(
             # blup_block is term-first: [q_j intercept BLUPs, q_j slope BLUPs, ...]
             # reshape to (n_terms, q_j) then transpose → (q_j, n_terms)
             re_mat = blup_block.reshape(spec.n_terms, q_j).T
-            random_effects[spec.group] = pd.DataFrame(
-                re_mat, index=uniques, columns=term_names_j
-            )
+
+            if _pandas_available:
+                random_effects[spec.group] = _pd.DataFrame(
+                    re_mat, index=uniques, columns=term_names_j
+                )
+            else:
+                random_effects[spec.group] = re_mat  # (q_j, n_terms) numpy array
 
             # Covariance matrix: sigma2 * L_j @ L_j.T
             p_j = spec.n_terms
@@ -238,28 +261,41 @@ def fit(
             else:
                 # Independent: diagonal covariance
                 cov_mat = np.diag(sigma2 * theta_j**2)
-            variance_components[spec.group] = pd.DataFrame(
-                cov_mat, index=term_names_j, columns=term_names_j
-            )
+
+            if _pandas_available:
+                variance_components[spec.group] = _pd.DataFrame(
+                    cov_mat, index=term_names_j, columns=term_names_j
+                )
+            else:
+                variance_components[spec.group] = cov_mat  # numpy ndarray
 
         ngroups[spec.group] = q_j
         theta_idx += n_theta_j
         blup_offset += n_blups_j
 
     # --- 9. Build ModelInfo ---
+    # Cache a pandas copy of the data if pandas is installed (used by diagnostics
+    # that rely on pandas-specific operations like the statsmodels compat path).
+    if _pandas_available:
+        pd_frame: Any = _pd.DataFrame(
+            {col: nw_data[col].to_numpy() for col in nw_data.columns}
+        )
+    else:
+        pd_frame = None
+
     model_info = ModelInfo(
         exog=X,
         endog=y,
-        groups=np.asarray(pd_data[group_cols[0]]),
+        groups=nw_data[group_cols[0]].to_numpy(),
         endog_names=formula.split("~")[0].strip(),
         formula=formula,
-        data=_DataWrapper(frame=data, _pandas_frame=pd_data),
+        data=_DataWrapper(frame=data, _pandas_frame=pd_frame),
     )
 
     return CrossedLMEResult(
-        fe_params=pd.Series(beta, index=term_names),
-        fe_bse=pd.Series(fe_bse, index=term_names),
-        fe_pvalues=pd.Series(fe_pvalues, index=term_names),
+        fe_params=fe_params,
+        fe_bse=fe_bse,
+        fe_pvalues=fe_pvalues,
         fe_conf_int=fe_conf_int,
         random_effects=random_effects,
         variance_components=variance_components,

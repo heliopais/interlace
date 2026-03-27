@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-import pandas as pd
+import narwhals as nw
 
-from interlace._frame import to_native as _to_native
-from interlace._frame import to_pandas as _to_pandas
 from interlace.influence import hlm_influence
 from interlace.residuals import hlm_resid
 
@@ -27,24 +25,18 @@ def hlm_augment(model: Any, level: int = 1, include_influence: bool = True) -> A
 
     Returns
     -------
-    pd.DataFrame
-        Conditional residuals + original data + (optionally) influence stats.
+    Native DataFrame in the same type as the model's input data.
     """
     _ = level  # reserved for future multi-level support
-    native_frame = model.model.data.frame
     res_df = hlm_resid(model, type="conditional", full_data=True)
 
     if include_influence:
         infl_df = hlm_influence(model, level=1)
-        # Both res_df and infl_df are in the native type; normalise to pandas,
-        # concat, then convert back so the output type matches the input.
-        combined = pd.concat(
-            [
-                _to_pandas(res_df).reset_index(drop=True),
-                _to_pandas(infl_df).reset_index(drop=True),
-            ],
-            axis=1,
-        )
-        return _to_native(combined, like=native_frame)
+        # Both res_df and infl_df are in the native type; concat horizontally
+        # via narwhals so the output type matches the input.
+        nw_res = nw.from_native(res_df, eager_only=True)
+        nw_infl = nw.from_native(infl_df, eager_only=True)
+        combined = nw.concat([nw_res, nw_infl], how="horizontal")
+        return nw.to_native(combined)
 
     return res_df
