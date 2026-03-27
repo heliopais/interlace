@@ -37,6 +37,7 @@ from interlace.profiled_reml import (
 from interlace.quantreg import quantreg_ker_se
 from interlace.residuals import hlm_resid
 from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper, _SimpleRE
+from interlace.satterthwaite import satterthwaite_dfs
 from interlace.sparse_z import build_joint_z_from_specs, group_array
 from interlace.summary import VarCorr
 
@@ -184,35 +185,80 @@ def fit(
     fittedvalues = X @ beta + Z @ blups
     resid = y - fittedvalues
 
-    # --- 7. Standard errors (Wald) ---
+    # --- 7. Standard errors and Satterthwaite DFs ---
     sigma2 = reml.sigma2
     MX_inv = np.linalg.inv(MX)
     fe_cov = sigma2 * MX_inv
     fe_bse_arr = np.sqrt(sigma2 * np.diag(MX_inv))
-    z_scores = beta / fe_bse_arr
-    fe_pvalues_arr = 2.0 * (1.0 - stats.norm.cdf(np.abs(z_scores)))
 
     # Build FE result objects — pd.Series/pd.DataFrame when pandas is available,
-    # plain numpy arrays otherwise.
+    # plain numpy arrays otherwise. (fe_pvalues filled after Satterthwaite DFs below)
     try:
         import pandas as _pd
 
         fe_params: Any = _pd.Series(beta, index=term_names)
         fe_bse: Any = _pd.Series(fe_bse_arr, index=term_names)
-        fe_pvalues: Any = _pd.Series(fe_pvalues_arr, index=term_names)
-        fe_conf_int: Any = _pd.DataFrame(
-            {"lower": beta - 1.96 * fe_bse_arr, "upper": beta + 1.96 * fe_bse_arr},
-            index=term_names,
-        )
         _pandas_available = True
     except ImportError:
         fe_params = beta
         fe_bse = fe_bse_arr
+        _pandas_available = False
+
+    # --- 7b. Satterthwaite DFs and t-based p-values ---
+    # Build a partial result just to pass context to satterthwaite_dfs.
+    # We store Z and n_levels on a temporary object; the full result is built below.
+    _partial_result = CrossedLMEResult(
+        fe_params=fe_params,
+        fe_bse=fe_bse,
+        fe_pvalues=np.zeros(p),  # placeholder
+        fe_conf_int=np.zeros((p, 2)),  # placeholder
+        fe_df=np.ones(p),  # placeholder
+        random_effects={},
+        variance_components={},
+        theta=reml.theta,
+        resid=np.asarray(resid),
+        fittedvalues=np.asarray(fittedvalues),
+        scale=sigma2,
+        fe_cov=fe_cov,
+        model=ModelInfo(
+            exog=X,
+            endog=y,
+            groups=nw_data[group_cols[0]].to_numpy(),
+            endog_names=formula.split("~")[0].strip(),
+            formula=formula,
+            data=_DataWrapper(frame=data),
+        ),
+        converged=reml.converged,
+        nobs=n,
+        ngroups={},
+        method=method,
+        llf=reml.llf,
+        aic=reml.aic,
+        bic=reml.bic,
+        nparams=reml.nparams,
+        _gpgap_group_col=group_cols[0],
+        _random_specs=list(specs),
+        _Z=Z,
+        _n_levels=n_levels_list,
+    )
+
+    fe_df_arr = satterthwaite_dfs(_partial_result)
+    t_scores = beta / fe_bse_arr
+    fe_pvalues_arr = 2.0 * (1.0 - stats.t.cdf(np.abs(t_scores), df=fe_df_arr))
+
+    if _pandas_available:
+        fe_pvalues: Any = _pd.Series(fe_pvalues_arr, index=term_names)
+        fe_df: Any = _pd.Series(fe_df_arr, index=term_names)
+        fe_conf_int: Any = _pd.DataFrame(
+            {"lower": beta - 1.96 * fe_bse_arr, "upper": beta + 1.96 * fe_bse_arr},
+            index=term_names,
+        )
+    else:
         fe_pvalues = fe_pvalues_arr
+        fe_df = fe_df_arr
         fe_conf_int = np.column_stack(
             [beta - 1.96 * fe_bse_arr, beta + 1.96 * fe_bse_arr]
         )
-        _pandas_available = False
 
     # --- 8. Package random effects per spec ---
     random_effects: dict[str, Any] = {}
@@ -307,6 +353,7 @@ def fit(
         fe_bse=fe_bse,
         fe_pvalues=fe_pvalues,
         fe_conf_int=fe_conf_int,
+        fe_df=fe_df,
         random_effects=random_effects,
         variance_components=variance_components,
         theta=reml.theta,
@@ -326,4 +373,6 @@ def fit(
         _gpgap_group_col=group_cols[0],
         _gpgap_vc_cols=group_cols[1:],
         _random_specs=list(specs),
+        _Z=Z,
+        _n_levels=n_levels_list,
     )

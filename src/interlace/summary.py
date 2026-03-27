@@ -211,6 +211,7 @@ class SummaryResult:
         bse_arr = np.asarray(r.fe_bse)
         pval_arr = np.asarray(r.fe_pvalues)
         tval_arr = fe_arr / bse_arr
+        df_arr = np.asarray(r.fe_df)
 
         try:
             names = list(r.fe_params.index)
@@ -219,17 +220,17 @@ class SummaryResult:
 
         header = (
             f"  {'':20} {'Estimate':>12} {'Std. Error':>12}"
-            f" {'z value':>10} {'Pr(>|z|)':>12}"
+            f" {'df':>8} {'t value':>10} {'Pr(>|t|)':>12}"
         )
         lines.append(header)
-        for name, est, se, tv, pv in zip(
-            names, fe_arr, bse_arr, tval_arr, pval_arr, strict=True
+        for name, est, se, df_val, tv, pv in zip(
+            names, fe_arr, bse_arr, df_arr, tval_arr, pval_arr, strict=True
         ):
             stars = _pval_stars(pv)
             pv_str = f"{pv:.4e}" if pv < 0.001 else f"{pv:.4f}"
             line = (
                 f"  {name:<20} {est:>12.4f} {se:>12.4f}"
-                f" {tv:>10.4f} {pv_str:>12} {stars}"
+                f" {df_val:>8.1f} {tv:>10.4f} {pv_str:>12} {stars}"
             )
             lines.append(line)
         lines.append("---")

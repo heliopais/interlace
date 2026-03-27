@@ -85,6 +85,9 @@ class CrossedLMEResult:
     # Fixed-effects covariance matrix (p×p): scale * (X'Ω⁻¹X)⁻¹
     fe_cov: np.ndarray
 
+    # Satterthwaite denominator DFs — pd.Series when pandas is installed
+    fe_df: Any
+
     # Model matrices
     model: ModelInfo
 
@@ -104,6 +107,10 @@ class CrossedLMEResult:
 
     # Random effect specs — stored so diagnostics can reconstruct random= for refits
     _random_specs: list[Any] = field(default_factory=list)
+
+    # Fitting context needed for post-fit computations (Satterthwaite, etc.)
+    _Z: Any = field(default=None, repr=False)  # scipy sparse (n, q)
+    _n_levels: list[int] = field(default_factory=list)
 
     @property
     def fe_tvalues(self) -> Any:
