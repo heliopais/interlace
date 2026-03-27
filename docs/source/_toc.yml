@@ -10,6 +10,7 @@ subtrees:
   - file: installation
   - file: quickstart
   - file: examples
+  - file: interpreting-results
 - caption: Releases
   entries:
   - file: changelog
