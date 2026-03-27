@@ -51,6 +51,7 @@ docs = [
     "sphinxext-opengraph>=0.9",
     "sphinx-design>=0.6",
     "sphinx-sitemap>=2.5",
+    "sphinx-gitstamp>=0.4",
 ]
 
 [tool.hatch.version]

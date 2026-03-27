@@ -23,6 +23,7 @@ extensions = [
     "sphinxext.opengraph",
     "sphinx_design",
     "sphinx_sitemap",
+    "sphinx_gitstamp",
 ]
 
 # External TOC
