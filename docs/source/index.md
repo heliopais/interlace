@@ -38,3 +38,37 @@ and sparse Cholesky machinery as R's [`lme4::lmer()`](https://lme4.r-lib.org/ref
 - Full suite of diagnostics: residuals, leverage, Cook's D, MDFFITS, influence plots
 - Compatible result object exposing the same attributes as `statsmodels.MixedLMResults`
 - Validated against R's [`lme4::lmer()`](https://lme4.r-lib.org/reference/lmer.html) to tight tolerances (fixed effects abs diff < 1e-4)
+
+## Get started
+
+::::{grid} 2
+:gutter: 3
+
+:::{grid-item-card} Installation & quickstart
+:link: installation
+:link-type: doc
+
+Install interlace and fit your first crossed random-intercepts model.
+:::
+
+:::{grid-item-card} Examples
+:link: examples
+:link-type: doc
+
+Worked notebooks: simulation, diagnostics, and comparison with lme4.
+:::
+
+:::{grid-item-card} API reference
+:link: api/augment
+:link-type: doc
+
+Full documentation for every public function and result object.
+:::
+
+:::{grid-item-card} Background
+:link: why-python
+:link-type: doc
+
+Why interlace exists, and how it compares to statsmodels and lme4.
+:::
+::::

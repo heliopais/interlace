@@ -49,6 +49,7 @@ docs = [
     "myst-nb>=1.1",
     "ipykernel>=6.0",
     "sphinxext-opengraph>=0.9",
+    "sphinx-design>=0.6",
 ]
 
 [tool.hatch.version]

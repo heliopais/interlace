@@ -21,6 +21,7 @@ extensions = [
     "sphinx_autodoc_typehints",
     "myst_nb",
     "sphinxext.opengraph",
+    "sphinx_design",
 ]
 
 # External TOC
