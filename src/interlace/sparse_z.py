@@ -103,12 +103,14 @@ def build_z_block(
 def group_array(spec: RandomEffectSpec, nw_data: Any) -> np.ndarray:
     """Return the grouping factor array for *spec*, deriving interactions if needed."""
     if spec.interaction_cols:
-        parts = [nw_data[col].cast(nw.String).to_numpy() for col in spec.interaction_cols]
-        arr = parts[0].astype(str)
+        parts = [
+            nw_data[col].cast(nw.String).to_numpy() for col in spec.interaction_cols
+        ]
+        arr: np.ndarray = np.asarray(parts[0], dtype=str)
         for part in parts[1:]:
-            arr = np.char.add(np.char.add(arr, ":"), part.astype(str))
+            arr = np.char.add(np.char.add(arr, ":"), np.asarray(part, dtype=str))
         return arr
-    return nw_data[spec.group].to_numpy()
+    return np.asarray(nw_data[spec.group].to_numpy())
 
 
 def build_joint_z_from_specs(
