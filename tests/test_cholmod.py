@@ -55,7 +55,7 @@ def single_re_data():
 def test_try_cholmod_returns_module_or_none():
     """_try_cholmod() must return the cholmod module or None — never raise."""
     result = _try_cholmod()
-    assert result is None or hasattr(result, "analyze")
+    assert result is None or hasattr(result, "cholesky")
 
 
 def test_fit_reml_superlu_fallback_converges(single_re_data):
@@ -91,7 +91,7 @@ _cholmod_available = pytest.mark.skipif(
 def test_try_cholmod_returns_cholmod_module():
     cholmod = _try_cholmod()
     assert cholmod is not None
-    assert hasattr(cholmod, "analyze")
+    assert hasattr(cholmod, "cholesky")
 
 
 @_cholmod_available
@@ -146,8 +146,7 @@ def test_reml_objective_cholmod_matches_superlu(single_re_data):
     cholmod = _try_cholmod()
     lambda_diag = make_lambda_diag(theta, d["q_sizes"])
     A11_0 = _build_A11(cache_ch["ZtZ"], lambda_diag)
-    chol_factor = cholmod.analyze(A11_0)
-    chol_factor.cholesky(A11_0)
+    chol_factor = cholmod.cholesky(A11_0)
     cache_ch["chol_factor"] = chol_factor
 
     val_ch = reml_objective(theta, d["y"], d["X"], d["Z"], d["q_sizes"], cache_ch)

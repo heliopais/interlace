@@ -438,8 +438,9 @@ def fit_reml(
 
     cache = _precompute(y, X, Z)
 
-    # Symbolic Cholesky analysis (once): sparsity pattern of A11 is fixed across
-    # all theta evaluations, so only the numeric refactorisation is needed per call.
+    # Cholesky factorisation (once for sparsity analysis + initial numeric factor):
+    # sparsity pattern of A11 is fixed across all theta evaluations, so only the
+    # numeric refactorisation is needed per call (factor.cholesky reuses the pattern).
     cholmod = _try_cholmod()
     if cholmod is not None:
         if specs is not None:
@@ -448,9 +449,7 @@ def fit_reml(
         else:
             lambda_diag_0 = make_lambda_diag(theta0, q_sizes)
             A11_0 = _build_A11(cache["ZtZ"], lambda_diag_0)
-        chol_factor = cholmod.analyze(A11_0)
-        chol_factor.cholesky(A11_0)
-        cache["chol_factor"] = chol_factor
+        cache["chol_factor"] = cholmod.cholesky(A11_0)
 
     def obj(theta: np.ndarray) -> float:
         return reml_objective(
