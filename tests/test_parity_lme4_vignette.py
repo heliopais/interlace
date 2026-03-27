@@ -53,7 +53,9 @@ def test_dyestuff_intercept(dyestuff_fit, dyestuff_ref):
     r_val = dyestuff_ref["fe_params"]["(Intercept)"]
     il_val = dyestuff_fit.fe_params["Intercept"]
     diff = abs(il_val - r_val)
-    assert diff < 1e-4, f"Intercept abs_diff={diff:.2e} (interlace={il_val:.4f}, R={r_val:.4f})"
+    assert diff < 1e-4, (
+        f"Intercept abs_diff={diff:.2e} (interlace={il_val:.4f}, R={r_val:.4f})"
+    )
 
 
 def test_dyestuff_batch_variance(dyestuff_fit, dyestuff_ref):
@@ -121,24 +123,33 @@ def test_sleepstudy_fixed_intercept(sleepstudy_fit, sleepstudy_ref):
     r_val = sleepstudy_ref["fe_params"]["(Intercept)"]
     il_val = sleepstudy_fit.fe_params["Intercept"]
     diff = abs(il_val - r_val)
-    assert diff < 1e-4, f"Intercept abs_diff={diff:.2e} (interlace={il_val:.4f}, R={r_val:.4f})"
+    assert diff < 1e-4, (
+        f"Intercept abs_diff={diff:.2e} (interlace={il_val:.4f}, R={r_val:.4f})"
+    )
 
 
 def test_sleepstudy_fixed_days(sleepstudy_fit, sleepstudy_ref):
     r_val = sleepstudy_ref["fe_params"]["Days"]
     il_val = sleepstudy_fit.fe_params["Days"]
     diff = abs(il_val - r_val)
-    assert diff < 1e-4, f"Days abs_diff={diff:.2e} (interlace={il_val:.6f}, R={r_val:.6f})"
+    assert diff < 1e-4, (
+        f"Days abs_diff={diff:.2e} (interlace={il_val:.6f}, R={r_val:.6f})"
+    )
 
 
 def test_sleepstudy_var_intercept(sleepstudy_fit, sleepstudy_ref):
     vc = sleepstudy_ref["vc_table"]
     r_var = next(
-        row["vcov"] for row in vc
-        if row["grp"] == "Subject" and row["var1"] == "(Intercept)" and row.get("var2") is None
+        row["vcov"]
+        for row in vc
+        if row["grp"] == "Subject"
+        and row["var1"] == "(Intercept)"
+        and row.get("var2") is None
     )
     # variance_components["Subject"] is the 2×2 covariance matrix DataFrame
-    il_var = float(sleepstudy_fit.variance_components["Subject"].loc["(Intercept)", "(Intercept)"])
+    il_var = float(
+        sleepstudy_fit.variance_components["Subject"].loc["(Intercept)", "(Intercept)"]
+    )
     rel_diff = abs(il_var - r_var) / r_var
     assert rel_diff < 0.05, (
         f"Subject intercept variance rel_diff={rel_diff:.2%} "
@@ -149,7 +160,8 @@ def test_sleepstudy_var_intercept(sleepstudy_fit, sleepstudy_ref):
 def test_sleepstudy_var_slope(sleepstudy_fit, sleepstudy_ref):
     vc = sleepstudy_ref["vc_table"]
     r_var = next(
-        row["vcov"] for row in vc
+        row["vcov"]
+        for row in vc
         if row["grp"] == "Subject" and row["var1"] == "Days" and row.get("var2") is None
     )
     il_var = float(sleepstudy_fit.variance_components["Subject"].loc["Days", "Days"])
@@ -174,7 +186,7 @@ def test_sleepstudy_residual_variance(sleepstudy_fit, sleepstudy_ref):
 def test_sleepstudy_blups_intercept(sleepstudy_fit, sleepstudy_ref):
     r_blups = sleepstudy_ref["ranef"]["Subject"]["(Intercept)"]
     # lme4 JSON keys are strings; interlace Series index is int — sort numerically
-    labels_int = sorted(int(s) for s in r_blups.keys())
+    labels_int = sorted(int(s) for s in r_blups)
     r_arr = np.array([r_blups[str(s)] for s in labels_int])
     il_series = sleepstudy_fit.random_effects["Subject"]["(Intercept)"]
     il_arr = np.array([il_series[s] for s in labels_int])
@@ -184,7 +196,7 @@ def test_sleepstudy_blups_intercept(sleepstudy_fit, sleepstudy_ref):
 
 def test_sleepstudy_blups_slope(sleepstudy_fit, sleepstudy_ref):
     r_blups = sleepstudy_ref["ranef"]["Subject"]["Days"]
-    labels_int = sorted(int(s) for s in r_blups.keys())
+    labels_int = sorted(int(s) for s in r_blups)
     r_arr = np.array([r_blups[str(s)] for s in labels_int])
     il_series = sleepstudy_fit.random_effects["Subject"]["Days"]
     il_arr = np.array([il_series[s] for s in labels_int])
@@ -222,7 +234,9 @@ def test_pastes_intercept(pastes_fit, pastes_ref):
     r_val = pastes_ref["fe_params"]["(Intercept)"]
     il_val = pastes_fit.fe_params["Intercept"]
     diff = abs(il_val - r_val)
-    assert diff < 1e-4, f"Intercept abs_diff={diff:.2e} (interlace={il_val:.4f}, R={r_val:.4f})"
+    assert diff < 1e-4, (
+        f"Intercept abs_diff={diff:.2e} (interlace={il_val:.4f}, R={r_val:.4f})"
+    )
 
 
 def test_pastes_batch_variance(pastes_fit, pastes_ref):
