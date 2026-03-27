@@ -16,7 +16,7 @@ Journal of Statistical Software, 67(1), 1-48.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import scipy.linalg as la
@@ -158,6 +158,21 @@ def make_lambda_diag(theta: np.ndarray, q_sizes: list[int]) -> np.ndarray:
     np.ndarray of length ``sum(q_sizes)``.
     """
     return np.repeat(theta, q_sizes)
+
+
+# ---------------------------------------------------------------------------
+# CHOLMOD optional import
+# ---------------------------------------------------------------------------
+
+
+def _try_cholmod() -> Any:
+    """Return the ``sksparse.cholmod`` module, or ``None`` if not installed."""
+    try:
+        from sksparse import cholmod  # type: ignore[import-not-found]
+
+        return cholmod
+    except ImportError:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -333,11 +348,17 @@ def reml_objective(
         lZty = lambda_diag * Zty  # (q,)
         lZtX = lambda_diag[:, None] * ZtX  # (q, p)
 
-    log_det_A11 = sparse_chol_logdet(A11)
-
-    # --- Woodbury pieces: solve A11 c = Lambda' Z' (y, X) ---
-    c1 = _sparse_solve(A11, lZty)  # (q,)
-    C_X = _sparse_solve(A11, lZtX)  # (q, p)
+    # --- Sparse Cholesky: prefer CHOLMOD (one numeric refactorisation) ---
+    chol_factor = _cache.get("chol_factor") if _cache is not None else None
+    if chol_factor is not None:
+        chol_factor.cholesky(A11)  # type: ignore[union-attr]
+        log_det_A11 = float(chol_factor.logdet())  # type: ignore[union-attr]
+        c1 = np.asarray(chol_factor.solve_A(lZty)).squeeze()  # type: ignore[union-attr]
+        C_X = np.asarray(chol_factor.solve_A(lZtX))  # type: ignore[union-attr]
+    else:
+        log_det_A11 = sparse_chol_logdet(A11)
+        c1 = _sparse_solve(A11, lZty)  # (q,)
+        C_X = _sparse_solve(A11, lZtX)  # (q, p)
 
     # --- X'Omega^{-1}X and X'Omega^{-1}y ---
     MX = XtX - lZtX.T @ C_X  # (p, p)
@@ -416,6 +437,20 @@ def fit_reml(
         theta0 = np.ones(n_theta)
 
     cache = _precompute(y, X, Z)
+
+    # Symbolic Cholesky analysis (once): sparsity pattern of A11 is fixed across
+    # all theta evaluations, so only the numeric refactorisation is needed per call.
+    cholmod = _try_cholmod()
+    if cholmod is not None:
+        if specs is not None:
+            Lambda0 = make_lambda(theta0, specs, n_levels)  # type: ignore[arg-type]
+            A11_0 = _build_A11(cache["ZtZ"], Lambda0)
+        else:
+            lambda_diag_0 = make_lambda_diag(theta0, q_sizes)
+            A11_0 = _build_A11(cache["ZtZ"], lambda_diag_0)
+        chol_factor = cholmod.analyze(A11_0)
+        chol_factor.cholesky(A11_0)
+        cache["chol_factor"] = chol_factor
 
     def obj(theta: np.ndarray) -> float:
         return reml_objective(
