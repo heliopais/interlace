@@ -50,6 +50,7 @@ docs = [
     "ipykernel>=6.0",
     "sphinxext-opengraph>=0.9",
     "sphinx-design>=0.6",
+    "sphinx-sitemap>=2.5",
 ]
 
 [tool.hatch.version]

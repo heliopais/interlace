@@ -22,10 +22,14 @@ extensions = [
     "myst_nb",
     "sphinxext.opengraph",
     "sphinx_design",
+    "sphinx_sitemap",
 ]
 
 # External TOC
 external_toc_path = "_toc.yml"
+
+# Sitemap
+html_baseurl = "https://heliopais.github.io/interlace/"
 
 # Open Graph (social media previews)
 ogp_site_url = "https://heliopais.github.io/interlace/"
