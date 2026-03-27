@@ -156,3 +156,53 @@ def test_crossed_overall_equals_fixef_plus_ranef(crossed_model: Any) -> None:
         result["fixef"].values + result["ranef"].values,
         atol=1e-10,
     )
+
+
+# --- random slopes leverage ---
+
+
+@pytest.fixture(scope="module")
+def slope_data_lev() -> pd.DataFrame:
+    rng = np.random.default_rng(11)
+    n_groups, n_per = 10, 8
+    n = n_groups * n_per
+    g = np.repeat(np.arange(n_groups), n_per).astype(str)
+    x = rng.standard_normal(n)
+    b0 = rng.normal(0, 0.8, n_groups)
+    b1 = rng.normal(0, 0.4, n_groups)
+    eps = rng.normal(0, 0.5, n)
+    y = 1.0 + 0.5 * x + b0[g.astype(int)] + b1[g.astype(int)] * x + eps
+    return pd.DataFrame({"y": y, "x": x, "g": g})
+
+
+@pytest.fixture(scope="module")
+def slope_model_lev(slope_data_lev: pd.DataFrame) -> Any:
+    return interlace.fit("y ~ x", data=slope_data_lev, random=["(1 + x | g)"])
+
+
+def test_leverage_slopes_returns_required_cols(slope_model_lev: Any) -> None:
+    result = leverage(slope_model_lev)
+    assert isinstance(result, pd.DataFrame)
+    for col in ("overall", "fixef", "ranef", "ranef.uc"):
+        assert col in result.columns, f"missing column: {col}"
+
+
+def test_leverage_slopes_values_nonneg(slope_model_lev: Any) -> None:
+    result = leverage(slope_model_lev)
+    for col in ("overall", "fixef", "ranef", "ranef.uc"):
+        assert (result[col] >= -1e-10).all(), f"negative values in {col}"
+
+
+def test_leverage_slopes_overall_equals_fixef_plus_ranef(slope_model_lev: Any) -> None:
+    result = leverage(slope_model_lev)
+    np.testing.assert_allclose(
+        result["overall"].values,
+        result["fixef"].values + result["ranef"].values,
+        atol=1e-10,
+    )
+
+
+def test_leverage_slopes_ranef_nonzero(slope_model_lev: Any) -> None:
+    """Random-effects leverage should be non-trivially nonzero for slope models."""
+    result = leverage(slope_model_lev)
+    assert result["ranef"].sum() > 0.01

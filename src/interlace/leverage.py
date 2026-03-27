@@ -29,40 +29,58 @@ def _is_crossed(model: Any) -> bool:
 def _crossed_structures(
     model: CrossedLMEResult,
 ) -> tuple[np.ndarray, list[Any], list[np.ndarray], np.ndarray]:
-    """Extract (groups, group_labels, exog_re_li, D, fe_cov, scale) from a
-    CrossedLMEResult.
+    """Extract (groups, group_labels, exog_re_li, D) from a CrossedLMEResult.
 
     Builds the per-primary-group Z_i matrices using the full joint random-effects
-    structure so that V_i = Z_i D Z_i' + σ²I is correct for any number of
-    crossed random intercepts.
+    structure so that V_i = Z_i D Z_i' + σ²I is correct for random intercepts
+    and slopes.
     """
     native_frame = model.model.data.frame
     nw_data = nw.from_native(native_frame, eager_only=True)
 
-    primary_col = model._gpgap_group_col
-    vc_cols = model._gpgap_vc_cols
-    all_group_cols = [primary_col] + vc_cols
+    specs = getattr(model, "_random_specs", [])
+    if not specs:
+        # Fallback for legacy results without _random_specs
+        from interlace.formula import groups_to_random_effects
 
+        specs = groups_to_random_effects(
+            [model._gpgap_group_col] + model._gpgap_vc_cols
+        )
+
+    primary_col = specs[0].group
     groups = nw_data[primary_col].to_numpy()
     group_labels = sorted(np.unique(groups).tolist())
 
-    # Block-diagonal D: blkdiag(var_j * I_{q_j}, ...)
-    vc_blocks = [
-        model.variance_components[col] * np.eye(model.ngroups[col])
-        for col in all_group_cols
-    ]
+    # Build D = blkdiag(cov_j ⊗ I_{q_j}) for each spec.
+    # Z columns are term-first: [q_j intercept cols, q_j slope cols, ...]
+    # so the matching covariance block is cov_j ⊗ I_{q_j}.
+    vc_blocks = []
+    for spec in specs:
+        cov_j = np.asarray(model.variance_components[spec.group])
+        q_j = model.ngroups[spec.group]
+        if cov_j.ndim == 0:
+            vc_blocks.append(float(cov_j) * np.eye(q_j))
+        else:
+            vc_blocks.append(np.kron(cov_j, np.eye(q_j)))
     D = la.block_diag(*vc_blocks)
 
-    # Column offsets into the joint Z matrix
-    q_offsets = np.cumsum([0] + [model.ngroups[col] for col in all_group_cols])
-    q_total = int(q_offsets[-1])
+    # Column offsets: each spec contributes n_terms_j * q_j columns
+    col_widths = [spec.n_terms * model.ngroups[spec.group] for spec in specs]
+    col_offsets = np.cumsum([0] + col_widths)
+    q_total = int(col_offsets[-1])
 
-    # Integer codes for each factor (sorted, matching build_joint_z)
-    codes_per_col = []
-    for col in all_group_cols:
-        arr = nw_data[col].to_numpy()
+    # Precompute per-spec: group codes and term value arrays (intercept=1, slope=x)
+    spec_data = []
+    for spec in specs:
+        arr = nw_data[spec.group].to_numpy()
         _, codes = np.unique(arr, return_inverse=True)
-        codes_per_col.append(codes)
+        q_j = model.ngroups[spec.group]
+        term_values: list[np.ndarray] = []
+        if spec.intercept:
+            term_values.append(np.ones(len(arr)))
+        for pred in spec.predictors:
+            term_values.append(nw_data[pred].to_numpy().astype(float))
+        spec_data.append((codes, q_j, term_values))
 
     # Build Z_i for each level of the primary group
     exog_re_li = []
@@ -70,10 +88,12 @@ def _crossed_structures(
         obs_idx = np.where(groups == gval)[0]
         n_i = len(obs_idx)
         Zi = np.zeros((n_i, q_total))
-        for j_col, codes in enumerate(codes_per_col):
-            col_start = int(q_offsets[j_col])
-            for k, obs in enumerate(obs_idx):
-                Zi[k, col_start + codes[obs]] = 1.0
+        for j_spec, (codes, q_j, term_values) in enumerate(spec_data):
+            col_start = int(col_offsets[j_spec])
+            for t_idx, tvals in enumerate(term_values):
+                term_start = col_start + t_idx * q_j
+                for k, obs in enumerate(obs_idx):
+                    Zi[k, term_start + codes[obs]] = tvals[obs]
         exog_re_li.append(Zi)
 
     return groups, group_labels, exog_re_li, D
