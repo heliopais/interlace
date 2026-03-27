@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "interlace-lme"
-version = "0.2.2"
+dynamic = ["version"]
 description = "Joint REML estimation for linear mixed models with crossed random intercepts using sparse design matrices"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -48,6 +48,13 @@ docs = [
     "myst-nb>=1.1",
     "ipykernel>=6.0",
 ]
+
+[tool.hatch.version]
+source = "vcs"
+raw-options = {version_scheme = "no-guess-dev", local_scheme = "no-local-version"}
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/interlace/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/interlace"]
