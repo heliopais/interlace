@@ -134,6 +134,30 @@ class CrossedLMEResult:
 
         return SummaryResult(self)
 
+    def simulate(
+        self,
+        nsim: int = 1,
+        seed: int | None = None,
+    ) -> np.ndarray:
+        """Simulate response vectors; see :func:`interlace.simulate.simulate`."""
+        from interlace.simulate import simulate
+
+        return simulate(self, nsim=nsim, seed=seed)
+
+    def bootMer(
+        self,
+        statistic: Any = None,
+        B: int = 500,
+        seed: int | None = None,
+        show_progress: bool = False,
+    ) -> Any:
+        """Parametric bootstrap; see :func:`interlace.simulate.bootMer`."""
+        from interlace.simulate import bootMer
+
+        return bootMer(
+            self, statistic=statistic, B=B, seed=seed, show_progress=show_progress
+        )
+
     def predict(
         self,
         newdata: object | None = None,

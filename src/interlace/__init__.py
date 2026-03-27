@@ -39,6 +39,7 @@ from interlace.quantreg import quantreg_ker_se
 from interlace.residuals import hlm_resid
 from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper, _SimpleRE
 from interlace.satterthwaite import satterthwaite_dfs
+from interlace.simulate import BootResult, bootMer, simulate
 from interlace.sparse_z import build_joint_z_from_specs, group_array
 from interlace.summary import VarCorr
 
@@ -62,6 +63,10 @@ __all__ = [
     "hlm_augment",
     # Quantile regression utilities
     "quantreg_ker_se",
+    # Simulation and bootstrap
+    "simulate",
+    "bootMer",
+    "BootResult",
     # Summary and VarCorr
     "VarCorr",
     # Plotting
