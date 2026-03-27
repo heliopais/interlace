@@ -53,12 +53,18 @@ def predict(
     # raise ColumnNotFoundError on some version combinations (GitHub issue #12).
     mm_cols = list(X_new_mm.columns)
     mm_arr = np.asarray(X_new_mm)
-    # Reorder columns to match fitting-time fe_params order (GitHub issue #10).
+    # Reorder/pad columns to match fitting-time fe_params order (GitHub issue #10).
+    # When predicting on new data that lacks some categorical levels seen at fit time,
+    # formulaic omits those dummy columns entirely.  We insert zero columns for any
+    # missing level so the matrix shape matches fe_params.
     if hasattr(result.fe_params, "index"):
         fe_cols = list(result.fe_params.index)
         if mm_cols != fe_cols:
-            col_idx = [mm_cols.index(c) for c in fe_cols]
-            mm_arr = mm_arr[:, col_idx]
+            n_obs = mm_arr.shape[0]
+            col_lookup = {c: mm_arr[:, i] for i, c in enumerate(mm_cols)}
+            mm_arr = np.column_stack(
+                [col_lookup.get(c, np.zeros(n_obs)) for c in fe_cols]
+            )
     X_new = mm_arr
     pred = X_new @ np.asarray(result.fe_params)
 
