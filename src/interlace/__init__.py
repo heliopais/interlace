@@ -33,6 +33,7 @@ from interlace.profiled_reml import (
     fit_reml,
     make_lambda,
 )
+from interlace.quantreg import quantreg_ker_se
 from interlace.residuals import hlm_resid
 from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper, _SimpleRE
 from interlace.sparse_z import build_joint_z_from_specs
@@ -52,6 +53,8 @@ __all__ = [
     "tau_gap",
     # Combined
     "hlm_augment",
+    # Quantile regression utilities
+    "quantreg_ker_se",
     # Plotting
     "plot_resid",
     "plot_influence",
