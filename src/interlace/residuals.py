@@ -107,18 +107,28 @@ def hlm_resid(
             msg = f"level '{level}' not found in random_effects; available: {available}"
             raise ValueError(msg)
         re_obj = model.random_effects[level]
-        # re_obj is pd.Series (pandas installed) or _SimpleRE (pandas-free)
-        re_vals = re_obj.values if hasattr(re_obj, "values") else np.asarray(re_obj)
-        re_name = re_obj.name if hasattr(re_obj, "name") else level
+        # re_obj: pd.Series/_SimpleRE (intercept-only) or pd.DataFrame/ndarray (slopes)
+        re_arr = np.asarray(re_obj.values if hasattr(re_obj, "values") else re_obj)
         re_index = (
-            re_obj.index if hasattr(re_obj, "index") else list(range(len(re_vals)))
+            list(re_obj.index) if hasattr(re_obj, "index") else list(range(len(re_arr)))
         )
 
         level_col_name = str(level)
-        result_dict: dict[str, Any] = {
-            level_col_name: list(re_index),
-            f".ranef.{re_name}": re_vals,
-        }
+        result_dict: dict[str, Any] = {level_col_name: re_index}
+
+        if re_arr.ndim == 1:
+            # Intercept-only: single .ranef column named after the group factor
+            re_name = re_obj.name if hasattr(re_obj, "name") else level
+            result_dict[f".ranef.{re_name}"] = re_arr
+        else:
+            # Multi-term (slopes): one column per term
+            if hasattr(re_obj, "columns"):
+                term_names: list[str] = list(re_obj.columns)
+            else:
+                term_names = [str(i) for i in range(re_arr.shape[1])]
+            for t_idx, term in enumerate(term_names):
+                result_dict[f".ranef.{level}.{term}"] = re_arr[:, t_idx]
+
         native_ns = nw.get_native_namespace(native_frame)
         return native_ns.DataFrame(result_dict)
 
