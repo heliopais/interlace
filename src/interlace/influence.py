@@ -160,6 +160,82 @@ def _refit_groups_arg(model: Any) -> Any:
     return group_cols[0] if len(group_cols) == 1 else group_cols
 
 
+def _refit_matrices_crossed(
+    y_i: np.ndarray,
+    X_i: np.ndarray,
+    Z_i: Any,
+    specs: list[Any],
+    n_levels: list[int],
+    theta0: np.ndarray | None,
+    optimizer: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Refit REML on pre-built arrays; return ``(beta_i, Vi, theta_i)``.
+
+    Bypasses formula parsing by working directly with numpy/sparse arrays.
+    ``theta_i`` is in variance units matching :func:`_full_params` output
+    (i.e. ``sigma2 * L @ L.T`` diagonal for each spec, then ``sigma2``).
+    """
+    import scipy.sparse as _sp
+
+    from interlace.profiled_reml import (
+        _build_A11,
+        _precompute,
+        _sparse_solve,
+        fit_reml,
+        make_lambda,
+        n_theta_for_spec,
+    )
+
+    reml_i = fit_reml(
+        y_i,
+        X_i,
+        Z_i,
+        q_sizes=[],
+        specs=specs,
+        n_levels=n_levels,
+        optimizer=optimizer,
+        theta0=theta0,
+    )
+    sigma2_i = reml_i.sigma2
+
+    # Recover fe_cov = sigma2 * (X'Ω⁻¹X)⁻¹ at optimum
+    cache_i = _precompute(y_i, X_i, Z_i)
+    Lambda_i = make_lambda(reml_i.theta, specs, n_levels)
+    ZtZ_i = _sp.csc_matrix(cache_i["ZtZ"])
+    ZtX_i = np.asarray(cache_i["ZtX"])
+    A11_i = _build_A11(ZtZ_i, Lambda_i)
+    lZtX_i = np.asarray(Lambda_i.T @ ZtX_i)
+    C_X_i = _sparse_solve(A11_i, lZtX_i)
+    XtX_i = np.asarray(cache_i["XtX"])
+    MX_i = XtX_i - lZtX_i.T @ C_X_i
+    Vi = sigma2_i * np.linalg.inv(MX_i)
+
+    # Extract theta_i in variance units (one entry per VC diagonal, then sigma2)
+    theta_vals_i: list[float] = []
+    theta_raw_idx = 0
+    for spec in specs:
+        n_theta_j = n_theta_for_spec(spec.n_terms, spec.correlated)
+        theta_j = reml_i.theta[theta_raw_idx : theta_raw_idx + n_theta_j]
+        if spec.n_terms == 1:
+            theta_vals_i.append(sigma2_i * float(theta_j[0] ** 2))
+        elif spec.correlated:
+            p_j = spec.n_terms
+            L_j = np.zeros((p_j, p_j))
+            idx = 0
+            for row in range(p_j):
+                for col in range(row + 1):
+                    L_j[row, col] = theta_j[idx]
+                    idx += 1
+            cov_mat = sigma2_i * L_j @ L_j.T
+            theta_vals_i.extend(np.diag(cov_mat).tolist())
+        else:
+            theta_vals_i.extend((sigma2_i * theta_j**2).tolist())
+        theta_raw_idx += n_theta_j
+    theta_vals_i.append(sigma2_i)  # error_var
+
+    return np.asarray(reml_i.beta), Vi, np.array(theta_vals_i)
+
+
 # ---------------------------------------------------------------------------
 # Main function
 # ---------------------------------------------------------------------------
@@ -247,54 +323,67 @@ def hlm_influence(
 
     data_native = nw.to_native(nw_data)
 
-    for i, unit in tqdm(enumerate(units), total=n_units, desc=desc, disable=True):
-        if level == 1:
-            # Drop row i: concat slices before and after
-            nw_before = nw_data[:i]
-            nw_after = nw_data[i + 1 :]
-            if i == 0:
-                data_i = nw.to_native(nw_after)
-            elif i == n_rows - 1:
-                data_i = nw.to_native(nw_before)
-            else:
-                data_i = nw.to_native(nw.concat([nw_before, nw_after]))
-        else:
-            level_col = level if isinstance(level, str) else None
-            if level_col is not None:
-                level_vals = nw_data[level_col].to_numpy()
-                keep_mask = level_vals != unit
-            else:
-                keep_mask = groups != unit
-            data_i = _filter_rows(data_native, keep_mask)
+    # Pre-build design matrices once for CrossedLMEResult — avoids re-parsing
+    # the formula on every case-deletion refit (GitHub issue #7).
+    _cc: dict[str, Any] | None = None
+    if _is_crossed(model):
+        from interlace.sparse_z import build_joint_z_from_specs as _build_z
 
+        _cc_specs = getattr(model, "_random_specs", [])
+        _cc_group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
+        _cc_n_levels = [model.ngroups[col] for col in _cc_group_cols]
+        _cc = {
+            "specs": _cc_specs,
+            "n_levels": _cc_n_levels,
+            "X": model.model.exog,
+            "y": model.model.endog,
+            "Z": _build_z(_cc_specs, data_src),
+            "theta0": model.theta,
+        }
+
+    for i, unit in tqdm(enumerate(units), total=n_units, desc=desc, disable=True):
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                if _is_crossed(model):
-                    import interlace
-                    from interlace.formula import spec_to_str
-
-                    specs = getattr(model, "_random_specs", [])
-                    has_slopes = any(s.n_terms > 1 for s in specs)
-                    if has_slopes:
-                        random_strs = [spec_to_str(s) for s in specs]
-                        model_i = interlace.fit(
-                            model.model.formula,
-                            data_i,
-                            random=random_strs,
-                            optimizer=optimizer,
-                            theta0=model.theta,
-                        )
+                if _cc is not None:
+                    # Crossed path: slice pre-built arrays — no formula parsing.
+                    if level == 1:
+                        row_mask = np.ones(n_rows, dtype=bool)
+                        row_mask[i] = False
                     else:
-                        groups_arg = _refit_groups_arg(model)
-                        model_i = interlace.fit(
-                            model.model.formula,
-                            data_i,
-                            groups=groups_arg,
-                            optimizer=optimizer,
-                            theta0=model.theta,
+                        lc = level if isinstance(level, str) else None
+                        row_mask = (
+                            nw_data[lc].to_numpy() != unit
+                            if lc is not None
+                            else groups != unit
                         )
+                    beta_i, Vi, theta_i = _refit_matrices_crossed(
+                        _cc["y"][row_mask],
+                        _cc["X"][row_mask],
+                        _cc["Z"][row_mask].tocsc(),
+                        _cc["specs"],
+                        _cc["n_levels"],
+                        theta0=_cc["theta0"],
+                        optimizer=optimizer,
+                    )
                 elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
+                    # statsmodels bobyqa path — re-route through interlace.
+                    if level == 1:
+                        nw_before = nw_data[:i]
+                        nw_after = nw_data[i + 1 :]
+                        if i == 0:
+                            data_i = nw.to_native(nw_after)
+                        elif i == n_rows - 1:
+                            data_i = nw.to_native(nw_before)
+                        else:
+                            data_i = nw.to_native(nw.concat([nw_before, nw_after]))
+                    else:
+                        level_col = level if isinstance(level, str) else None
+                        if level_col is not None:
+                            keep_mask = nw_data[level_col].to_numpy() != unit
+                        else:
+                            keep_mask = groups != unit
+                        data_i = _filter_rows(data_native, keep_mask)
                     import interlace
 
                     model_i = interlace.fit(
@@ -303,26 +392,38 @@ def hlm_influence(
                         groups=model._gpgap_group_col,
                         optimizer=optimizer,
                     )
+                    beta_i, Vi, theta_i = _reduced_params(model_i, p, theta_names)
                 else:
-                    # statsmodels path — requires pandas (already checked above)
-                    model_class = model.model.__class__
-                    groups_col = model.model.groups
+                    # Pure statsmodels path — requires pandas (already checked above).
                     if level == 1:
-                        groups_i = np.delete(groups_col, i)
-                    else:
-                        if level_col is not None:
-                            groups_i = groups_col[data_native[level_col] != unit]
+                        nw_before = nw_data[:i]
+                        nw_after = nw_data[i + 1 :]
+                        if i == 0:
+                            data_i = nw.to_native(nw_after)
+                        elif i == n_rows - 1:
+                            data_i = nw.to_native(nw_before)
                         else:
-                            groups_i = groups_col[groups_col != unit]
-                    model_i_obj = model_class.from_formula(
+                            data_i = nw.to_native(nw.concat([nw_before, nw_after]))
+                        groups_i = np.delete(model.model.groups, i)
+                    else:
+                        level_col = level if isinstance(level, str) else None
+                        if level_col is not None:
+                            keep_mask = nw_data[level_col].to_numpy() != unit
+                            groups_i = model.model.groups[
+                                data_native[level_col] != unit
+                            ]
+                        else:
+                            keep_mask = groups != unit
+                            groups_i = model.model.groups[groups != unit]
+                        data_i = _filter_rows(data_native, keep_mask)
+                    model_i_obj = model.model.__class__.from_formula(
                         model.model.formula,
                         data=data_i,
                         groups=groups_i,
                         vc_formula=vc_formula,
                     )
                     model_i = model_i_obj.fit(reml=model.method == "REML")
-
-            beta_i, Vi, theta_i = _reduced_params(model_i, p, theta_names)
+                    beta_i, Vi, theta_i = _reduced_params(model_i, p, theta_names)
 
             diff = np.asarray(beta) - np.asarray(beta_i)
 

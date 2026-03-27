@@ -237,12 +237,54 @@ class TestWarmStart:
         np.testing.assert_array_equal(passed_theta0, theta0)
 
     def test_hlm_influence_warm_starts_from_full_model_theta(self, models) -> None:
-        """hlm_influence should pass model.theta as theta0 for each interlace refit."""
+        """hlm_influence should pass model.theta as theta0 to each fit_reml call."""
+        from interlace.profiled_reml import fit_reml
+
         _, il = models
-        with mock.patch("interlace.fit", wraps=interlace.fit) as mock_fit:
+        with mock.patch("interlace.profiled_reml.fit_reml", wraps=fit_reml) as mock_fr:
             hlm_influence(il, level=1)
-        assert mock_fit.called
-        for call in mock_fit.call_args_list:
+        assert mock_fr.called
+        for call in mock_fr.call_args_list:
             theta0_passed = call.kwargs.get("theta0")
-            assert theta0_passed is not None, "theta0 not passed to interlace.fit refit"
+            assert theta0_passed is not None, "theta0 not passed to fit_reml"
             np.testing.assert_array_equal(theta0_passed, il.theta)
+
+
+# ---------------------------------------------------------------------------
+# Matrix-cache optimisation (GitHub issue #7)
+# ---------------------------------------------------------------------------
+
+
+class TestMatrixCacheOptimization:
+    """hlm_influence pre-builds X/y/Z once and skips formula re-parsing."""
+
+    def test_formula_not_reparsed_in_loop(self, models, data) -> None:
+        """formulaic.model_matrix must not be called inside the refit loop."""
+        import formulaic
+
+        _, il = models
+        with mock.patch.object(
+            formulaic, "model_matrix", wraps=formulaic.model_matrix
+        ) as mock_mm:
+            hlm_influence(il, level=1)
+
+        assert mock_mm.call_count == 0, (
+            f"formulaic.model_matrix was called {mock_mm.call_count} times "
+            f"for {len(data)} refits; expected 0 (X/y taken from model, Z pre-built)"
+        )
+
+    def test_cooksd_values_unchanged_after_optimisation(
+        self, il_influence, data
+    ) -> None:
+        """Diagnostic values must be numerically identical with the matrix path."""
+        import interlace
+
+        il = interlace.fit("y ~ x", data=data, groups="group")
+        result = hlm_influence(il, level=1)
+
+        np.testing.assert_allclose(
+            result["cooksd"].values,
+            il_influence["cooksd"].values,
+            rtol=1e-6,
+            err_msg="cooksd changed after matrix-cache optimisation",
+        )
