@@ -486,7 +486,6 @@ wheels = [
 
 [[package]]
 name = "interlace-lme"
-version = "0.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "formulaic" },
@@ -501,6 +500,9 @@ dependencies = [
 [package.optional-dependencies]
 bobyqa = [
     { name = "py-bobyqa" },
+]
+cholmod = [
+    { name = "scikit-sparse" },
 ]
 pandas = [
     { name = "pandas" },
@@ -535,11 +537,12 @@ requires-dist = [
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.0" },
     { name = "plotnine", specifier = ">=0.15.3" },
     { name = "py-bobyqa", marker = "extra == 'bobyqa'", specifier = ">=1.4" },
+    { name = "scikit-sparse", marker = "extra == 'cholmod'", specifier = ">=0.4" },
     { name = "scipy", specifier = ">=1.12" },
     { name = "statsmodels", specifier = ">=0.14" },
     { name = "tqdm", specifier = ">=4.67.3" },
 ]
-provides-extras = ["bobyqa", "pandas"]
+provides-extras = ["bobyqa", "cholmod", "pandas"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1725,6 +1728,17 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/2b/e9/346d4d3fffc6871125e877dae8d9a1966b254fbd92a50f8561078b88b099/ruff-0.15.7-py3-none-win_amd64.whl", hash = "sha256:4d53d712ddebcd7dace1bc395367aec12c057aacfe9adbb6d832302575f4d3a1", size = 11755839, upload-time = "2026-03-19T16:26:19.897Z" },
     { url = "https://files.pythonhosted.org/packages/8f/e8/726643a3ea68c727da31570bde48c7a10f1aa60eddd628d94078fec586ff/ruff-0.15.7-py3-none-win_arm64.whl", hash = "sha256:18e8d73f1c3fdf27931497972250340f92e8c861722161a9caeb89a58ead6ed2", size = 11023304, upload-time = "2026-03-19T16:26:51.669Z" },
 ]
+
+[[package]]
+name = "scikit-sparse"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4a/70/2351a8755de0b3d9821864299d6bba3feafb91e106b9b762a2675910392e/scikit_sparse-0.5.0.tar.gz", hash = "sha256:217579251b1d91dcfeab5a16d6408f462dc353939f9e5dfa65ec0b41f0b603dc", size = 106285, upload-time = "2026-03-03T19:18:41.586Z" }
 
 [[package]]
 name = "scipy"
