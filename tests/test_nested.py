@@ -179,7 +179,6 @@ def test_explicit_matches_slash(il_result_slash, il_result_explicit):
 # ---------------------------------------------------------------------------
 
 
-@_XFAIL
 def test_depth3_nesting_parse():
     """parse_random_effects(['(1|a/b/c)']) must return 3 RandomEffectSpec objects."""
     specs = parse_random_effects(["(1|a/b/c)"])
