@@ -113,3 +113,71 @@ class CrossedLMEResult:
         from interlace.predict import predict
 
         return predict(self, newdata=newdata, include_re=include_re)
+
+    def bootstrap_se(
+        self,
+        statistic: str = "median",
+        n_bootstrap: int = 1000,
+        resample_level: str = "group",
+        seed: int | None = None,
+    ) -> float:
+        """Bootstrap standard error for a scalar statistic of the response.
+
+        Parameters
+        ----------
+        statistic:
+            Statistic to compute on each bootstrap sample.  Only ``"median"``
+            is currently supported.
+        n_bootstrap:
+            Number of bootstrap replicates.
+        resample_level:
+            ``"group"`` (default) resamples grouping-factor levels with
+            replacement, then includes all observations from the sampled
+            groups — matching R's ``boot`` package cluster bootstrap used in
+            the ``gpgap`` reference implementation.  ``"observation"``
+            resamples individual observations; this underestimates the SE
+            when group variance is substantial.
+        seed:
+            Seed for the random number generator.  Pass an integer for
+            reproducible results.
+
+        Returns
+        -------
+        float
+            Bootstrap standard error (``std(bootstrap_stats, ddof=1)``).
+        """
+        _SUPPORTED_STATISTICS = {"median"}
+        _SUPPORTED_LEVELS = {"group", "observation"}
+
+        if statistic not in _SUPPORTED_STATISTICS:
+            raise ValueError(
+                f"statistic={statistic!r} is not supported; "
+                f"choose one of {sorted(_SUPPORTED_STATISTICS)}"
+            )
+        if resample_level not in _SUPPORTED_LEVELS:
+            raise ValueError(
+                f"resample_level={resample_level!r} is not supported; "
+                f"choose one of {sorted(_SUPPORTED_LEVELS)}"
+            )
+
+        y = self.model.endog
+        rng = np.random.default_rng(seed)
+
+        if resample_level == "group":
+            groups = self.model.groups
+            unique_groups = np.unique(groups)
+            n_groups = len(unique_groups)
+            boot_stats = np.empty(n_bootstrap)
+            for i in range(n_bootstrap):
+                sampled = rng.choice(unique_groups, size=n_groups, replace=True)
+                # Use repeat counts so duplicated groups contribute all their obs
+                indices = np.concatenate([np.where(groups == g)[0] for g in sampled])
+                boot_stats[i] = np.median(y[indices])
+        else:  # observation
+            n = len(y)
+            boot_stats = np.empty(n_bootstrap)
+            for i in range(n_bootstrap):
+                indices = rng.integers(0, n, size=n)
+                boot_stats[i] = np.median(y[indices])
+
+        return float(np.std(boot_stats, ddof=1))
