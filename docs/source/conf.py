@@ -25,6 +25,7 @@ extensions = [
     "sphinx_sitemap",
     "sphinx_gitstamp",
     "notfound.extension",
+    "sphinxcontrib.mermaid",
 ]
 
 # External TOC

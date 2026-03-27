@@ -53,6 +53,7 @@ docs = [
     "sphinx-sitemap>=2.5",
     "sphinx-gitstamp>=0.4",
     "sphinx-notfound-page>=1.0",
+    "sphinxcontrib-mermaid>=0.9",
 ]
 
 [tool.hatch.version]
