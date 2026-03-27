@@ -43,6 +43,25 @@ def _require_pandas() -> Any:
 # ---------------------------------------------------------------------------
 
 
+def _vc_to_scalars(vc: Any, col: str) -> tuple[list[float], list[str]]:
+    """Flatten a variance component into (values, names) for RVC computation.
+
+    For scalar VCs (intercept-only) returns a single ``(var_col, [value])`` pair.
+    For matrix VCs (random slopes) returns one entry per diagonal element,
+    named ``var_col_term`` — e.g. ``var_g_(Intercept)`` and ``var_g_x``.
+    """
+    vc_arr = np.asarray(vc)
+    if vc_arr.ndim == 0:
+        return [float(vc_arr)], [f"var_{col}"]
+    diag = np.diag(vc_arr) if vc_arr.ndim == 2 else vc_arr
+    terms: list[str]
+    if hasattr(vc, "index"):
+        terms = list(vc.index)
+    else:
+        terms = [str(i) for i in range(len(diag))]
+    return list(diag.astype(float)), [f"var_{col}_{t}" for t in terms]
+
+
 def _full_params(
     model: Any,
 ) -> tuple[Any, np.ndarray, np.ndarray, np.ndarray, list[str], int]:
@@ -52,10 +71,16 @@ def _full_params(
         p = len(np.asarray(beta))
         V = model.fe_cov
         group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
-        theta = np.array(
-            [model.variance_components[col] for col in group_cols] + [model.scale]
-        )
-        theta_names = [f"var_{col}" for col in group_cols] + ["error_var"]
+        theta_vals: list[float] = []
+        theta_names_list: list[str] = []
+        for col in group_cols:
+            vals, names = _vc_to_scalars(model.variance_components[col], col)
+            theta_vals.extend(vals)
+            theta_names_list.extend(names)
+        theta_vals.append(model.scale)
+        theta_names_list.append("error_var")
+        theta = np.array(theta_vals)
+        theta_names = theta_names_list
     else:
         pd = _require_pandas()
         p = model.k_fe
@@ -79,10 +104,17 @@ def _refit(model: Any, data_i: Any) -> Any:
     """
     if _is_crossed(model):
         import interlace
+        from interlace.formula import spec_to_str
 
-        group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
-        groups_arg = group_cols[0] if len(group_cols) == 1 else group_cols
-        return interlace.fit(model.model.formula, data_i, groups=groups_arg)
+        specs = getattr(model, "_random_specs", [])
+        has_slopes = any(s.n_terms > 1 for s in specs)
+        if has_slopes:
+            random_strs = [spec_to_str(s) for s in specs]
+            return interlace.fit(model.model.formula, data_i, random=random_strs)
+        else:
+            group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
+            groups_arg = group_cols[0] if len(group_cols) == 1 else group_cols
+            return interlace.fit(model.model.formula, data_i, groups=groups_arg)
     else:
         _require_pandas()
         model_i = model.model.__class__.from_formula(
@@ -105,9 +137,12 @@ def _reduced_params(
         beta_i = model_i.fe_params
         Vi = model_i.fe_cov
         group_cols = [model_i._gpgap_group_col] + model_i._gpgap_vc_cols
-        theta_i = np.array(
-            [model_i.variance_components[col] for col in group_cols] + [model_i.scale]
-        )
+        theta_vals_i: list[float] = []
+        for col in group_cols:
+            vals, _ = _vc_to_scalars(model_i.variance_components[col], col)
+            theta_vals_i.extend(vals)
+        theta_vals_i.append(model_i.scale)
+        theta_i = np.array(theta_vals_i)
     else:
         beta_i = model_i.fe_params
         Vi = model_i.cov_params().iloc[:p, :p].values
@@ -237,15 +272,28 @@ def hlm_influence(
                 warnings.simplefilter("ignore")
                 if _is_crossed(model):
                     import interlace
+                    from interlace.formula import spec_to_str
 
-                    groups_arg = _refit_groups_arg(model)
-                    model_i = interlace.fit(
-                        model.model.formula,
-                        data_i,
-                        groups=groups_arg,
-                        optimizer=optimizer,
-                        theta0=model.theta,
-                    )
+                    specs = getattr(model, "_random_specs", [])
+                    has_slopes = any(s.n_terms > 1 for s in specs)
+                    if has_slopes:
+                        random_strs = [spec_to_str(s) for s in specs]
+                        model_i = interlace.fit(
+                            model.model.formula,
+                            data_i,
+                            random=random_strs,
+                            optimizer=optimizer,
+                            theta0=model.theta,
+                        )
+                    else:
+                        groups_arg = _refit_groups_arg(model)
+                        model_i = interlace.fit(
+                            model.model.formula,
+                            data_i,
+                            groups=groups_arg,
+                            optimizer=optimizer,
+                            theta0=model.theta,
+                        )
                 elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
                     import interlace
 

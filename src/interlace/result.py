@@ -101,6 +101,9 @@ class CrossedLMEResult:
     _gpgap_group_col: str
     _gpgap_vc_cols: list[str] = field(default_factory=list)
 
+    # Random effect specs — stored so diagnostics can reconstruct random= for refits
+    _random_specs: list[Any] = field(default_factory=list)
+
     def predict(
         self,
         newdata: object | None = None,

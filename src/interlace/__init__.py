@@ -314,4 +314,5 @@ def fit(
         bic=reml.bic,
         _gpgap_group_col=group_cols[0],
         _gpgap_vc_cols=group_cols[1:],
+        _random_specs=list(specs),
     )

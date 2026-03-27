@@ -107,6 +107,33 @@ def parse_random_effects(random: list[str]) -> list[RandomEffectSpec]:
     return specs
 
 
+def spec_to_str(spec: RandomEffectSpec) -> str:
+    """Reconstruct an lme4-style string from a RandomEffectSpec.
+
+    Examples
+    --------
+    >>> spec_to_str(RandomEffectSpec(group="g", predictors=[], intercept=True))
+    "(1 | g)"
+    >>> spec_to_str(  # doctest: +NORMALIZE_WHITESPACE
+    ...     RandomEffectSpec(group="g", predictors=["x"], intercept=True)
+    ... )
+    "(1 + x | g)"
+    >>> spec_to_str(  # doctest: +NORMALIZE_WHITESPACE
+    ...     RandomEffectSpec(
+    ...         group="g", predictors=["x"], intercept=True, correlated=False
+    ...     )
+    ... )
+    "(1 + x || g)"
+    """
+    terms = []
+    if spec.intercept:
+        terms.append("1")
+    terms.extend(spec.predictors)
+    effects_str = " + ".join(terms)
+    pipe = "|" if spec.correlated else "||"
+    return f"({effects_str} {pipe} {spec.group})"
+
+
 def groups_to_random_effects(groups: str | list[str]) -> list[RandomEffectSpec]:
     """Convert the legacy ``groups`` parameter to a list of RandomEffectSpec.
 

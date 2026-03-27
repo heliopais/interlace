@@ -173,6 +173,53 @@ class TestBobyqaRouting:
 # ---------------------------------------------------------------------------
 
 
+class TestInfluenceRandomSlopes:
+    """hlm_influence works on random-slopes CrossedLMEResult."""
+
+    @pytest.fixture(scope="class")
+    def slope_data(self):
+        rng = np.random.default_rng(7)
+        n_groups, n_per = 8, 5
+        n = n_groups * n_per
+        g = np.repeat(np.arange(n_groups), n_per).astype(str)
+        x = rng.standard_normal(n)
+        b0 = rng.normal(0, 0.8, n_groups)
+        b1 = rng.normal(0, 0.4, n_groups)
+        eps = rng.normal(0, 0.5, n)
+        y = 1.0 + 0.5 * x + b0[g.astype(int)] + b1[g.astype(int)] * x + eps
+        return pd.DataFrame({"y": y, "x": x, "g": g})
+
+    @pytest.fixture(scope="class")
+    def slope_model(self, slope_data):
+        return interlace.fit("y ~ x", data=slope_data, random=["(1 + x | g)"])
+
+    def test_hlm_influence_slopes_returns_dataframe(self, slope_model, slope_data):
+        result = hlm_influence(slope_model, level=1)
+        assert isinstance(result, pd.DataFrame)
+        for col in ("cooksd", "mdffits", "covtrace", "covratio"):
+            assert col in result.columns, f"missing column: {col}"
+        assert any(c.startswith("rvc.") for c in result.columns)
+        assert len(result) == len(slope_data)
+
+    def test_hlm_influence_slopes_cooksd_nonneg(self, slope_model):
+        result = hlm_influence(slope_model, level=1)
+        assert (result["cooksd"].fillna(0) >= -1e-10).all()
+
+    def test_hlm_influence_slopes_rvc_columns_per_term(self, slope_model):
+        """RVC columns must reflect multi-term VC — one entry per diagonal element."""
+        result = hlm_influence(slope_model, level=1)
+        rvc_cols = [c for c in result.columns if c.startswith("rvc.")]
+        # correlated (1+x|g) has 3 Cholesky params + 1 error_var = 4 rvc columns
+        # independent (1+x||g) has 2 diag params + 1 error_var = 3 rvc columns
+        assert len(rvc_cols) >= 2, f"too few rvc columns: {rvc_cols}"
+
+    def test_hlm_influence_slopes_group_level(self, slope_model, slope_data):
+        result = hlm_influence(slope_model, level="g")
+        assert isinstance(result, pd.DataFrame)
+        assert "cooksd" in result.columns
+        assert len(result) == slope_data["g"].nunique()
+
+
 class TestWarmStart:
     def test_fit_accepts_theta0(self, data) -> None:
         """interlace.fit() should accept theta0 and pass it to fit_reml."""
