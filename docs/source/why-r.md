@@ -14,11 +14,11 @@ lme4 encodes random effects inside the model formula using `(term | group)` nota
 |---|---|---|
 | `y ~ x + (1\|g)` | `formula="y ~ x", groups="g"` | Single random intercept |
 | `y ~ x + (1\|g1) + (1\|g2)` | `formula="y ~ x", groups=["g1", "g2"]` | **Crossed** random intercepts |
-| `y ~ x + (1\|g1/g2)` | — | Nested designs: not yet supported |
-| `y ~ x + (x\|g)` | — | Random slopes: not yet supported |
+| `y ~ x + (1\|g1/g2)` | `formula="y ~ x", random=["(1\|g1/g2)"]` | **Nested** random intercepts |
+| `y ~ x + (x\|g)` | `formula="y ~ x", random=["(1 + x \| g)"]` | Random slopes |
 
-Only **crossed random intercepts** are implemented. Random slopes, correlated random
-effects, and nested shorthand (`/`) are outside the current scope.
+The `(1\|g1/g2)` shorthand expands to `(1\|g1) + (1\|g1:g2)`, exactly as in lme4.
+The resulting `random_effects` dict has keys `"g1"` and `"g1:g2"`.
 
 ## Side-by-side example
 

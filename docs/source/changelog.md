@@ -2,6 +2,27 @@
 
 ## v0.2.4 — 2026-03-27
 
+### Nested random effects — `(1|g1/g2)` syntax
+
+The `random` parameter now accepts lme4-style nested shorthand.
+`(1|batch/cask)` expands automatically to `(1|batch) + (1|batch:cask)`, and
+depth-3 nesting (`(1|a/b/c)`) is also supported.  No pre-derived interaction
+column is needed; `interlace` derives it on the fly from the component columns.
+
+```python
+result = interlace.fit(
+    "strength ~ 1",
+    data=df,
+    random=["(1|batch/cask)"],
+)
+print(result.variance_components)  # keys: 'batch', 'batch:cask', 'residual'
+print(result.random_effects["batch:cask"])
+```
+
+Results match lme4 to the same tolerances as crossed designs
+(fixed effects abs_diff < 1e-4, variance components rel_diff < 5%,
+BLUP correlation > 0.99).
+
 ### `quantreg_ker_se` — Hall-Sheather kernel SE for quantile regression
 
 New utility function `quantreg_ker_se(residuals, X, tau=0.5, hs=True)` that
