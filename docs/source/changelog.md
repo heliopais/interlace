@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.2.4 — 2026-03-27
+
+### `quantreg_ker_se` — Hall-Sheather kernel SE for quantile regression
+
+New utility function `quantreg_ker_se(residuals, X, tau=0.5, hs=True)` that
+computes quantile regression standard errors matching R's
+`quantreg::summary.rq(se="ker", hs=TRUE)`.
+
+```python
+from interlace import quantreg_ker_se
+
+fit = smf.quantreg("normalized ~ male", data=df).fit(q=0.5)
+se = quantreg_ker_se(fit.resid, fit.model.exog, tau=0.5, hs=True)
+```
+
+`statsmodels` uses a different (narrower) bandwidth rule and underestimates the
+SE by ~11% on typical payroll datasets relative to R.  This function reproduces
+R's result exactly by implementing the Hall-Sheather bandwidth:
+
+```
+h = n^(-1/3) · z_{α/2}^(2/3) · [(1.5 · φ(Φ⁻¹(τ))²) / (2·Φ⁻¹(τ)² + 1)]^(1/3)
+```
+
+Set `hs=False` to use the Bofinger bandwidth instead
+(`quantreg::summary.rq(se="ker", hs=FALSE)`).
+
+### Fixes
+
+- CHOLMOD compat: replaced deprecated `cholmod.analyze()` call with
+  `cholmod.cholesky()` for `scikit-sparse` ≥ 0.5.0 (issue #8).
+
+---
+
 ## v0.2.3 — 2026-03-27
 
 ### CHOLMOD sparse Cholesky
