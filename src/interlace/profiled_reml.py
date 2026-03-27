@@ -420,8 +420,10 @@ def fit_reml(
     -------
     REMLResult
     """
-    if optimizer not in ("lbfgsb", "bobyqa"):
-        msg = f"optimizer must be 'lbfgsb' or 'bobyqa', got {optimizer!r}"
+    if optimizer not in ("lbfgsb", "bobyqa", "nelder-mead"):
+        msg = (
+            f"optimizer must be 'lbfgsb', 'bobyqa', or 'nelder-mead', got {optimizer!r}"
+        )
         raise ValueError(msg)
 
     n, p = X.shape
@@ -457,6 +459,8 @@ def fit_reml(
         ):
             cache["chol_factor"] = factor
 
+    lower_bounds = np.array([lo if lo is not None else -np.inf for lo, _ in bounds])
+
     def obj(theta: np.ndarray) -> float:
         return reml_objective(
             theta, y, X, Z, q_sizes, _cache=cache, specs=specs, n_levels=n_levels
@@ -465,11 +469,19 @@ def fit_reml(
     if optimizer == "bobyqa":
         import pybobyqa
 
-        lower = np.array([lo if lo is not None else -np.inf for lo, _ in bounds])
         upper = np.array([hi if hi is not None else np.inf for _, hi in bounds])
-        soln = pybobyqa.solve(obj, theta0, bounds=(lower, upper))
+        soln = pybobyqa.solve(obj, theta0, bounds=(lower_bounds, upper))
         theta_hat = soln.x
         converged = soln.msg == "Success: rho has reached rhoend"
+    elif optimizer == "nelder-mead":
+        # Nelder-Mead has no native bound support; enforce lower bounds by
+        # projecting theta onto the feasible region inside the objective.
+        def obj_bounded(theta: np.ndarray) -> float:
+            return obj(np.maximum(theta, lower_bounds))
+
+        res = opt.minimize(obj_bounded, theta0, method="Nelder-Mead")
+        theta_hat = np.maximum(res.x, lower_bounds)
+        converged = bool(res.success)
     else:
         res = opt.minimize(obj, theta0, method="L-BFGS-B", bounds=bounds)
         theta_hat = res.x
@@ -645,8 +657,10 @@ def fit_ml(
     REMLResult
         The ``llf`` field contains the ML log-likelihood.
     """
-    if optimizer not in ("lbfgsb", "bobyqa"):
-        msg = f"optimizer must be 'lbfgsb' or 'bobyqa', got {optimizer!r}"
+    if optimizer not in ("lbfgsb", "bobyqa", "nelder-mead"):
+        msg = (
+            f"optimizer must be 'lbfgsb', 'bobyqa', or 'nelder-mead', got {optimizer!r}"
+        )
         raise ValueError(msg)
 
     n, p = X.shape
@@ -679,6 +693,8 @@ def fit_ml(
         ):
             cache["chol_factor"] = factor
 
+    lower_bounds = np.array([lo if lo is not None else -np.inf for lo, _ in bounds])
+
     def obj(theta: np.ndarray) -> float:
         return ml_objective(
             theta, y, X, Z, q_sizes, _cache=cache, specs=specs, n_levels=n_levels
@@ -687,11 +703,18 @@ def fit_ml(
     if optimizer == "bobyqa":
         import pybobyqa
 
-        lower = np.array([lo if lo is not None else -np.inf for lo, _ in bounds])
         upper = np.array([hi if hi is not None else np.inf for _, hi in bounds])
-        soln = pybobyqa.solve(obj, theta0, bounds=(lower, upper))
+        soln = pybobyqa.solve(obj, theta0, bounds=(lower_bounds, upper))
         theta_hat = soln.x
         converged = soln.msg == "Success: rho has reached rhoend"
+    elif optimizer == "nelder-mead":
+
+        def obj_bounded(theta: np.ndarray) -> float:
+            return obj(np.maximum(theta, lower_bounds))
+
+        res = opt.minimize(obj_bounded, theta0, method="Nelder-Mead")
+        theta_hat = np.maximum(res.x, lower_bounds)
+        converged = bool(res.success)
     else:
         res = opt.minimize(obj, theta0, method="L-BFGS-B", bounds=bounds)
         theta_hat = res.x

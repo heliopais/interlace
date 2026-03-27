@@ -10,6 +10,7 @@ import scipy.linalg as la
 import scipy.sparse as sp
 import scipy.stats as stats
 
+from interlace.allfit import AllFitResult, allFit
 from interlace.anova import anova
 from interlace.augment import hlm_augment
 from interlace.formula import (
@@ -43,6 +44,8 @@ from interlace.summary import VarCorr
 
 __all__ = [
     "fit",
+    "allFit",
+    "AllFitResult",
     "anova",
     "CrossedLMEResult",
     # Residuals
