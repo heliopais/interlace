@@ -20,10 +20,15 @@ extensions = [
     "sphinx_external_toc",
     "sphinx_autodoc_typehints",
     "myst_nb",
+    "sphinxext.opengraph",
 ]
 
 # External TOC
 external_toc_path = "_toc.yml"
+
+# Open Graph (social media previews)
+ogp_site_url = "https://heliopais.github.io/interlace/"
+ogp_image = "https://heliopais.github.io/interlace/_static/interlace.png"
 
 # MyST-NB (notebook execution + Markdown support)
 myst_enable_extensions = ["colon_fence"]
