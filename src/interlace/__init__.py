@@ -12,7 +12,6 @@ import scipy.stats as stats
 
 from interlace.augment import hlm_augment
 from interlace.formula import (
-    extract_group_factors,
     groups_to_random_effects,
     parse_formula,
     parse_random_effects,
@@ -36,7 +35,7 @@ from interlace.profiled_reml import (
 from interlace.quantreg import quantreg_ker_se
 from interlace.residuals import hlm_resid
 from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper, _SimpleRE
-from interlace.sparse_z import build_joint_z_from_specs
+from interlace.sparse_z import build_joint_z_from_specs, group_array
 
 __all__ = [
     "fit",
@@ -132,8 +131,9 @@ def fit(
 
     # --- 2. Build joint sparse Z and collect n_levels per spec ---
     Z = build_joint_z_from_specs(specs, data)
-    group_factors = extract_group_factors(data, group_cols)
-    n_levels_list: list[int] = [gf[2] for gf in group_factors]
+    n_levels_list: list[int] = [
+        int(np.unique(group_array(spec, nw_data)).shape[0]) for spec in specs
+    ]
 
     # --- 3. Fit REML ---
     reml = fit_reml(
@@ -219,7 +219,7 @@ def fit(
         n_theta_j = n_theta_for_spec(spec.n_terms, spec.correlated)
         n_blups_j = spec.n_terms * q_j
         blup_block = blups[blup_offset : blup_offset + n_blups_j]
-        uniques: list[Any] = sorted(np.unique(nw_data[spec.group].to_numpy()).tolist())
+        uniques: list[Any] = sorted(np.unique(group_array(spec, nw_data)).tolist())
 
         if spec.n_terms == 1:
             # Intercept-only: backward-compatible Series/SimpleRE + scalar variance
