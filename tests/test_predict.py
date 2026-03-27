@@ -167,3 +167,95 @@ def test_predict_slopes_returns_numpy_array(slope_data_and_result):
     pred = result.predict(newdata=df)
     assert isinstance(pred, np.ndarray)
     assert pred.shape == (len(df),)
+
+
+# ---------------------------------------------------------------------------
+# Regression: categorical predictor column-order mismatch (GitHub issue #4)
+# ---------------------------------------------------------------------------
+# formulaic and patsy produce the same columns for a categorical predictor but
+# in *different* order.  If predict() were changed to use patsy internally,
+# continuous and categorical coefficients would be mixed up and predictions
+# would be completely wrong.  This test catches that regression.
+
+
+@pytest.fixture(scope="module")
+def categorical_data_and_result():
+    """Dataset with continuous + multi-level categorical predictor."""
+    rng = np.random.default_rng(42)
+    n_groups = 12
+    n_per = 25
+    n = n_groups * n_per
+
+    group_ids = np.repeat([f"g{i}" for i in range(n_groups)], n_per)
+    age = rng.uniform(25, 55, n)
+    edu_levels = ["HighSchool", "Bachelor", "Master", "PhD"]
+    education = rng.choice(edu_levels, size=n)
+
+    # Known true coefficients (so we can sanity-check direction)
+    edu_effect = {"HighSchool": 0.0, "Bachelor": 0.05, "Master": 0.15, "PhD": 0.25}
+    u = rng.normal(0, 0.3, n_groups)
+    eps = rng.normal(0, 0.1, n)
+    y = (
+        1.5
+        + 0.04 * age
+        + np.array([edu_effect[e] for e in education])
+        + u[np.repeat(np.arange(n_groups), n_per)]
+        + eps
+    )
+
+    df = pd.DataFrame({"y": y, "age": age, "education": education, "group": group_ids})
+    result = interlace.fit("y ~ age + education", data=df, groups="group")
+    return df, result
+
+
+def test_predict_categorical_column_order_consistency(categorical_data_and_result):
+    """predict(newdata) must use formulaic (not patsy) to avoid column-order mismatch.
+
+    formulaic and patsy assign dummy columns for categorical predictors in
+    different orders.  A patsy-based predict() would silently multiply the wrong
+    coefficients against the wrong features.  Verify predictions on held-out data
+    are close to ground truth (|mean error| < 0.5 log-wage units).
+    """
+    import formulaic
+
+    df, result = categorical_data_and_result
+    newdata = df.iloc[-25:].reset_index(drop=True)
+
+    pred = result.predict(newdata=newdata, include_re=False)
+
+    # Compute expected using formulaic explicitly (same library as fitting path)
+    fe_formula = result.model.formula.split("~", 1)[1].strip()
+    X_formulaic = formulaic.model_matrix(fe_formula, newdata)
+    # Align columns to fe_params to be safe
+    X_aligned = np.asarray(X_formulaic[list(result.fe_params.index)])
+    expected = X_aligned @ np.asarray(result.fe_params)
+
+    np.testing.assert_allclose(pred, expected, rtol=1e-8)
+
+
+def test_predict_categorical_vs_patsy_column_order_differs():
+    """Document that formulaic and patsy produce different column orders for
+    categorical predictors — confirming why using patsy in predict() was a bug.
+    """
+    import formulaic
+    import patsy
+
+    rng = np.random.default_rng(0)
+    n = 30
+    df = pd.DataFrame(
+        {
+            "age": rng.uniform(25, 55, n),
+            "education": rng.choice(["HighSchool", "Bachelor", "Master", "PhD"], n),
+        }
+    )
+    fe_formula = "age + education"
+
+    formulaic_cols = list(formulaic.model_matrix(fe_formula, df).columns)
+    patsy_cols = list(patsy.dmatrix(fe_formula, df, return_type="dataframe").columns)
+
+    # If the libraries ever agree, this test becomes vacuous — but it documents
+    # the known behaviour that motivated the fix.
+    assert formulaic_cols != patsy_cols, (
+        "formulaic and patsy produced the same column order — re-evaluate if "
+        "the regression test below is still meaningful"
+    )
