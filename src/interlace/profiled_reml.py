@@ -449,7 +449,13 @@ def fit_reml(
         else:
             lambda_diag_0 = make_lambda_diag(theta0, q_sizes)
             A11_0 = _build_A11(cache["ZtZ"], lambda_diag_0)
-        cache["chol_factor"] = cholmod.cholesky(A11_0)
+        factor = cholmod.cholesky(A11_0)
+        if (
+            hasattr(factor, "cholesky")
+            and hasattr(factor, "logdet")
+            and hasattr(factor, "solve_A")
+        ):
+            cache["chol_factor"] = factor
 
     def obj(theta: np.ndarray) -> float:
         return reml_objective(
@@ -665,7 +671,13 @@ def fit_ml(
         else:
             lambda_diag_0 = make_lambda_diag(theta0, q_sizes)
             A11_0 = _build_A11(cache["ZtZ"], lambda_diag_0)
-        cache["chol_factor"] = cholmod.cholesky(A11_0)
+        factor = cholmod.cholesky(A11_0)
+        if (
+            hasattr(factor, "cholesky")
+            and hasattr(factor, "logdet")
+            and hasattr(factor, "solve_A")
+        ):
+            cache["chol_factor"] = factor
 
     def obj(theta: np.ndarray) -> float:
         return ml_objective(
