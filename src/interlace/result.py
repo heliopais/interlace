@@ -104,6 +104,28 @@ class CrossedLMEResult:
     # Random effect specs — stored so diagnostics can reconstruct random= for refits
     _random_specs: list[Any] = field(default_factory=list)
 
+    @property
+    def fe_tvalues(self) -> Any:
+        """Fixed-effect z-scores (estimate / SE).
+
+        Named ``fe_tvalues`` for API symmetry with statsmodels; note that
+        interlace uses the normal (z) distribution for inference, not t.
+        """
+        try:
+            import pandas as _pd
+
+            if isinstance(self.fe_params, _pd.Series):
+                return self.fe_params / self.fe_bse
+        except ImportError:
+            pass
+        return np.asarray(self.fe_params) / np.asarray(self.fe_bse)
+
+    def summary(self) -> object:
+        """Return a human-readable summary mirroring lme4's ``summary.merMod()``."""
+        from interlace.summary import SummaryResult
+
+        return SummaryResult(self)
+
     def predict(
         self,
         newdata: object | None = None,
