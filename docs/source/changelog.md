@@ -1,5 +1,110 @@
 # Changelog
 
+## v0.2.3 — 2026-03-27
+
+### CHOLMOD sparse Cholesky
+
+The REML objective now uses CHOLMOD's symbolic-then-numeric refactorisation
+when `scikit-sparse` is installed.  CHOLMOD performs a single symbolic
+analysis on the first iteration and reuses the sparsity pattern on every
+subsequent step — substantially faster for large or deeply nested designs
+where the KKT system has a stable non-zero structure.
+
+```bash
+pip install "interlace-lme[cholmod]"
+```
+
+No API change required — the fast path is activated automatically.
+
+### `bootstrap_se` — cluster bootstrap for the median
+
+`CrossedLMEResult` gains a `bootstrap_se()` method that computes a
+cluster-bootstrap standard error for a scalar statistic of the response
+(currently `"median"`):
+
+```python
+se = result.bootstrap_se(statistic="median", n_bootstrap=1000,
+                          resample_level="group", seed=42)
+```
+
+`resample_level="group"` (default) resamples grouping-factor levels with
+replacement and includes all observations from each sampled group, matching
+R's `boot` cluster bootstrap.  `resample_level="observation"` resamples
+individual rows.
+
+### Random slopes in all diagnostics
+
+`residuals.hlm_resid`, `leverage.leverage`, and all `influence` functions
+now support models fitted with random slopes (lme4-style `(1 + x | g)`
+specifications).
+
+### `hlm_influence` performance
+
+Design matrices `X`, `y`, and `Z` are pre-built once before the case-deletion
+loop.  Per-observation formula re-parsing is eliminated, giving a meaningful
+speedup on large datasets.
+
+### Fixes
+
+- `predict()`: fixed categorical column-ordering bug that produced wrong BLUPs
+  when the newdata column order differed from the training frame.
+
+---
+
+## v0.2.2 — 2026-03-27
+
+### Zero-pandas internals
+
+Pandas has been eliminated from the diagnostics pipeline in two phases:
+
+- **Phase 2** — `formula.py` and `sparse_z.py` now use
+  [formulaic](https://matthewwardrop.github.io/formulaic/) instead of patsy,
+  and [narwhals](https://narwhals-dev.github.io/narwhals/) for frame
+  abstraction throughout.
+- **Phase 3** — all diagnostics functions (`residuals`, `leverage`,
+  `influence`, `augment`) operate on narwhals frames internally; polars
+  DataFrames pass through without a pandas round-trip.
+
+### Leverage fix for truly-crossed RE
+
+For models with two or more grouping factors, the fixed-effects leverage
+component now uses the OLS hat matrix `H_X = X(X'X)⁻¹X'` rather than the
+full mixed-model hat approximation.  The previous calculation over-estimated
+leverage in balanced crossed designs.
+
+---
+
+## v0.2.1 — 2026-03-26
+
+### Random slopes
+
+interlace now supports lme4-style random slopes in addition to random intercepts.
+
+```python
+# Correlated random intercept + slope
+result = interlace.fit(
+    "y ~ x",
+    data=df,
+    random=["(1 + x | group)"],
+)
+
+# Independent (uncorrelated) parameterisation
+result = interlace.fit(
+    "y ~ x",
+    data=df,
+    random=["(1 + x || group)"],
+)
+```
+
+`result.random_effects["group"]` now returns a DataFrame with one column per
+random effect term.  `result.varcov` exposes the full random-effect covariance
+matrix.
+
+Warm-start support: case-deletion refits initialise the optimizer from the
+full-model `theta_hat`, reducing iterations for large models.
+
+---
+
 ## v0.2.0 — 2026-03-26
 
 ### New feature: BOBYQA optimizer for R/Python diagnostic parity

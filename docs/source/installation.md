@@ -10,6 +10,21 @@ Requires **Python ≥ 3.13**.
 
 ## Optional extras
 
+### CHOLMOD sparse Cholesky
+
+For faster REML optimisation on large models, install the `cholmod` extra:
+
+```bash
+pip install "interlace-lme[cholmod]"
+```
+
+This adds [scikit-sparse](https://scikit-sparse.readthedocs.io/), which
+provides Python bindings to SuiteSparse/CHOLMOD.  When installed, interlace
+automatically uses CHOLMOD's symbolic-then-numeric refactorisation path —
+performing symbolic analysis once and reusing the sparsity pattern on every
+REML iteration.  No code change required; the fast path is detected at
+runtime.
+
 ### BOBYQA optimizer
 
 For better parity with R/HLMdiag influence diagnostics, install the

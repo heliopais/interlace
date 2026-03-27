@@ -28,7 +28,7 @@ df = pd.DataFrame({
 
 ## Fit the model
 
-Pass a Patsy-style fixed-effects formula and the grouping column names:
+Pass a standard fixed-effects formula and the grouping column names:
 
 ```python
 from interlace import fit
@@ -96,8 +96,39 @@ print(preds)
 
 Unseen group levels automatically shrink to the population mean (BLUP = 0).
 
+## Random slopes
+
+To include a random slope alongside the random intercept, use `random` instead
+of `groups` with lme4-style specifications:
+
+```python
+result = fit(
+    formula="score ~ hours_studied + prior_gpa",
+    data=df,
+    random=["(1 + hours_studied | student_id)", "(1 | school_id)"],
+)
+
+# BLUPs are now a DataFrame, one column per term
+print(result.random_effects["student_id"])
+# hours_studied
+# s1    0.42
+# s2   -0.31
+# ...
+```
+
+## Bootstrap standard error
+
+`CrossedLMEResult.bootstrap_se()` computes a cluster-bootstrap SE for the
+median of the response — useful for EU pay-gap reporting:
+
+```python
+se = result.bootstrap_se(statistic="median", n_bootstrap=1000, seed=42)
+print(f"Median SE (cluster bootstrap): {se:.4f}")
+```
+
 ## Next steps
 
 - See {doc}`examples` for a full walkthrough of diagnostics and plots
 - See the {doc}`api/fit` reference for all `fit()` parameters
 - See {doc}`api/result` for the complete list of `CrossedLMEResult` attributes
+- See {doc}`installation` for optional extras (CHOLMOD, BOBYQA)
