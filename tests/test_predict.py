@@ -324,3 +324,54 @@ def test_predict_survives_shuffled_formulaic_columns(
             "Fix: reindex X_new to result.fe_params.index before the dot product."
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Regression: ColumnNotFoundError when formulaic returns narwhals-backed frame
+# (GitHub issue #12)
+# ---------------------------------------------------------------------------
+# When newdata is a non-pandas frame (e.g. polars), formulaic's NarwhalsMaterializer
+# returns a narwhals-wrapped ModelMatrix.  Indexing it with `mm[list_of_col_names]`
+# goes through narwhals __getitem__ and can fail with ColumnNotFoundError on
+# some narwhals/polars version combinations.
+# Fix: extract numpy array first, then reorder columns positionally.
+
+
+def test_predict_does_not_use_narwhals_column_selection(
+    categorical_result_for_column_order,
+):
+    """predict() must not rely on narwhals __getitem__ for column selection.
+
+    Simulates the GitHub issue #12 scenario: formulaic returns a ModelMatrix
+    whose __getitem__ raises ColumnNotFoundError (as happens with certain
+    narwhals/polars version combos). predict() must succeed by using
+    np.asarray() + positional indexing instead.
+    """
+    from unittest.mock import MagicMock, patch
+
+    import formulaic
+
+    df, result = categorical_result_for_column_order
+    newdata = df.iloc[:20].reset_index(drop=True)
+
+    # Compute the real model matrix
+    fe_formula = result.model.formula.split("~", 1)[1].strip()
+    real_mm = formulaic.model_matrix(fe_formula, newdata)
+
+    # Build a mock that exposes .columns and __array__ but raises on __getitem__
+    mock_mm = MagicMock()
+    mock_mm.columns = real_mm.columns
+    mock_mm.__array__ = lambda *a, **kw: np.asarray(real_mm)
+    mock_mm.__getitem__ = MagicMock(
+        side_effect=Exception(
+            "Simulated ColumnNotFoundError: narwhals __getitem__ must not be used"
+        )
+    )
+
+    with patch("interlace.predict.formulaic.model_matrix", return_value=mock_mm):
+        # Should NOT raise — fix uses np.asarray + positional reorder
+        pred = result.predict(newdata=newdata, include_re=False)
+
+    # Compare against correct prediction (no mock)
+    pred_correct = result.predict(newdata=newdata, include_re=False)
+    np.testing.assert_allclose(pred, pred_correct, rtol=1e-8)

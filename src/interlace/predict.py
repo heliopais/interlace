@@ -48,9 +48,18 @@ def predict(
 
     # Build fixed-effects design matrix using formulaic (same as fitting path).
     fe_formula = result.model.formula.split("~", 1)[1].strip()
-    X_new_df = formulaic.model_matrix(fe_formula, nw_new)
-    # Reindex to fitting column order before dot product (column order can differ).
-    X_new = np.asarray(X_new_df[list(result.fe_params.index)])
+    X_new_mm = formulaic.model_matrix(fe_formula, nw_new)
+    # Convert to numpy first — avoids narwhals/polars __getitem__ path which can
+    # raise ColumnNotFoundError on some version combinations (GitHub issue #12).
+    mm_cols = list(X_new_mm.columns)
+    mm_arr = np.asarray(X_new_mm)
+    # Reorder columns to match fitting-time fe_params order (GitHub issue #10).
+    if hasattr(result.fe_params, "index"):
+        fe_cols = list(result.fe_params.index)
+        if mm_cols != fe_cols:
+            col_idx = [mm_cols.index(c) for c in fe_cols]
+            mm_arr = mm_arr[:, col_idx]
+    X_new = mm_arr
     pred = X_new @ np.asarray(result.fe_params)
 
     if not include_re:
