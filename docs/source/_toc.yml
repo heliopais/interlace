@@ -10,7 +10,7 @@ subtrees:
   - file: installation
   - file: quickstart
   - file: examples
-  - file: interpreting-results
+  - file: interpreting-results.ipynb
 - caption: Releases
   entries:
   - file: changelog
