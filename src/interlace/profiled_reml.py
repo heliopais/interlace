@@ -522,3 +522,216 @@ def fit_reml(
         specs=specs,
         n_levels=n_levels,
     )
+
+
+# ---------------------------------------------------------------------------
+# Profiled ML objective
+# ---------------------------------------------------------------------------
+
+
+def ml_objective(
+    theta: np.ndarray,
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    q_sizes: list[int],
+    _cache: dict[str, np.ndarray | sp.csc_matrix | float] | None = None,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
+) -> float:
+    """Profiled ML deviance (to minimise over theta).
+
+    Evaluates:
+
+        obj(theta) = log|A11| + n * log(y'Py)
+
+    Differs from :func:`reml_objective` by omitting the ``log|X'Omega^{-1}X|``
+    term and using ``n`` rather than ``n - p`` as the multiplier.
+
+    Parameters
+    ----------
+    theta, y, X, Z, q_sizes, _cache, specs, n_levels:
+        Same as :func:`reml_objective`.
+
+    Returns
+    -------
+    float  (profiled ML deviance; lower is better)
+    """
+    if _cache is None:
+        _cache = _precompute(y, X, Z)
+
+    ZtZ = sp.csc_matrix(_cache["ZtZ"])
+    ZtX = np.asarray(_cache["ZtX"])
+    Zty = np.asarray(_cache["Zty"])
+    XtX = np.asarray(_cache["XtX"])
+    Xty = np.asarray(_cache["Xty"])
+    yty = float(_cache["yty"])  # noqa: PGH003
+
+    n, p = X.shape
+
+    if specs is not None:
+        Lambda = make_lambda(theta, specs, n_levels)  # type: ignore[arg-type]
+        A11 = _build_A11(ZtZ, Lambda)
+        lZty = np.asarray(Lambda.T @ Zty).squeeze()
+        lZtX = np.asarray(Lambda.T @ ZtX)
+    else:
+        lambda_diag = make_lambda_diag(theta, q_sizes)
+        A11 = _build_A11(ZtZ, lambda_diag)
+        lZty = lambda_diag * Zty
+        lZtX = lambda_diag[:, None] * ZtX
+
+    chol_factor = _cache.get("chol_factor") if _cache is not None else None
+    if chol_factor is not None:
+        chol_factor.cholesky(A11)  # type: ignore[union-attr]
+        log_det_A11 = float(chol_factor.logdet())  # type: ignore[union-attr]
+        c1 = np.asarray(chol_factor.solve_A(lZty)).squeeze()  # type: ignore[union-attr]
+        C_X = np.asarray(chol_factor.solve_A(lZtX))  # type: ignore[union-attr]
+    else:
+        log_det_A11 = sparse_chol_logdet(A11)
+        c1 = _sparse_solve(A11, lZty)
+        C_X = _sparse_solve(A11, lZtX)
+
+    MX = XtX - lZtX.T @ C_X
+    rhs = Xty - lZtX.T @ c1
+
+    try:
+        beta_hat = la.solve(MX, rhs, assume_a="pos")
+    except la.LinAlgError:
+        return np.inf
+
+    yPy = float(yty - lZty @ c1 - rhs @ beta_hat)
+    if yPy <= 0:
+        return np.inf
+
+    return float(log_det_A11 + n * np.log(yPy))
+
+
+def fit_ml(
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    q_sizes: list[int],
+    theta0: np.ndarray | None = None,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
+    optimizer: str = "lbfgsb",
+) -> REMLResult:
+    """Fit a linear mixed model by profiled ML.
+
+    Identical to :func:`fit_reml` but optimises the ML (not REML) criterion.
+    The key differences are:
+
+    * No ``log|X'Omega^{-1}X|`` correction term in the objective.
+    * ``sigma2`` is estimated as ``y'Py / n`` (ML, biased) rather than
+      ``y'Py / (n - p)`` (REML, unbiased).
+    * The log-likelihood uses ``n`` degrees of freedom:
+      ``llf = -0.5 * (log|A11| + n*(1 + log(2*pi*sigma2)))``.
+
+    Parameters
+    ----------
+    y, X, Z, q_sizes, theta0, specs, n_levels, optimizer:
+        Same as :func:`fit_reml`.
+
+    Returns
+    -------
+    REMLResult
+        The ``llf`` field contains the ML log-likelihood.
+    """
+    if optimizer not in ("lbfgsb", "bobyqa"):
+        msg = f"optimizer must be 'lbfgsb' or 'bobyqa', got {optimizer!r}"
+        raise ValueError(msg)
+
+    n, p = X.shape
+
+    if specs is not None:
+        n_theta = sum(n_theta_for_spec(s.n_terms, s.correlated) for s in specs)
+        bounds = _build_theta_bounds(specs)
+    else:
+        n_theta = len(q_sizes)
+        bounds = [(1e-8, None)] * n_theta
+
+    if theta0 is None:
+        theta0 = np.ones(n_theta)
+
+    cache = _precompute(y, X, Z)
+
+    cholmod = _try_cholmod()
+    if cholmod is not None:
+        if specs is not None:
+            Lambda0 = make_lambda(theta0, specs, n_levels)  # type: ignore[arg-type]
+            A11_0 = _build_A11(cache["ZtZ"], Lambda0)
+        else:
+            lambda_diag_0 = make_lambda_diag(theta0, q_sizes)
+            A11_0 = _build_A11(cache["ZtZ"], lambda_diag_0)
+        cache["chol_factor"] = cholmod.cholesky(A11_0)
+
+    def obj(theta: np.ndarray) -> float:
+        return ml_objective(
+            theta, y, X, Z, q_sizes, _cache=cache, specs=specs, n_levels=n_levels
+        )
+
+    if optimizer == "bobyqa":
+        import pybobyqa
+
+        lower = np.array([lo if lo is not None else -np.inf for lo, _ in bounds])
+        upper = np.array([hi if hi is not None else np.inf for _, hi in bounds])
+        soln = pybobyqa.solve(obj, theta0, bounds=(lower, upper))
+        theta_hat = soln.x
+        converged = soln.msg == "Success: rho has reached rhoend"
+    else:
+        res = opt.minimize(obj, theta0, method="L-BFGS-B", bounds=bounds)
+        theta_hat = res.x
+        converged = bool(res.success)
+
+    # --- Recover beta and sigma2 at optimum ---
+    ZtZ = cache["ZtZ"]
+    ZtX = cache["ZtX"]
+    Zty = cache["Zty"]
+    XtX = cache["XtX"]
+    Xty = cache["Xty"]
+    yty = cache["yty"]
+
+    if specs is not None:
+        Lambda = make_lambda(theta_hat, specs, n_levels)  # type: ignore[arg-type]
+        A11 = _build_A11(ZtZ, Lambda)
+        lZty = np.asarray(Lambda.T @ Zty).squeeze()
+        lZtX = np.asarray(Lambda.T @ ZtX)
+    else:
+        lambda_diag = make_lambda_diag(theta_hat, q_sizes)
+        A11 = _build_A11(ZtZ, lambda_diag)
+        lZty = lambda_diag * Zty
+        lZtX = lambda_diag[:, None] * ZtX
+
+    c1 = _sparse_solve(A11, lZty)
+    C_X = _sparse_solve(A11, lZtX)
+    MX = XtX - lZtX.T @ C_X
+    rhs = Xty - lZtX.T @ c1
+    beta_hat = la.solve(MX, rhs, assume_a="pos")
+
+    yPy = float(yty - lZty @ c1 - rhs @ beta_hat)
+    sigma2 = yPy / n  # ML estimate (biased; uses n not n-p)
+
+    # --- ML log-likelihood ---
+    log_det_A11 = sparse_chol_logdet(A11)
+    llf = -0.5 * (log_det_A11 + n * (1.0 + np.log(2.0 * np.pi * sigma2)))
+
+    # --- Information criteria ---
+    nparams = p + n_theta + 1
+    aic = -2.0 * llf + 2.0 * nparams
+    bic = -2.0 * llf + np.log(n) * nparams
+
+    return REMLResult(
+        beta=beta_hat,
+        theta=theta_hat,
+        sigma2=sigma2,
+        converged=converged,
+        llf=float(llf),
+        aic=float(aic),
+        bic=float(bic),
+        nobs=n,
+        nparams=nparams,
+        specs=specs,
+        n_levels=n_levels,
+    )

@@ -10,6 +10,7 @@ import scipy.linalg as la
 import scipy.sparse as sp
 import scipy.stats as stats
 
+from interlace.anova import anova
 from interlace.augment import hlm_augment
 from interlace.formula import (
     groups_to_random_effects,
@@ -29,6 +30,7 @@ from interlace.profiled_reml import (
     _build_A11,
     _precompute,
     _sparse_solve,
+    fit_ml,
     fit_reml,
     make_lambda,
 )
@@ -40,6 +42,7 @@ from interlace.summary import VarCorr
 
 __all__ = [
     "fit",
+    "anova",
     "CrossedLMEResult",
     # Residuals
     "hlm_resid",
@@ -109,8 +112,8 @@ def fit(
     CrossedLMEResult
         Drop-in replacement for statsmodels ``MixedLMResults``.
     """
-    if method != "REML":
-        raise ValueError(f"Only method='REML' is supported; got '{method}'")
+    if method not in ("REML", "ML"):
+        raise ValueError(f"method must be 'REML' or 'ML'; got '{method}'")
     if random is None and groups is None:
         raise ValueError("Either 'groups' or 'random' must be provided.")
 
@@ -138,8 +141,9 @@ def fit(
         int(np.unique(group_array(spec, nw_data)).shape[0]) for spec in specs
     ]
 
-    # --- 3. Fit REML ---
-    reml = fit_reml(
+    # --- 3. Fit (REML or ML) ---
+    _fit_fn = fit_reml if method == "REML" else fit_ml
+    reml = _fit_fn(
         y,
         X,
         Z,
@@ -318,6 +322,7 @@ def fit(
         llf=reml.llf,
         aic=reml.aic,
         bic=reml.bic,
+        nparams=reml.nparams,
         _gpgap_group_col=group_cols[0],
         _gpgap_vc_cols=group_cols[1:],
         _random_specs=list(specs),

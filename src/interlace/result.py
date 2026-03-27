@@ -96,6 +96,7 @@ class CrossedLMEResult:
     llf: float
     aic: float
     bic: float
+    nparams: int  # p (FE) + n_theta (RE variances) + 1 (sigma²)
 
     # gpgap compatibility
     _gpgap_group_col: str
