@@ -135,9 +135,7 @@ def test_blups_batch_cask_correlated(il_result_slash, r_results):
     r_blups = r_results["ranef"]["batch:cask"]
     labels = sorted(r_blups.keys())
     r_arr = np.array([r_blups[g] for g in labels])
-    il_arr = np.array(
-        [il_result_slash.random_effects["batch:cask"][g] for g in labels]
-    )
+    il_arr = np.array([il_result_slash.random_effects["batch:cask"][g] for g in labels])
     corr = np.corrcoef(r_arr, il_arr)[0, 1]
     assert corr > 0.99, f"batch:cask BLUP correlation={corr:.4f} < 0.99"
 
@@ -148,7 +146,7 @@ def test_blups_batch_cask_correlated(il_result_slash, r_results):
 
 
 def test_explicit_matches_slash(il_result_slash, il_result_explicit):
-    """Fitting with (1|batch) + (1|batch_cask) must give the same results as (1|batch/cask)."""
+    """Explicit two-term form must match the / shorthand."""
     # Fixed effects
     slash_fe = il_result_slash.fe_params["Intercept"]
     expl_fe = il_result_explicit.fe_params["Intercept"]
@@ -181,11 +179,14 @@ def test_depth3_nesting_parse():
 
     # Each spec has interaction_cols set correctly
     assert specs[0].interaction_cols == [], (
-        f"Top-level spec should have empty interaction_cols, got {specs[0].interaction_cols}"
+        f"Top-level spec should have empty interaction_cols, "
+        f"got {specs[0].interaction_cols}"
     )
     assert specs[1].interaction_cols == ["a", "b"], (
-        f"Second spec interaction_cols should be ['a', 'b'], got {specs[1].interaction_cols}"
+        f"Second spec interaction_cols should be ['a', 'b'], "
+        f"got {specs[1].interaction_cols}"
     )
     assert specs[2].interaction_cols == ["a", "b", "c"], (
-        f"Third spec interaction_cols should be ['a', 'b', 'c'], got {specs[2].interaction_cols}"
+        f"Third spec interaction_cols should be ['a', 'b', 'c'], "
+        f"got {specs[2].interaction_cols}"
     )
