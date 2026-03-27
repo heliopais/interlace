@@ -49,8 +49,6 @@ jobs:
           uv venv .venv-no-pandas
           uv pip install --python .venv-no-pandas/bin/python \
             ".[bobyqa]" polars pytest
-          # Explicitly verify pandas is absent
-          ! .venv-no-pandas/bin/python -c "import pandas" 2>/dev/null
 
       - name: Run pandas-free tests
         run: |

@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-import formulaic  # type: ignore[import-untyped]
+import formulaic
 import narwhals as nw
 import numpy as np
 
