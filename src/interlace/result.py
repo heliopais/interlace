@@ -6,10 +6,42 @@ exposing all attributes accessed by the gpgap diagnostics pipeline.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+
+
+def _expand_dot_formula(new_formula: str, orig_formula: str) -> str:
+    """Expand lme4-style dot notation in *new_formula* using *orig_formula*.
+
+    A standalone ``.`` in the LHS or RHS is replaced by the corresponding
+    part of *orig_formula*.  For example::
+
+        _expand_dot_formula(". ~ . + x2", "y ~ x1")  # → "y ~ x1 + x2"
+        _expand_dot_formula(". ~ . - x1", "y ~ x1 + x2")  # → "y ~ x1 + x2 - x1"
+
+    If *new_formula* contains no ``.`` it is returned unchanged.
+    """
+    if "." not in new_formula:
+        return new_formula
+
+    orig_lhs, orig_rhs = (s.strip() for s in orig_formula.split("~", 1))
+
+    if "~" not in new_formula:
+        new_lhs = orig_lhs
+        new_rhs_template = new_formula.strip()
+    else:
+        new_lhs, new_rhs_template = (s.strip() for s in new_formula.split("~", 1))
+        if new_lhs == ".":
+            new_lhs = orig_lhs
+
+    # Replace a standalone '.' (not part of a variable name) with orig_rhs.
+    # A standalone dot is preceded/followed by non-word, non-dot characters.
+    new_rhs = re.sub(r"(?<![.\w])\.(?![.\w])", orig_rhs, new_rhs_template)
+
+    return f"{new_lhs} ~ {new_rhs}"
 
 
 @dataclass
@@ -111,6 +143,9 @@ class CrossedLMEResult:
     # Fitting context needed for post-fit computations (Satterthwaite, etc.)
     _Z: Any = field(default=None, repr=False)  # scipy sparse (n, q)
     _n_levels: list[int] = field(default_factory=list)
+
+    # Original fit() kwargs for update() replay
+    _fit_kwargs: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
     def fe_tvalues(self) -> Any:
@@ -235,3 +270,49 @@ class CrossedLMEResult:
                 boot_stats[i] = np.median(y[indices])
 
         return float(np.std(boot_stats, ddof=1))
+
+    def update(
+        self,
+        formula: str | None = None,
+        data: Any = None,
+        **kwargs: Any,
+    ) -> CrossedLMEResult:
+        """Refit the model with a modified formula, data, or fit arguments.
+
+        Mirrors R's ``update.merMod()``.  Any argument not supplied is taken
+        from the original fit.  The *formula* argument supports lme4-style
+        dot notation: ``. ~ . + x2`` means "keep the original LHS and RHS,
+        then add ``x2`` to the fixed effects".
+
+        Parameters
+        ----------
+        formula:
+            New fixed-effects formula.  May use ``.`` to refer to the
+            corresponding part of the original formula.  If ``None``, the
+            original formula is reused unchanged.
+        data:
+            New data frame.  If ``None``, the original data is reused.
+        **kwargs:
+            Additional keyword arguments forwarded to :func:`interlace.fit`
+            (e.g. ``method``, ``groups``, ``random``, ``optimizer``).
+            Override the stored values from the original fit.
+
+        Returns
+        -------
+        CrossedLMEResult
+        """
+        from interlace import fit as _fit  # local import to avoid circular dep
+
+        stored = self._fit_kwargs.copy()
+        orig_formula: str = stored.pop("formula")
+        orig_data: Any = stored.pop("data")
+
+        resolved_formula = (
+            _expand_dot_formula(formula, orig_formula)
+            if formula is not None
+            else orig_formula
+        )
+        resolved_data = data if data is not None else orig_data
+
+        merged = {**stored, **kwargs}
+        return _fit(resolved_formula, resolved_data, **merged)

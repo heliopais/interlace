@@ -47,6 +47,7 @@ from interlace.summary import VarCorr
 
 __all__ = [
     "fit",
+    "update",
     "cross_val",
     "CVResult",
     "allFit",
@@ -360,6 +361,15 @@ def fit(
         data=_DataWrapper(frame=data, _pandas_frame=pd_frame),
     )
 
+    _fit_kwargs: dict[str, Any] = {
+        "formula": formula,
+        "data": data,
+        "groups": groups,
+        "random": random,
+        "method": method,
+        "optimizer": optimizer,
+    }
+
     return CrossedLMEResult(
         fe_params=fe_params,
         fe_bse=fe_bse,
@@ -387,4 +397,34 @@ def fit(
         _random_specs=list(specs),
         _Z=Z,
         _n_levels=n_levels_list,
+        _fit_kwargs=_fit_kwargs,
     )
+
+
+def update(
+    result: CrossedLMEResult,
+    formula: str | None = None,
+    data: Any = None,
+    **kwargs: Any,
+) -> CrossedLMEResult:
+    """Refit *result* with modified formula, data, or fit arguments.
+
+    Convenience wrapper around :meth:`CrossedLMEResult.update`.
+
+    Parameters
+    ----------
+    result:
+        Previously fitted model.
+    formula:
+        New fixed-effects formula, optionally using lme4-style dot notation.
+    data:
+        New data frame.  If ``None``, the original data is reused.
+    **kwargs:
+        Additional keyword arguments forwarded to :func:`fit`
+        (e.g. ``method``, ``groups``, ``random``, ``optimizer``).
+
+    Returns
+    -------
+    CrossedLMEResult
+    """
+    return result.update(formula=formula, data=data, **kwargs)
