@@ -1,16 +1,26 @@
 """Tests for profiled_reml.py — Lambda parameterisation, sparse Cholesky,
 REML objective, and L-BFGS-B optimiser."""
 
+import sys
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pytest
+import scipy.linalg as la
 import scipy.sparse as sp
+import scipy.sparse.linalg as spla
 
 from interlace.formula import RandomEffectSpec
 from interlace.profiled_reml import (
     REMLResult,
+    _build_A11,
+    _precompute,
+    _try_cholmod,
+    fit_ml,
     fit_reml,
     make_lambda,
     make_lambda_diag,
+    ml_objective,
     n_theta_for_spec,
     reml_objective,
     sparse_chol_logdet,
@@ -517,3 +527,276 @@ class TestFitREMLBobyqa:
         d = self._make_dataset(rng, n_obs, n_groups)
         with pytest.raises(ValueError, match="optimizer"):
             fit_reml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="invalid")
+
+
+# ---------------------------------------------------------------------------
+# Fake CHOLMOD factor — backs the CHOLMOD API with scipy.sparse.linalg so the
+# coverage paths for the optional sksparse dependency can be exercised.
+# ---------------------------------------------------------------------------
+
+
+class _FakeFactor:
+    """Mimics a sksparse.cholmod Factor object using scipy sparse solvers."""
+
+    def __init__(self, A: sp.csc_matrix) -> None:
+        self._A = A.tocsc()
+
+    def cholesky(self, A: sp.csc_matrix) -> None:  # in-place numeric refactor
+        self._A = A.tocsc()
+
+    def logdet(self) -> float:
+        return sparse_chol_logdet(self._A)
+
+    def solve_A(self, b: np.ndarray) -> np.ndarray:
+        b_arr = np.asarray(b)
+        if b_arr.ndim == 2:
+            return np.column_stack(
+                [
+                    np.asarray(spla.spsolve(self._A, b_arr[:, i]))
+                    for i in range(b_arr.shape[1])
+                ]
+            )
+        return np.asarray(spla.spsolve(self._A, b_arr))
+
+
+class _FakeCholmod:
+    """Mimics the sksparse.cholmod module (just the `cholesky` entry point)."""
+
+    @staticmethod
+    def cholesky(A: sp.csc_matrix) -> _FakeFactor:
+        return _FakeFactor(A)
+
+
+# ---------------------------------------------------------------------------
+# _try_cholmod — line 173: `return cholmod` (only reachable when sksparse is
+# installed; we mock sys.modules to exercise it without the real package)
+# ---------------------------------------------------------------------------
+
+
+class TestTryCholmod:
+    def test_returns_none_without_sksparse(self) -> None:
+        result = _try_cholmod()
+        assert result is None
+
+    def test_returns_module_when_sksparse_available(self) -> None:
+        mock_cholmod = MagicMock()
+        with patch.dict(
+            sys.modules,
+            {
+                "sksparse": MagicMock(cholmod=mock_cholmod),
+                "sksparse.cholmod": mock_cholmod,
+            },
+        ):
+            result = _try_cholmod()
+        assert result is mock_cholmod
+
+
+# ---------------------------------------------------------------------------
+# reml_objective edge cases (lines 354-357, 370-371, 375)
+# ---------------------------------------------------------------------------
+
+
+class TestRemlObjectiveEdgeCases:
+    def test_linalg_error_returns_inf(self, single_re_dataset: dict) -> None:
+        """LinAlgError from la.solve → objective returns inf (lines 370-371)."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        with patch(
+            "interlace.profiled_reml.la.solve", side_effect=la.LinAlgError("test")
+        ):
+            val = reml_objective(d["theta_true"], d["y"], d["X"], Z, d["q_sizes"])
+        assert val == np.inf
+
+    def test_zero_y_ypy_nonpositive_returns_inf(self, single_re_dataset: dict) -> None:
+        """y=0 makes y'Py=0 → objective returns inf (line 375)."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        y_zero = np.zeros(len(d["y"]))
+        val = reml_objective(d["theta_true"], y_zero, d["X"], Z, d["q_sizes"])
+        assert val == np.inf
+
+    def test_chol_factor_in_cache_used(self, single_re_dataset: dict) -> None:
+        """When cache has chol_factor the CHOLMOD branch is taken (lines 354-357)."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        cache = _precompute(d["y"], d["X"], Z)
+        lambda_diag = make_lambda_diag(d["theta_true"], d["q_sizes"])
+        A11_init = _build_A11(cache["ZtZ"], lambda_diag)
+        cache["chol_factor"] = _FakeFactor(A11_init)
+        val = reml_objective(
+            d["theta_true"], d["y"], d["X"], Z, d["q_sizes"], _cache=cache
+        )
+        assert np.isfinite(val)
+
+
+# ---------------------------------------------------------------------------
+# fit_reml with mocked CHOLMOD (lines 449-450, 460)
+# Side-effect: also covers the CHOLMOD branch inside reml_objective (354-357)
+# ---------------------------------------------------------------------------
+
+
+class TestFitRemlCholmodMock:
+    def test_lbfgsb_with_cholmod_mock_qsizes_path(
+        self, single_re_dataset: dict
+    ) -> None:
+        """Mocked CHOLMOD, q_sizes path: exercises the hasattr/cache lines."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        with patch("interlace.profiled_reml._try_cholmod", return_value=_FakeCholmod()):
+            result = fit_reml(d["y"], d["X"], Z, d["q_sizes"])
+        assert isinstance(result, REMLResult)
+        assert result.converged
+
+    def test_lbfgsb_with_cholmod_mock_specs_path(self, single_re_dataset: dict) -> None:
+        """Mocked CHOLMOD, specs path: exercises lines 449-450 and 460."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        spec = RandomEffectSpec(
+            group="g", predictors=[], intercept=True, correlated=True
+        )
+        with patch("interlace.profiled_reml._try_cholmod", return_value=_FakeCholmod()):
+            result = fit_reml(
+                d["y"],
+                d["X"],
+                Z,
+                q_sizes=[],
+                specs=[spec],
+                n_levels=[d["q_sizes"][0]],
+            )
+        assert isinstance(result, REMLResult)
+
+
+# ---------------------------------------------------------------------------
+# ml_objective (lines 580, 604-607, 618-619, 623)
+# ---------------------------------------------------------------------------
+
+
+class TestMlObjective:
+    def test_returns_finite_without_cache(self, single_re_dataset: dict) -> None:
+        """Call without _cache → line 580 executed."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        val = ml_objective(d["theta_true"], d["y"], d["X"], Z, d["q_sizes"])
+        assert np.isfinite(val)
+
+    def test_linalg_error_returns_inf(self, single_re_dataset: dict) -> None:
+        """LinAlgError from la.solve → ml_objective returns inf (lines 618-619)."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        with patch(
+            "interlace.profiled_reml.la.solve", side_effect=la.LinAlgError("test")
+        ):
+            val = ml_objective(d["theta_true"], d["y"], d["X"], Z, d["q_sizes"])
+        assert val == np.inf
+
+    def test_zero_y_ypy_nonpositive_returns_inf(self, single_re_dataset: dict) -> None:
+        """y=0 makes y'Py=0 → ml_objective returns inf (line 623)."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        y_zero = np.zeros(len(d["y"]))
+        val = ml_objective(d["theta_true"], y_zero, d["X"], Z, d["q_sizes"])
+        assert val == np.inf
+
+    def test_chol_factor_in_cache_used(self, single_re_dataset: dict) -> None:
+        """When cache has chol_factor the CHOLMOD branch is taken (lines 604-607)."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        cache = _precompute(d["y"], d["X"], Z)
+        lambda_diag = make_lambda_diag(d["theta_true"], d["q_sizes"])
+        A11_init = _build_A11(cache["ZtZ"], lambda_diag)
+        cache["chol_factor"] = _FakeFactor(A11_init)
+        val = ml_objective(
+            d["theta_true"], d["y"], d["X"], Z, d["q_sizes"], _cache=cache
+        )
+        assert np.isfinite(val)
+
+
+# ---------------------------------------------------------------------------
+# fit_ml (lines 661-664, 683-684, 694, 704-709, 712-717)
+# ---------------------------------------------------------------------------
+
+
+class TestFitMl:
+    def test_invalid_optimizer_raises(self, single_re_dataset: dict) -> None:
+        """fit_ml raises ValueError for unknown optimizer (lines 661-664)."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        with pytest.raises(ValueError, match="optimizer"):
+            fit_ml(d["y"], d["X"], Z, d["q_sizes"], optimizer="invalid")
+
+    def test_nelder_mead_returns_result(self, single_re_dataset: dict) -> None:
+        """nelder-mead optimizer path in fit_ml (lines 712-717)."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        result = fit_ml(d["y"], d["X"], Z, d["q_sizes"], optimizer="nelder-mead")
+        assert isinstance(result, REMLResult)
+        assert np.isfinite(result.llf)
+
+    def test_lbfgsb_with_cholmod_mock_qsizes_path(
+        self, single_re_dataset: dict
+    ) -> None:
+        """Mocked CHOLMOD, q_sizes path: exercises cholmod block in fit_ml."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        with patch("interlace.profiled_reml._try_cholmod", return_value=_FakeCholmod()):
+            result = fit_ml(d["y"], d["X"], Z, d["q_sizes"])
+        assert isinstance(result, REMLResult)
+        assert np.isfinite(result.llf)
+
+    def test_lbfgsb_with_cholmod_mock_specs_path(self, single_re_dataset: dict) -> None:
+        """Mocked CHOLMOD, specs path: exercises lines 683-684 and 694."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        spec = RandomEffectSpec(
+            group="g", predictors=[], intercept=True, correlated=True
+        )
+        with patch("interlace.profiled_reml._try_cholmod", return_value=_FakeCholmod()):
+            result = fit_ml(
+                d["y"],
+                d["X"],
+                Z,
+                q_sizes=[],
+                specs=[spec],
+                n_levels=[d["q_sizes"][0]],
+            )
+        assert isinstance(result, REMLResult)
+
+
+@pytest.mark.parametrize("n_groups,n_obs", [(10, 200)])
+class TestFitMlBobyqa:
+    """BOBYQA path in fit_ml (lines 704-709) — skipped when pybobyqa absent."""
+
+    def _make_dataset(
+        self, rng: np.random.Generator, n_obs: int, n_groups: int
+    ) -> dict:
+        sigma2, sigma2_b = 2.0, 1.0
+        group_codes = np.repeat(np.arange(n_groups), n_obs // n_groups)
+        b_true = rng.normal(scale=np.sqrt(sigma2_b), size=n_groups)
+        X = np.column_stack([np.ones(n_obs), rng.normal(size=n_obs)])
+        y = (
+            X @ np.array([1.5, 0.8])
+            + b_true[group_codes]
+            + rng.normal(scale=np.sqrt(sigma2), size=n_obs)
+        )
+        from interlace.sparse_z import build_indicator_matrix
+
+        Z = build_indicator_matrix(group_codes, n_groups)
+        return {"y": y, "X": X, "Z": Z, "q_sizes": [n_groups]}
+
+    def test_bobyqa_converges(
+        self, rng: np.random.Generator, n_groups: int, n_obs: int
+    ) -> None:
+        pytest.importorskip("pybobyqa")
+        d = self._make_dataset(rng, n_obs, n_groups)
+        result = fit_ml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="bobyqa")
+        assert isinstance(result, REMLResult)
+        assert result.converged
+
+    def test_bobyqa_beta_close_to_lbfgsb(
+        self, rng: np.random.Generator, n_groups: int, n_obs: int
+    ) -> None:
+        pytest.importorskip("pybobyqa")
+        d = self._make_dataset(rng, n_obs, n_groups)
+        r_lbfgsb = fit_ml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="lbfgsb")
+        r_bobyqa = fit_ml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="bobyqa")
+        np.testing.assert_allclose(r_bobyqa.beta, r_lbfgsb.beta, atol=1e-3)
