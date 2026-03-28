@@ -11,7 +11,6 @@ Acceptance criteria:
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
 import pytest
 import statsmodels.api as sm
 
@@ -40,7 +39,9 @@ def wide_ols():
     return sm.OLS(y, X).fit()
 
 
-def _brute_force_dfbetas(model: sm.regression.linear_model.RegressionResultsWrapper) -> np.ndarray:
+def _brute_force_dfbetas(
+    model: sm.regression.linear_model.RegressionResultsWrapper,
+) -> np.ndarray:
     """Exact LOO-refit DFBETAS for validation (slow, only for small n).
 
     Formula: DFBETAS[i,j] = (β̂_j − β̂_{j(i)}) / (s_(i) · sqrt(c_jj))

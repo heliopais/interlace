@@ -677,4 +677,4 @@ def ols_dfbetas_qr(model: Any) -> np.ndarray:
     # Denominator: (n, p)
     denominator = loo_sigma[:, np.newaxis] * se_coef[np.newaxis, :]
 
-    return numerator / np.maximum(denominator, 1e-300)
+    return np.asarray(numerator / np.maximum(denominator, 1e-300))
