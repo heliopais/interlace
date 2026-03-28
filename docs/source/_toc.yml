@@ -19,6 +19,7 @@ subtrees:
 - caption: Reference
   entries:
   - file: faq
+  - file: performance
 - caption: Releases
   entries:
   - file: changelog
