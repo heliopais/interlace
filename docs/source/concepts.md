@@ -86,22 +86,32 @@ dict of `{group_col: σ²}`. The residual variance is `result.scale`.
 
 The grouping structure of your data determines which type of model you need.
 
-**Nested (hierarchical) design:** every level of factor B exists within exactly one
-level of factor A. Students are nested within schools: each student belongs to one and
-only one school.
+**Nested (hierarchical) design:** every level of a lower factor exists within exactly
+one level of the factor above it. A classic three-level example: students are grouped
+into classes, and classes are grouped into schools. Class 1A only exists in School 1 —
+it is not shared with School 2.
 
 ```
-school 1 → students A, B, C
-school 2 → students D, E, F
-school 3 → students G, H, I
+school 1
+  ├── class 1A → students A, B, C
+  └── class 1B → students D, E, F
+school 2
+  ├── class 2A → students G, H, I
+  └── class 2B → students J, K, L
 ```
 
-Groups at the lower level are *not* shared across groups at the higher level. The
-standard tool for this in Python is `statsmodels.MixedLM`.
+The hierarchy is strict: no class spans two schools, no student spans two classes.
+Variance decomposes across levels — some students differ because of school-level
+effects, some because of class-level effects within a school, and the rest is residual.
 
-**Crossed design:** every level of factor A appears with multiple levels of factor B,
-and vice versa. Subjects responding to items in a reading-time study: each subject sees
-many items, and each item is seen by many subjects.
+This is often called a **multilevel** or **hierarchical linear model** and is well
+supported by `statsmodels.MixedLM`.
+
+**Crossed design:** the grouping factors are independent of each other — each level of
+factor A co-occurs with multiple levels of factor B, and vice versa. A classic example:
+subjects responding to items in a reading-time experiment. Subject 1 sees items from
+across the whole item pool; item 3 is seen by subjects from across the whole subject
+pool. Neither factor is contained within the other.
 
 ```
            item 1  item 2  item 3  item 4
@@ -112,9 +122,18 @@ subject D    ✓       ✓       ✓
 ```
 
 Both `subject` and `item` independently shift the outcome. Fitting a model with only
-one of them leaves the other's variance in the residual, biasing inference. Neither
-factor is nested inside the other — this is the defining feature of a **crossed**
-design.
+one of them leaves the other's variance in the residual, biasing inference. This is
+the defining feature of a **crossed** design, and it cannot be expressed as a
+hierarchy.
+
+The same pattern appears in many applied settings:
+
+- **HR / compensation:** employees rated by managers, where each manager rates employees
+  from multiple departments and each department has employees rated by multiple managers
+- **Education:** students taking standardised tests across subjects, where a student's
+  performance reflects both student ability and item difficulty
+- **E-commerce:** customers purchasing across product categories, where a transaction
+  reflects both customer propensity and category-level demand
 
 `interlace` targets crossed designs. For nested designs, `statsmodels.MixedLM` is the
 right tool. See [For Python users](why-python.md) for a side-by-side comparison.
@@ -194,9 +213,20 @@ An **unseen group level** at prediction time automatically receives a BLUP of ze
 | **REML** | Restricted maximum likelihood: unbiased estimator for variance components |
 | **ML** | Maximum likelihood: biased for variance components but comparable across fixed structures |
 | **Profiled REML** | REML where the optimisation is collapsed to variance parameters only |
+| **Profiled likelihood** | A likelihood surface obtained by optimising out nuisance parameters (here, the fixed effects) so only variance parameters remain |
 | **BLUP** | Best Linear Unbiased Predictor: shrinkage estimate of a group's deviation |
 | **Shrinkage** | Pulling individual group estimates toward the population mean |
-| **Sparse Cholesky** | Matrix factorisation used internally for efficient REML computation |
+| **Conditional prediction** | A prediction that includes the estimated group-level BLUPs; appropriate for known groups |
+| **Marginal prediction** | A prediction based on fixed effects only, averaging over the random-effect distribution; appropriate for new or unknown groups |
+| **Conditional residual** | Observed minus conditional prediction; reflects within-group unexplained variation |
+| **Marginal residual** | Observed minus marginal prediction; reflects both between- and within-group unexplained variation |
+| **Leverage** | The diagonal of the hat matrix: how much an observation can influence its own fitted value |
+| **Cook's distance** | A scalar measure of how much the fixed-effect estimates change when one observation is deleted |
+| **MDFFITS** | Measures of Difference in Fits: a scale-free version of Cook's distance standardised by the full fixed-effect covariance matrix |
+| **COVTRACE** | Influence on the trace of the fixed-effect precision matrix; positive values mean deletion improves precision |
+| **COVRATIO** | Ratio of fixed-effect covariance determinants with vs without an observation; values near 1 indicate little influence on precision |
+| **RVC** | Relative variance change: how much a variance component changes (proportionally) when one observation is deleted |
+| **Sparse Cholesky** | Matrix factorisation used internally for efficient REML computation on large, sparse random-effect structures |
 
 ---
 
