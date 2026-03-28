@@ -15,8 +15,12 @@ import pytest
 
 polars = pytest.importorskip("polars")
 
-from interlace._frame import filter_rows, native_from_dict, to_native, to_pandas  # noqa: E402
-
+from interlace._frame import (  # noqa: E402
+    filter_rows,
+    native_from_dict,
+    to_native,
+    to_pandas,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -54,9 +58,11 @@ class TestToPandas:
         pd.testing.assert_frame_equal(result, pd_df)
 
     def test_raises_importerror_when_pandas_missing(self, pl_df):
-        with unittest.mock.patch.dict("sys.modules", {"pandas": None}):
-            with pytest.raises(ImportError, match="pandas is required"):
-                to_pandas(pl_df)
+        with (
+            unittest.mock.patch.dict("sys.modules", {"pandas": None}),
+            pytest.raises(ImportError, match="pandas is required"),
+        ):
+            to_pandas(pl_df)
 
 
 # ---------------------------------------------------------------------------
