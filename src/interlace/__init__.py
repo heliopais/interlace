@@ -40,7 +40,7 @@ from interlace.profiled_reml import (
 )
 from interlace.quantreg import quantreg_ker_se
 from interlace.residuals import hlm_resid
-from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper, _SimpleRE
+from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper
 from interlace.satterthwaite import satterthwaite_dfs
 from interlace.simulate import BootResult, bootMer, simulate
 from interlace.sparse_z import build_joint_z_from_specs, group_array
@@ -206,18 +206,11 @@ def fit(
     fe_cov = sigma2 * MX_inv
     fe_bse_arr = np.sqrt(sigma2 * np.diag(MX_inv))
 
-    # Build FE result objects — pd.Series/pd.DataFrame when pandas is available,
-    # plain numpy arrays otherwise. (fe_pvalues filled after Satterthwaite DFs below)
-    try:
-        import pandas as _pd
+    # Build FE result objects.  (fe_pvalues filled after Satterthwaite DFs below)
+    import pandas as _pd
 
-        fe_params: Any = _pd.Series(beta, index=term_names)
-        fe_bse: Any = _pd.Series(fe_bse_arr, index=term_names)
-        _pandas_available = True
-    except ImportError:
-        fe_params = beta
-        fe_bse = fe_bse_arr
-        _pandas_available = False
+    fe_params: Any = _pd.Series(beta, index=term_names)
+    fe_bse: Any = _pd.Series(fe_bse_arr, index=term_names)
 
     # --- 7b. Satterthwaite DFs and t-based p-values ---
     # Build a partial result just to pass context to satterthwaite_dfs.
@@ -261,19 +254,12 @@ def fit(
     t_scores = beta / fe_bse_arr
     fe_pvalues_arr = 2.0 * (1.0 - stats.t.cdf(np.abs(t_scores), df=fe_df_arr))
 
-    if _pandas_available:
-        fe_pvalues: Any = _pd.Series(fe_pvalues_arr, index=term_names)
-        fe_df: Any = _pd.Series(fe_df_arr, index=term_names)
-        fe_conf_int: Any = _pd.DataFrame(
-            {"lower": beta - 1.96 * fe_bse_arr, "upper": beta + 1.96 * fe_bse_arr},
-            index=term_names,
-        )
-    else:
-        fe_pvalues = fe_pvalues_arr
-        fe_df = fe_df_arr
-        fe_conf_int = np.column_stack(
-            [beta - 1.96 * fe_bse_arr, beta + 1.96 * fe_bse_arr]
-        )
+    fe_pvalues: Any = _pd.Series(fe_pvalues_arr, index=term_names)
+    fe_df: Any = _pd.Series(fe_df_arr, index=term_names)
+    fe_conf_int: Any = _pd.DataFrame(
+        {"lower": beta - 1.96 * fe_bse_arr, "upper": beta + 1.96 * fe_bse_arr},
+        index=term_names,
+    )
 
     # --- 8. Package random effects per spec ---
     random_effects: dict[str, Any] = {}
@@ -290,15 +276,10 @@ def fit(
         uniques: list[Any] = sorted(np.unique(group_array(spec, nw_data)).tolist())
 
         if spec.n_terms == 1:
-            # Intercept-only: backward-compatible Series/SimpleRE + scalar variance
-            if _pandas_available:
-                random_effects[spec.group] = _pd.Series(
-                    blup_block, index=uniques, name=spec.group
-                )
-            else:
-                random_effects[spec.group] = _SimpleRE(
-                    values=blup_block, index=uniques, name=spec.group
-                )
+            # Intercept-only: Series + scalar variance
+            random_effects[spec.group] = _pd.Series(
+                blup_block, index=uniques, name=spec.group
+            )
             theta_j0 = reml.theta[theta_idx]
             variance_components[spec.group] = float(sigma2 * theta_j0**2)
         else:
@@ -311,13 +292,9 @@ def fit(
             # blup_block is term-first: [q_j intercept BLUPs, q_j slope BLUPs, ...]
             # reshape to (n_terms, q_j) then transpose → (q_j, n_terms)
             re_mat = blup_block.reshape(spec.n_terms, q_j).T
-
-            if _pandas_available:
-                random_effects[spec.group] = _pd.DataFrame(
-                    re_mat, index=uniques, columns=term_names_j
-                )
-            else:
-                random_effects[spec.group] = re_mat  # (q_j, n_terms) numpy array
+            random_effects[spec.group] = _pd.DataFrame(
+                re_mat, index=uniques, columns=term_names_j
+            )
 
             # Covariance matrix: sigma2 * L_j @ L_j.T
             p_j = spec.n_terms
@@ -333,26 +310,20 @@ def fit(
                 # Independent: diagonal covariance
                 cov_mat = np.diag(sigma2 * theta_j**2)
 
-            if _pandas_available:
-                variance_components[spec.group] = _pd.DataFrame(
-                    cov_mat, index=term_names_j, columns=term_names_j
-                )
-            else:
-                variance_components[spec.group] = cov_mat  # numpy ndarray
+            variance_components[spec.group] = _pd.DataFrame(
+                cov_mat, index=term_names_j, columns=term_names_j
+            )
 
         ngroups[spec.group] = q_j
         theta_idx += n_theta_j
         blup_offset += n_blups_j
 
     # --- 9. Build ModelInfo ---
-    # Cache a pandas copy of the data if pandas is installed (used by diagnostics
-    # that rely on pandas-specific operations like the statsmodels compat path).
-    if _pandas_available:
-        pd_frame: Any = _pd.DataFrame(
-            {col: nw_data[col].to_numpy() for col in nw_data.columns}
-        )
-    else:
-        pd_frame = None
+    # Cache a pandas copy of the data (used by diagnostics that rely on pandas-
+    # specific operations like the statsmodels compat path).
+    pd_frame: Any = _pd.DataFrame(
+        {col: nw_data[col].to_numpy() for col in nw_data.columns}
+    )
 
     model_info = ModelInfo(
         exog=X,

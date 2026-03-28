@@ -26,12 +26,7 @@ class VarCorrResult:
         self._df = self._build_dataframe()
 
     def _build_dataframe(self) -> Any:
-        try:
-            import pandas as pd
-
-            _pandas = True
-        except ImportError:
-            _pandas = False
+        import pandas as pd
 
         rows: list[dict[str, Any]] = []
 
@@ -57,12 +52,7 @@ class VarCorrResult:
                     spec.predictors
                 )
 
-                if _pandas:
-                    import pandas as pd
-
-                    cov_mat = vc.values if hasattr(vc, "values") else np.asarray(vc)
-                else:
-                    cov_mat = np.asarray(vc)
+                cov_mat = vc.values if hasattr(vc, "values") else np.asarray(vc)
 
                 p = len(term_names)
                 for i in range(p):
@@ -107,15 +97,10 @@ class VarCorrResult:
             }
         )
 
-        if _pandas:
-            import pandas as pd
-
-            return pd.DataFrame(rows)
-        else:
-            return rows
+        return pd.DataFrame(rows)
 
     def as_dataframe(self) -> Any:
-        """Return variance components as a DataFrame (or list of dicts without pandas).
+        """Return variance components as a DataFrame.
 
         Columns: ``grp``, ``var1``, ``var2``, ``vcov``, ``sdcor``
 

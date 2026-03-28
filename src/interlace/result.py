@@ -45,32 +45,12 @@ def _expand_dot_formula(new_formula: str, orig_formula: str) -> str:
 
 
 @dataclass
-class _SimpleRE:
-    """Lightweight random-effect store used when pandas is not installed.
-
-    Exposes the same interface as a pandas Series for the attributes used
-    by interlace diagnostics: ``values``, ``index``, ``name``.
-    """
-
-    values: np.ndarray
-    index: list[Any]
-    name: str
-
-    def __len__(self) -> int:
-        return len(self.values)
-
-    def __array__(self, dtype: Any = None) -> np.ndarray:
-        return self.values if dtype is None else self.values.astype(dtype)
-
-
-@dataclass
 class _DataWrapper:
     """Thin wrapper so result.model.data.frame mirrors statsmodels.
 
     ``frame`` holds the caller's original native frame (pandas, polars, etc.)
     so that downstream diagnostics can return results in the same type.
-    ``_pandas_frame`` caches the pandas version for internal use; ``None``
-    when pandas is not installed.
+    ``_pandas_frame`` caches the pandas version for internal use.
     """
 
     frame: Any  # native type as passed by the caller (pandas, polars, etc.)
@@ -97,14 +77,13 @@ class CrossedLMEResult:
     this object is a drop-in replacement for the gpgap diagnostics pipeline.
     """
 
-    # Fixed effects — pd.Series when pandas is installed, np.ndarray otherwise
-    fe_params: Any
-    fe_bse: Any
-    fe_pvalues: Any
-    fe_conf_int: Any  # pd.DataFrame (pandas) or np.ndarray shape (p, 2)
+    # Fixed effects
+    fe_params: Any  # pd.Series
+    fe_bse: Any  # pd.Series
+    fe_pvalues: Any  # pd.Series
+    fe_conf_int: Any  # pd.DataFrame with columns ["lower", "upper"]
 
-    # Random effects — dict values are pd.Series/_SimpleRE (intercept-only)
-    # or pd.DataFrame/np.ndarray (multi-term)
+    # Random effects — pd.Series per group (intercept-only) or pd.DataFrame (slopes)
     random_effects: dict[str, Any]
     variance_components: dict[str, Any]
     theta: np.ndarray
@@ -117,8 +96,8 @@ class CrossedLMEResult:
     # Fixed-effects covariance matrix (p×p): scale * (X'Ω⁻¹X)⁻¹
     fe_cov: np.ndarray
 
-    # Satterthwaite denominator DFs — pd.Series when pandas is installed
-    fe_df: Any
+    # Satterthwaite denominator DFs
+    fe_df: Any  # pd.Series
 
     # Model matrices
     model: ModelInfo
@@ -154,14 +133,7 @@ class CrossedLMEResult:
         Named ``fe_tvalues`` for API symmetry with statsmodels; note that
         interlace uses the normal (z) distribution for inference, not t.
         """
-        try:
-            import pandas as _pd
-
-            if isinstance(self.fe_params, _pd.Series):
-                return self.fe_params / self.fe_bse
-        except ImportError:
-            pass
-        return np.asarray(self.fe_params) / np.asarray(self.fe_bse)
+        return self.fe_params / self.fe_bse
 
     def summary(self) -> object:
         """Return a human-readable summary mirroring lme4's ``summary.merMod()``."""
@@ -282,8 +254,7 @@ class CrossedLMEResult:
         -------
         dict[str, Any]
             Same structure as :attr:`random_effects`: for intercept-only specs
-            a pd.Series/_SimpleRE per group, for multi-term specs a
-            pd.DataFrame per group.
+            a pd.Series per group, for multi-term specs a pd.DataFrame per group.
         """
         import scipy.sparse.linalg as _spla
 
@@ -306,12 +277,7 @@ class CrossedLMEResult:
         se_blup = np.sqrt(np.maximum(sigma2 * var_blup, 0.0))
 
         # Split into per-spec blocks (same layout as random_effects)
-        try:
-            import pandas as _pd
-
-            _pandas_available = True
-        except ImportError:
-            _pandas_available = False
+        import pandas as _pd
 
         result: dict[str, Any] = {}
         blup_offset = 0
@@ -321,23 +287,15 @@ class CrossedLMEResult:
             re_ref = self.random_effects[spec.group]
 
             if spec.n_terms == 1:
-                if _pandas_available:
-                    result[spec.group] = _pd.Series(
-                        se_block, index=re_ref.index, name=spec.group
-                    )
-                else:
-                    result[spec.group] = _SimpleRE(
-                        values=se_block, index=re_ref.index, name=spec.group
-                    )
+                result[spec.group] = _pd.Series(
+                    se_block, index=re_ref.index, name=spec.group
+                )
             else:
                 # se_block is term-first: reshape to (n_terms, q_j) then transpose
                 se_mat = se_block.reshape(spec.n_terms, q_j).T
-                if _pandas_available:
-                    result[spec.group] = _pd.DataFrame(
-                        se_mat, index=re_ref.index, columns=re_ref.columns
-                    )
-                else:
-                    result[spec.group] = se_mat
+                result[spec.group] = _pd.DataFrame(
+                    se_mat, index=re_ref.index, columns=re_ref.columns
+                )
 
             blup_offset += n_blups_j
 
@@ -362,14 +320,8 @@ class CrossedLMEResult:
             For multi-term specs: pd.DataFrame with MultiIndex columns
             ``(term, bound)`` where bound is ``"lower"`` or ``"upper"``.
         """
+        import pandas as _pd
         from scipy.stats import norm
-
-        try:
-            import pandas as _pd
-
-            _pandas_available = True
-        except ImportError:
-            _pandas_available = False
 
         z = float(norm.ppf((1.0 + level) / 2.0))
         se_dict = self.random_effects_se
@@ -379,34 +331,25 @@ class CrossedLMEResult:
             se_val = se_dict[group]
             blup_arr = np.asarray(re_val)
             se_arr = np.asarray(se_val)
+            re_index = re_val.index if hasattr(re_val, "index") else None
 
-            if _pandas_available:
-                import pandas as _pd  # noqa: PLC0415
-
-                re_index = re_val.index if hasattr(re_val, "index") else None
-
-                if blup_arr.ndim == 1:
-                    # intercept-only
-                    result[group] = _pd.DataFrame(
-                        {
-                            "lower": blup_arr - z * se_arr,
-                            "upper": blup_arr + z * se_arr,
-                        },
-                        index=re_index,
-                    )
-                else:
-                    # multi-term: produce MultiIndex columns (term, lower/upper)
-                    cols_terms = list(re_val.columns)
-                    data: dict[tuple[str, str], Any] = {}
-                    for i, term in enumerate(cols_terms):
-                        data[(term, "lower")] = blup_arr[:, i] - z * se_arr[:, i]
-                        data[(term, "upper")] = blup_arr[:, i] + z * se_arr[:, i]
-                    result[group] = _pd.DataFrame(data, index=re_index)
-            else:
-                # numpy fallback: array of shape (q, 2) for intercept-only
-                result[group] = np.column_stack(
-                    [blup_arr - z * se_arr, blup_arr + z * se_arr]
+            if blup_arr.ndim == 1:
+                # intercept-only
+                result[group] = _pd.DataFrame(
+                    {
+                        "lower": blup_arr - z * se_arr,
+                        "upper": blup_arr + z * se_arr,
+                    },
+                    index=re_index,
                 )
+            else:
+                # multi-term: produce MultiIndex columns (term, lower/upper)
+                cols_terms = list(re_val.columns)
+                data: dict[tuple[str, str], Any] = {}
+                for i, term in enumerate(cols_terms):
+                    data[(term, "lower")] = blup_arr[:, i] - z * se_arr[:, i]
+                    data[(term, "upper")] = blup_arr[:, i] + z * se_arr[:, i]
+                result[group] = _pd.DataFrame(data, index=re_index)
 
         return result
 

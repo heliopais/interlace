@@ -57,13 +57,6 @@ class TestToPandas:
         assert isinstance(result, pd.DataFrame)
         pd.testing.assert_frame_equal(result, pd_df)
 
-    def test_raises_importerror_when_pandas_missing(self, pl_df):
-        with (
-            unittest.mock.patch.dict("sys.modules", {"pandas": None}),
-            pytest.raises(ImportError, match="pandas is required"),
-        ):
-            to_pandas(pl_df)
-
 
 # ---------------------------------------------------------------------------
 # to_native

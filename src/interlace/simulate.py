@@ -154,13 +154,10 @@ def _default_statistic(result: CrossedLMEResult) -> np.ndarray:
 
 def _replace_col_in_frame(frame, col_name: str, values: np.ndarray):  # type: ignore[no-untyped-def]
     """Replace *col_name* in *frame* with *values*, returning the same native type."""
-    try:
-        import pandas as pd
+    import pandas as pd
 
-        if isinstance(frame, pd.DataFrame):
-            return frame.assign(**{col_name: values})
-    except ImportError:
-        pass
+    if isinstance(frame, pd.DataFrame):
+        return frame.assign(**{col_name: values})
 
     try:
         import polars as pl

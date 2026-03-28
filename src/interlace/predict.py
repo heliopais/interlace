@@ -79,42 +79,28 @@ def predict(
         blup_re = result.random_effects[col]
         col_vals = nw_new[col].to_numpy()
 
-        # Detect whether blup_re is a pandas DataFrame (random slopes, pandas path)
-        try:
-            import pandas as pd
+        import pandas as pd
 
-            if isinstance(blup_re, pd.DataFrame):
-                # Random slopes: contribution = blup_intercept + sum(blup_slope_k * x_k)
-                predictors = list(blup_re.columns[1:])
-                n_obs = len(col_vals)
-                contrib = np.zeros(n_obs)
-                for i, level in enumerate(col_vals):
-                    if level not in blup_re.index:
-                        continue  # unseen level → 0
-                    blup_vec = blup_re.loc[level].to_numpy(dtype=float)
-                    z_row = np.array(
-                        [1.0] + [float(nw_new[p].to_numpy()[i]) for p in predictors]
-                    )
-                    contrib[i] = blup_vec @ z_row
-                pred = pred + contrib
-                continue
-            if isinstance(blup_re, pd.Series):
-                # Intercept-only, pandas path: map via dict lookup
-                lookup = blup_re.to_dict()
-                contrib = np.array([lookup.get(v, 0.0) for v in col_vals], dtype=float)
-                pred = pred + contrib
-                continue
-        except ImportError:
-            pass
-
-        # Pandas-free path: blup_re is _SimpleRE or numpy array
-        if hasattr(blup_re, "values") and hasattr(blup_re, "index"):
-            # _SimpleRE
-            lookup = dict(zip(blup_re.index, blup_re.values.tolist(), strict=True))
-        else:
-            # raw numpy array — no index info available, skip
+        if isinstance(blup_re, pd.DataFrame):
+            # Random slopes: contribution = blup_intercept + sum(blup_slope_k * x_k)
+            predictors = list(blup_re.columns[1:])
+            n_obs = len(col_vals)
+            contrib = np.zeros(n_obs)
+            for i, level in enumerate(col_vals):
+                if level not in blup_re.index:
+                    continue  # unseen level → 0
+                blup_vec = blup_re.loc[level].to_numpy(dtype=float)
+                z_row = np.array(
+                    [1.0] + [float(nw_new[p].to_numpy()[i]) for p in predictors]
+                )
+                contrib[i] = blup_vec @ z_row
+            pred = pred + contrib
             continue
-        contrib = np.array([lookup.get(v, 0.0) for v in col_vals], dtype=float)
-        pred = pred + contrib
+        if isinstance(blup_re, pd.Series):
+            # Intercept-only: map via dict lookup
+            lookup = blup_re.to_dict()
+            contrib = np.array([lookup.get(v, 0.0) for v in col_vals], dtype=float)
+            pred = pred + contrib
+            continue
 
     return np.asarray(pred)

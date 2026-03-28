@@ -25,19 +25,6 @@ def _is_crossed(model: Any) -> bool:
     return isinstance(model, CrossedLMEResult)
 
 
-def _require_pandas() -> Any:
-    """Import and return pandas, raising a helpful error if not installed."""
-    try:
-        import pandas as pd
-
-        return pd
-    except ImportError as exc:
-        raise ImportError(
-            "The statsmodels compat path requires pandas. "
-            "Install it with: pip install interlace-lme[pandas]"
-        ) from exc
-
-
 # ---------------------------------------------------------------------------
 # Helpers to extract a unified parameter set from either model type
 # ---------------------------------------------------------------------------
@@ -82,7 +69,6 @@ def _full_params(
         theta = np.array(theta_vals)
         theta_names = theta_names_list
     else:
-        pd = _require_pandas()
         p = model.k_fe
         beta = model.fe_params
         V = model.cov_params().iloc[:p, :p].values
@@ -90,7 +76,6 @@ def _full_params(
         re_names = [f"var_{name}" for name in model.cov_re.index]
         theta = np.append(re_vars, model.scale)
         theta_names = list(re_names) + ["error_var"]
-        del pd  # only imported for the statsmodels path
 
     V_inv = np.linalg.inv(V)
     return beta, V, V_inv, theta, theta_names, p
@@ -116,7 +101,6 @@ def _refit(model: Any, data_i: Any) -> Any:
             groups_arg = group_cols[0] if len(group_cols) == 1 else group_cols
             return interlace.fit(model.model.formula, data_i, groups=groups_arg)
     else:
-        _require_pandas()
         model_i = model.model.__class__.from_formula(
             model.model.formula,
             data=data_i,
@@ -276,10 +260,6 @@ def hlm_influence(
     if optimizer not in ("lbfgsb", "bobyqa"):
         msg = f"optimizer must be 'lbfgsb' or 'bobyqa', got {optimizer!r}"
         raise ValueError(msg)
-
-    # Guard statsmodels path: requires pandas.
-    if not _is_crossed(model):
-        _require_pandas()
 
     beta, V, V_inv, theta, theta_names, p = _full_params(model)
     det_V = np.linalg.det(V)
@@ -577,8 +557,7 @@ def tau_gap(
             }
             vc_reduced = model_reduced.variance_components
         else:
-            # statsmodels path — requires pandas
-            _require_pandas()
+            # statsmodels path
             groups_reduced_arr = model.model.groups[~influential_mask]
             model_i_obj = model.model.__class__.from_formula(
                 model.model.formula, data=data_reduced, groups=groups_reduced_arr

@@ -27,7 +27,6 @@ Issues = "https://github.com/heliopais/interlace/issues"
 [project.optional-dependencies]
 bobyqa = ["Py-BOBYQA>=1.4"]
 cholmod = ["scikit-sparse>=0.4"]
-pandas = ["pandas>=2.0"]
 
 [dependency-groups]
 dev = [
@@ -39,6 +38,7 @@ dev = [
     "types-tqdm>=4.67.0",
     "polars>=1.0",
     "narwhals>=1.0",
+    "pytest-cov>=7.1.0",
 ]
 docs = [
     "sphinx>=8.0",

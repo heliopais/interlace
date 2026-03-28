@@ -104,15 +104,10 @@ def cross_val(
     scorer = _resolve_scorer(scoring)
 
     # Normalise to pandas for slicing (interlace.fit accepts pandas).
-    nw_frame = nw.from_native(data, eager_only=True)
-    try:
-        import pandas as pd
+    import pandas as pd
 
-        pdf = pd.DataFrame({col: nw_frame[col].to_numpy() for col in nw_frame.columns})
-    except ImportError as exc:
-        raise RuntimeError(  # pragma: no cover
-            "cross_val requires pandas to be installed."
-        ) from exc
+    nw_frame = nw.from_native(data, eager_only=True)
+    pdf = pd.DataFrame({col: nw_frame[col].to_numpy() for col in nw_frame.columns})
 
     response = formula.split("~")[0].strip()
     unique_groups = sorted(pdf[groups].unique().tolist())

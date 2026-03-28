@@ -26,7 +26,6 @@ from interlace.influence import (
     _reduced_params,
     _refit,
     _refit_groups_arg,
-    _require_pandas,
     _vc_to_scalars,
     cooks_distance,
     hlm_influence,
@@ -304,18 +303,6 @@ class TestMatrixCacheOptimization:
 # ---------------------------------------------------------------------------
 # Private helper unit tests (covers dead-code / rarely-reached paths)
 # ---------------------------------------------------------------------------
-
-
-class TestRequirePandas:
-    def test_importerror_when_pandas_missing(self):
-        """Lines 34-35: ImportError raised with helpful message."""
-        import sys
-
-        with (
-            mock.patch.dict(sys.modules, {"pandas": None}),
-            pytest.raises(ImportError, match="statsmodels compat path requires pandas"),
-        ):
-            _require_pandas()
 
 
 class TestVcToScalars:
