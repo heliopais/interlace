@@ -11,6 +11,7 @@ subtrees:
   - file: quickstart
   - file: examples
   - file: interpreting-results.ipynb
+  - file: diagnostics.ipynb
 - caption: Case Studies
   entries:
   - file: case-study-politeness.ipynb
