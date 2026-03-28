@@ -271,6 +271,145 @@ class CrossedLMEResult:
 
         return float(np.std(boot_stats, ddof=1))
 
+    @property
+    def random_effects_se(self) -> dict[str, Any]:
+        """Standard errors for BLUP estimates.
+
+        Returns the square-root of the diagonal of the posterior variance
+        matrix ``Var(b | y) = σ² * Lambda * A11⁻¹ * Lambda'``.
+
+        Returns
+        -------
+        dict[str, Any]
+            Same structure as :attr:`random_effects`: for intercept-only specs
+            a pd.Series/_SimpleRE per group, for multi-term specs a
+            pd.DataFrame per group.
+        """
+        import scipy.sparse.linalg as _spla
+
+        from interlace.profiled_reml import _build_A11, make_lambda
+
+        Z = self._Z
+        Lambda = make_lambda(self.theta, self._random_specs, self._n_levels)
+        ZtZ = (Z.T @ Z).tocsc()
+        A11 = _build_A11(ZtZ, Lambda)
+        sigma2 = self.scale
+
+        # Compute diag(Lambda * A11^{-1} * Lambda') via sparse factorization.
+        # Solve A11 * W = Lambda' (dense RHS); W = A11^{-1} * Lambda'.
+        # diag(Lambda * W) = row-wise dot product of Lambda and W'.
+        factor = _spla.splu(A11)
+        Lambda_arr = Lambda.toarray()  # (q, q)
+        W = factor.solve(Lambda_arr.T)  # (q, q): A11^{-1} * Lambda'
+        # diag_i = sum_k Lambda[i, k] * W[k, i]  =  row of Lambda · col of W
+        var_blup = np.einsum("ij,ji->i", Lambda_arr, W)  # (q,)
+        se_blup = np.sqrt(np.maximum(sigma2 * var_blup, 0.0))
+
+        # Split into per-spec blocks (same layout as random_effects)
+        try:
+            import pandas as _pd
+
+            _pandas_available = True
+        except ImportError:
+            _pandas_available = False
+
+        result: dict[str, Any] = {}
+        blup_offset = 0
+        for spec, q_j in zip(self._random_specs, self._n_levels, strict=True):
+            n_blups_j = spec.n_terms * q_j
+            se_block = se_blup[blup_offset : blup_offset + n_blups_j]
+            re_ref = self.random_effects[spec.group]
+
+            if spec.n_terms == 1:
+                if _pandas_available:
+                    result[spec.group] = _pd.Series(
+                        se_block, index=re_ref.index, name=spec.group
+                    )
+                else:
+                    result[spec.group] = _SimpleRE(
+                        values=se_block, index=re_ref.index, name=spec.group
+                    )
+            else:
+                # se_block is term-first: reshape to (n_terms, q_j) then transpose
+                se_mat = se_block.reshape(spec.n_terms, q_j).T
+                if _pandas_available:
+                    result[spec.group] = _pd.DataFrame(
+                        se_mat, index=re_ref.index, columns=re_ref.columns
+                    )
+                else:
+                    result[spec.group] = se_mat
+
+            blup_offset += n_blups_j
+
+        return result
+
+    def random_effects_ci(self, level: float = 0.95) -> dict[str, Any]:
+        """Confidence intervals for BLUP estimates (normal approximation).
+
+        Returns symmetric CIs: ``blup ± z * se``, where ``z`` is the
+        appropriate quantile of the standard normal.
+
+        Parameters
+        ----------
+        level:
+            Nominal coverage probability (default 0.95).
+
+        Returns
+        -------
+        dict[str, Any]
+            For intercept-only specs: pd.DataFrame with columns
+            ``["lower", "upper"]`` and index matching group levels.
+            For multi-term specs: pd.DataFrame with MultiIndex columns
+            ``(term, bound)`` where bound is ``"lower"`` or ``"upper"``.
+        """
+        from scipy.stats import norm
+
+        try:
+            import pandas as _pd
+
+            _pandas_available = True
+        except ImportError:
+            _pandas_available = False
+
+        z = float(norm.ppf((1.0 + level) / 2.0))
+        se_dict = self.random_effects_se
+
+        result: dict[str, Any] = {}
+        for group, re_val in self.random_effects.items():
+            se_val = se_dict[group]
+            blup_arr = np.asarray(re_val)
+            se_arr = np.asarray(se_val)
+
+            if _pandas_available:
+                import pandas as _pd  # noqa: PLC0415
+
+                re_index = re_val.index if hasattr(re_val, "index") else None
+
+                if blup_arr.ndim == 1:
+                    # intercept-only
+                    result[group] = _pd.DataFrame(
+                        {
+                            "lower": blup_arr - z * se_arr,
+                            "upper": blup_arr + z * se_arr,
+                        },
+                        index=re_index,
+                    )
+                else:
+                    # multi-term: produce MultiIndex columns (term, lower/upper)
+                    cols_terms = list(re_val.columns)
+                    data: dict[tuple[str, str], Any] = {}
+                    for i, term in enumerate(cols_terms):
+                        data[(term, "lower")] = blup_arr[:, i] - z * se_arr[:, i]
+                        data[(term, "upper")] = blup_arr[:, i] + z * se_arr[:, i]
+                    result[group] = _pd.DataFrame(data, index=re_index)
+            else:
+                # numpy fallback: array of shape (q, 2) for intercept-only
+                result[group] = np.column_stack(
+                    [blup_arr - z * se_arr, blup_arr + z * se_arr]
+                )
+
+        return result
+
     def update(
         self,
         formula: str | None = None,
