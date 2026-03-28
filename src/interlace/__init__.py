@@ -25,6 +25,7 @@ from interlace.influence import (
     hlm_influence,
     mdffits,
     n_influential,
+    ols_dfbetas_qr,
     tau_gap,
 )
 from interlace.leverage import leverage
@@ -63,6 +64,7 @@ __all__ = [
     "cooks_distance",
     "mdffits",
     "n_influential",
+    "ols_dfbetas_qr",
     "tau_gap",
     # Combined
     "hlm_augment",

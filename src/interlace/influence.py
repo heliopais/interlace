@@ -608,3 +608,73 @@ def tau_gap(
         gaps[factor] = float(abs(tau_f - tau_r))
 
     return gaps
+
+
+# ---------------------------------------------------------------------------
+# OLS influence — vectorised QR-based DFBETAS
+# ---------------------------------------------------------------------------
+
+
+def ols_dfbetas_qr(model: Any) -> np.ndarray:
+    """Compute DFBETAS for an OLS model via QR decomposition (no Python loops).
+
+    Implements the exact closed-form formula using the Sherman-Morrison-Woodbury
+    identity and thin QR decomposition, matching R's ``influence.measures()``
+    convention (LOO sigma in the denominator).
+
+    For a design matrix X = QR (thin QR) with residuals e and MSE s²:
+
+    - Hat diagonal: hᵢ = ‖Qᵢ‖²
+    - LOO sigma²: s²ᵢ = (s²(n−p) − eᵢ²/(1−hᵢ)) / (n−p−1)
+    - C = R⁻¹Qᵀ  (p×n), the "influence matrix" (X'X)⁻¹Xᵀ
+    - se_coef[j] = ‖row j of R⁻¹‖ = √(diag[(X'X)⁻¹]ⱼ)
+    - DFBETAS[i,j] = C[j,i] · eᵢ / ((1−hᵢ) · sᵢ · se_coef[j])
+
+    Parameters
+    ----------
+    model :
+        A fitted statsmodels ``RegressionResultsWrapper`` (OLS).
+
+    Returns
+    -------
+    np.ndarray of shape (n, p)
+        DFBETAS matrix, one row per observation, one column per parameter.
+
+    References
+    ----------
+    Belsley, Kuh & Welsch (1980). *Regression Diagnostics*. Wiley.
+    R's ``stats::dfbetas.lm`` / ``stats::influence.measures``.
+    """
+    X = np.asarray(model.model.exog)
+    e = np.asarray(model.resid)
+    n, p = X.shape
+    df_resid = int(model.df_resid)  # n - p
+    mse = float(model.mse_resid)
+
+    # Thin QR decomposition
+    Q, R = np.linalg.qr(X, mode="reduced")  # Q: (n,p), R: (p,p)
+
+    # Hat diagonal
+    h = np.einsum("ij,ij->i", Q, Q)  # (n,) — faster than (Q**2).sum(axis=1)
+
+    # LOO sigma squared (clamped to avoid numerical negatives near h=1)
+    loo_var = (mse * df_resid - e**2 / np.maximum(1 - h, 1e-10)) / (df_resid - 1)
+    loo_sigma = np.sqrt(np.maximum(loo_var, 0.0))  # (n,)
+
+    # Influence matrix C = R⁻¹ Qᵀ  (p×n) = (X'X)⁻¹ Xᵀ
+    R_inv = np.linalg.solve(R, np.eye(p))  # (p,p)
+    C = R_inv @ Q.T  # (p,n)
+
+    # se_coef[j] = sqrt(diag[(X'X)⁻¹]_j) = ‖R_inv[j,:]‖
+    se_coef = np.sqrt(np.einsum("ij,ij->i", R_inv, R_inv))  # (p,)
+
+    # Scaled residuals for numerator
+    scale = e / np.maximum(1 - h, 1e-10)  # (n,)
+
+    # Numerator: (n, p)
+    numerator = (C * scale[np.newaxis, :]).T
+
+    # Denominator: (n, p)
+    denominator = loo_sigma[:, np.newaxis] * se_coef[np.newaxis, :]
+
+    return numerator / np.maximum(denominator, 1e-300)
