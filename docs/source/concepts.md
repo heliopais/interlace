@@ -92,12 +92,20 @@ into classes, and classes are grouped into schools. Class 1A only exists in Scho
 it is not shared with School 2.
 
 ```
-school 1
-  ├── class 1A → students A, B, C
-  └── class 1B → students D, E, F
-school 2
-  ├── class 2A → students G, H, I
-  └── class 2B → students J, K, L
+Nested structure (students within classes within schools):
+
+school 1 ──┬── class 1A ──┬── student A
+           │              ├── student B
+           │              └── student C
+           └── class 1B ──┬── student D
+                          ├── student E
+                          └── student F
+
+school 2 ──┬── class 2A ── ...
+           └── class 2B ── ...
+
+Key property: no class is shared between schools.
+Each student belongs to exactly one class, one school.
 ```
 
 The hierarchy is strict: no class spans two schools, no student spans two classes.
@@ -114,11 +122,17 @@ across the whole item pool; item 3 is seen by subjects from across the whole sub
 pool. Neither factor is contained within the other.
 
 ```
+Crossed structure (subjects × items):
+
            item 1  item 2  item 3  item 4
 subject A    ✓       ✓              ✓
 subject B    ✓               ✓      ✓
 subject C            ✓       ✓
 subject D    ✓       ✓       ✓
+
+Key property: subjects and items are independent sources of variance.
+Subject A appears with items 1, 2, 4 — not confined to any "item group".
+Item 2 appears with subjects A, C, D — not confined to any "subject group".
 ```
 
 Both `subject` and `item` independently shift the outcome. Fitting a model with only
@@ -202,19 +216,34 @@ An **unseen group level** at prediction time automatically receives a BLUP of ze
 
 ## Glossary
 
+**Terminology note:** this documentation uses **grouping factor** to mean a categorical
+variable whose levels define groups (e.g. `subject`, `item`, `school`). The term
+**grouping column** refers to the same thing in the context of a DataFrame — the column
+whose values identify which group each observation belongs to. The two terms are
+interchangeable.
+
+Similarly, **random intercept** and **random effect** are often used synonymously in
+this documentation; more precisely, a random intercept is the simplest type of random
+effect (a per-group offset), while a random effect is the general concept that includes
+random slopes.
+
 | Term | Definition |
 |---|---|
 | **Fixed effect** | A population-level coefficient; inference focuses on the specific levels |
-| **Random effect** | A group-level deviation assumed drawn from a Normal distribution |
+| **Random effect** | A group-level deviation assumed drawn from a Normal distribution; encompasses random intercepts and random slopes |
+| **Random intercept** | A per-group offset from the population mean — the most common type of random effect |
+| **Random slope** | A per-group deviation in the effect of a predictor — the slope varies by group |
+| **Grouping factor** | A categorical variable whose levels define groups (also called grouping column) |
 | **Variance component** | The variance `σ²` of a random effect distribution |
-| **ICC** | Intraclass correlation: proportion of total variance due to grouping |
+| **ICC** | Intraclass correlation: proportion of total variance due to grouping; ICC = σ²_group / σ²_total |
 | **Nested design** | Groups at one level exist entirely within a single group at the next level |
 | **Crossed design** | Each level of factor A co-occurs with multiple levels of factor B |
 | **REML** | Restricted maximum likelihood: unbiased estimator for variance components |
 | **ML** | Maximum likelihood: biased for variance components but comparable across fixed structures |
 | **Profiled REML** | REML where the optimisation is collapsed to variance parameters only |
 | **Profiled likelihood** | A likelihood surface obtained by optimising out nuisance parameters (here, the fixed effects) so only variance parameters remain |
-| **BLUP** | Best Linear Unbiased Predictor: shrinkage estimate of a group's deviation |
+| **BLUP** | Best Linear Unbiased Predictor: shrinkage estimate of a group's deviation; also called conditional mode |
+| **Conditional mode** | Synonym for BLUP — the mode of the conditional distribution of random effects given the data |
 | **Shrinkage** | Pulling individual group estimates toward the population mean |
 | **Conditional prediction** | A prediction that includes the estimated group-level BLUPs; appropriate for known groups |
 | **Marginal prediction** | A prediction based on fixed effects only, averaging over the random-effect distribution; appropriate for new or unknown groups |

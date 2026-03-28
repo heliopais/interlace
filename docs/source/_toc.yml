@@ -13,6 +13,10 @@ subtrees:
   - file: examples
   - file: interpreting-results.ipynb
   - file: diagnostics.ipynb
+- caption: Guides
+  entries:
+  - file: random-slopes
+  - file: model-comparison
 - caption: Case Studies
   entries:
   - file: case-study-politeness.ipynb

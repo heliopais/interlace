@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue)](https://github.com/heliopais/interlace/blob/main/LICENSE)
 
 **interlace** is a pure-Python implementation of profiled [restricted maximum likelihood
-(REML)](https://en.wikipedia.org/wiki/Restricted_maximum_likelihood) estimation for linear mixed models with **crossed random intercepts** — targeting
+(REML)](https://en.wikipedia.org/wiki/Restricted_maximum_likelihood) estimation for linear mixed models with **crossed random effects** — targeting
 parity with R's [`lme4::lmer()`](https://lme4.r-lib.org/reference/lmer.html) and
 designed as a drop-in replacement for
 [`statsmodels.MixedLM`](https://www.statsmodels.org/stable/generated/statsmodels.regression.mixed_linear_model.MixedLM.html)
@@ -34,6 +34,7 @@ and sparse Cholesky machinery as R's [`lme4::lmer()`](https://lme4.r-lib.org/ref
 ## Key features
 
 - Fit models with multiple crossed grouping factors, e.g. `(1|subject) + (1|item)`
+- Random slopes via lme4-style notation: `(1 + x | g)` and `(1 + x || g)`
 - Sparse throughout — Z is never materialised as a dense matrix
 - Full suite of diagnostics: residuals, leverage, Cook's D, MDFFITS, influence plots
 - Compatible result object exposing the same attributes as `statsmodels.MixedLMResults`

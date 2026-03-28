@@ -210,5 +210,6 @@ print(f"Fit took {time.perf_counter() - t0:.2f}s")
 ## Where to go next
 
 - [FAQ](faq.md) — convergence troubleshooting, solver and optimizer switching
-- [Installation](installation.md) — installing CHOLMOD and BOBYQA extras
+- [Installation](installation.md) — installing CHOLMOD and BOBYQA extras (includes decision guide)
+- [Model Comparison Guide](model-comparison.md) — ML vs REML, fitting multiple models efficiently
 - [Feature comparison](comparison.md) — how interlace compares to statsmodels and lme4 on supported structures

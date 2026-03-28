@@ -96,10 +96,35 @@ print(preds)
 
 Unseen group levels automatically shrink to the population mean (BLUP = 0).
 
-## Random slopes
+## `groups` vs `random`: choosing the right parameter
 
-To include a random slope alongside the random intercept, use `random` instead
-of `groups` with lme4-style specifications:
+`groups` is shorthand for **random intercepts only** — the common case. Pass a string
+or list of column names and interlace adds one random intercept per factor:
+
+```python
+# Equivalent to lme4: rt ~ x + (1|subject) + (1|item)
+result = fit("score ~ hours_studied", data=df, groups=["student_id", "school_id"])
+```
+
+`random` accepts **lme4-style Wilkinson notation** and is required when you need
+**random slopes** (each group gets its own slope for a predictor) or when you want
+to mix intercept-only and slope terms across factors:
+
+```python
+# Equivalent to lme4: score ~ x + (1+x|student_id) + (1|school_id)
+result = fit(
+    "score ~ hours_studied",
+    data=df,
+    random=["(1 + hours_studied | student_id)", "(1 | school_id)"],
+)
+```
+
+**Quick rule:** start with `groups=`. Switch to `random=` if you have
+subject-by-predictor interactions, or if lme4 model comparison suggests the
+slope variance is non-negligible. See the [Random Slopes Guide](random-slopes.md)
+for a full walkthrough.
+
+## Random slopes
 
 ```python
 result = fit(
@@ -129,6 +154,8 @@ print(f"Median SE (cluster bootstrap): {se:.4f}")
 ## Next steps
 
 - See {doc}`examples` for a full walkthrough of diagnostics and plots
+- See {doc}`random-slopes` for a detailed guide on random slopes syntax and interpretation
+- See {doc}`model-comparison` for comparing models with likelihood ratio tests
 - See the {doc}`api/fit` reference for all `fit()` parameters
 - See {doc}`api/result` for the complete list of `CrossedLMEResult` attributes
 - See {doc}`installation` for optional extras (CHOLMOD, BOBYQA)

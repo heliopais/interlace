@@ -7,20 +7,25 @@ notes where the two differ, and points to the reference literature they share.
 ## Formula syntax
 
 lme4 encodes random effects inside the model formula using `(term | group)` notation.
-`interlace` separates fixed-effect formula from grouping factors, following the
-`statsmodels.MixedLM` convention:
+`interlace` separates fixed-effect formula from grouping factors for simple random
+intercepts, and accepts lme4-style `(term | group)` notation via the `random` parameter
+for random slopes:
 
 | lme4 (R) | interlace (Python) | Notes |
 |---|---|---|
 | `y ~ x + (1\|g)` | `formula="y ~ x", groups="g"` | Single random intercept |
 | `y ~ x + (1\|g1) + (1\|g2)` | `formula="y ~ x", groups=["g1", "g2"]` | **Crossed** random intercepts |
+| `y ~ x + (x\|g)` | `formula="y ~ x", random=["(1 + x \| g)"]` | Correlated random intercept + slope *(v0.2.1+)* |
+| `y ~ x + (x\|\|g)` | `formula="y ~ x", random=["(1 + x \|\| g)"]` | Independent (uncorrelated) parameterisation *(v0.2.1+)* |
 | `y ~ x + (1\|g1/g2)` | — | Nested designs: not yet supported |
-| `y ~ x + (x\|g)` | — | Random slopes: not yet supported |
 
-Only **crossed random intercepts** are implemented. Random slopes, correlated random
-effects, and nested shorthand (`/`) are outside the current scope.
+**`groups` vs `random`:** use `groups=` for random intercepts only (shorter syntax); use
+`random=` when you need random slopes or want to mix intercept-only and slope terms
+across grouping factors. See [Quickstart](quickstart.md) for a side-by-side example.
 
-## Side-by-side example
+## Side-by-side examples
+
+### Crossed random intercepts
 
 The following example fits the same model in both languages, using a synthetic dataset
 of reading times with subject and item as crossed grouping factors — the canonical
@@ -60,6 +65,50 @@ print(result.random_effects)      # BLUPs, keyed by grouping factor
 print(result.variance_components) # sigma^2 per grouping factor + residual
 ```
 
+### Random slopes (v0.2.1+)
+
+When subjects differ not just in their baseline RT but also in how much condition
+affects them, add a by-subject random slope:
+
+**R (lme4)**
+
+```r
+fm_slopes <- lmer(
+  rt ~ condition + (1 + condition | subject) + (1 | item),
+  data = df,
+  REML = TRUE
+)
+
+ranef(fm_slopes)$subject  # DataFrame: columns (Intercept) + condition
+```
+
+**Python (interlace)**
+
+```python
+result_slopes = interlace.fit(
+    "rt ~ condition",
+    data   = df,
+    random = [
+        "(1 + condition | subject)",  # correlated intercept + slope
+        "(1 | item)",                 # intercept only
+    ],
+)
+
+# random_effects["subject"] is now a DataFrame, one column per term
+print(result_slopes.random_effects["subject"])
+#             (Intercept)  condition
+# subject_01       -12.3       0.42
+# subject_02         8.7      -0.31
+# ...
+
+# Full random-effect covariance matrix
+print(result_slopes.varcov)
+```
+
+For the independent (uncorrelated) parameterisation — equivalent to lme4's `||` — use
+`"(1 + condition || subject)"`. See the [Random Slopes Guide](random-slopes.md) for
+a full walkthrough including interpretation and when to use each parameterisation.
+
 ### Comparing output
 
 `result.fe_params` is a `pandas.Series` with the same ordering as `fixef(fm)`.
@@ -92,7 +141,8 @@ equivalent suite directly, inspired by the R package
 | `mdffits(fm)` | `interlace.mdffits(result)` |
 | `dotplot_diag(...)` | `interlace.dotplot_diag(result, ...)` |
 
-See [Examples](examples.md) for full diagnostic workflows.
+See the [Diagnostics notebook](diagnostics.ipynb) for full diagnostic workflows,
+and {doc}`api/influence` for the function reference.
 
 ## References
 

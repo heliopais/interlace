@@ -109,6 +109,16 @@ A model that does not converge is often overparameterised. Ask:
 
 ---
 
+## Model comparison
+
+**Can I compare two models to test if a predictor improves fit?**
+
+Yes — fit both models with `method="ML"` and use a likelihood ratio test (LRT).
+Do not compare models fitted with REML when the fixed-effect structures differ.
+See the [Model Comparison Guide](model-comparison.md) for the full workflow.
+
+---
+
 ## Solver choice: CHOLMOD vs default
 
 `interlace` uses a dense Cholesky factorisation of the random-effect covariance blocks by default. For large models this can be slow.
