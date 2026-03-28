@@ -5,6 +5,7 @@ subtrees:
   - file: concepts
   - file: why-python
   - file: why-r
+  - file: comparison
 - caption: Getting Started
   entries:
   - file: installation
