@@ -170,6 +170,83 @@ Both produce identical results. Use whichever is clearer for your use case.
 
 ---
 
+## Uncertainty in BLUPs
+
+BLUPs are point estimates — each group's deviation from the population mean. The
+`random_effects_se` property and `random_effects_ci()` method expose the posterior
+standard errors and normal-approximation confidence intervals for those estimates.
+
+### Standard errors
+
+```python
+se = result.random_effects_se
+# Intercept-only model → pd.Series indexed by group
+print(se["subject"])
+# subject_01    4.32
+# subject_02    3.87
+# subject_03    5.01
+# ...
+
+# Random-slope model → pd.DataFrame, one column per term
+print(se["subject"])
+#             (Intercept)  condition
+# subject_01         4.32       0.61
+# subject_02         3.87       0.54
+```
+
+### Confidence intervals
+
+```python
+# 95 % CIs (default)
+ci = result.random_effects_ci()
+print(ci["subject"])
+#             lower    upper
+# subject_01  -20.8     -3.8
+# subject_02   -2.1     17.3
+# ...
+
+# 90 % CIs
+ci_90 = result.random_effects_ci(level=0.90)
+```
+
+For random-slope models `random_effects_ci()` returns a DataFrame with a
+MultiIndex column: `(term, "lower")` and `(term, "upper")` pairs.
+
+### Caterpillar plot
+
+A caterpillar plot orders groups by their BLUP and overlays the CI — a quick
+visual check for which groups stand out from the population mean:
+
+```python
+import pandas as pd
+from plotnine import ggplot, aes, geom_point, geom_errorbar, geom_hline, coord_flip, theme_bw
+
+blups = result.random_effects["subject"]
+ci    = result.random_effects_ci()["subject"]
+
+caterpillar = pd.DataFrame({
+    "group":  blups.index,
+    "blup":   blups.values,
+    "lower":  ci["lower"].values,
+    "upper":  ci["upper"].values,
+}).sort_values("blup").assign(rank=lambda d: range(len(d)))
+
+(
+    ggplot(caterpillar, aes(x="rank", y="blup"))
+    + geom_errorbar(aes(ymin="lower", ymax="upper"), width=0.3, alpha=0.5)
+    + geom_point(size=2)
+    + geom_hline(yintercept=0, linetype="dashed", color="grey")
+    + coord_flip()
+    + theme_bw()
+)
+```
+
+Groups whose CI excludes zero differ reliably from the population mean. Note that
+these are normal-approximation CIs — treat them as indicative rather than exact
+for small group counts or boundary variance estimates.
+
+---
+
 ## See also
 
 - [Quickstart](quickstart.md) — `groups` vs `random` parameter overview

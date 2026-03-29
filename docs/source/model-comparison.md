@@ -139,6 +139,82 @@ print(m_final.variance_components)
 
 ---
 
+## Iterative refinement with `update()`
+
+Repeatedly calling `interlace.fit()` with slightly different formulas is
+verbose. The `update()` method reruns the fit with only the parts you want to
+change — formula, data, or any keyword argument — while inheriting the rest
+from the original call.
+
+### Dot notation
+
+A `.` in the new formula expands to the corresponding part of the original:
+
+```python
+# Original model
+m0 = interlace.fit("rt ~ condition", data=df, groups=["subject", "item"], method="ML")
+
+# Add a predictor: . ~ . + frequency
+m1 = m0.update(". ~ . + frequency")
+
+# Remove a predictor: . ~ . - condition
+m_reduced = m0.update(". ~ . - condition")
+
+# Replace the response (LHS)
+m_alt = m0.update("log_rt ~ .")
+```
+
+The original `m0` is unchanged; `update()` always returns a new
+`CrossedLMEResult`.
+
+### Changing the dataset
+
+Pass `data=` to refit on a different frame — useful for sensitivity analyses or
+rolling-window designs:
+
+```python
+# Refit on a filtered subset
+m_large = m0.update(data=df[df["school_size"] > 200])
+
+# Change data and formula together
+m_sens = m0.update(". ~ . + frequency", data=df_filtered)
+```
+
+### Overriding fit arguments
+
+Any keyword accepted by `interlace.fit()` can be overridden:
+
+```python
+# Switch from ML to REML for final estimates
+m_reml = m1.update(method="REML")
+
+# Switch optimizer
+m_bobyqa = m0.update(optimizer="bobyqa")
+```
+
+### Typical workflow
+
+```python
+import interlace, scipy.stats
+
+# 1. Build models incrementally with ML
+m0 = interlace.fit("rt ~ 1",         data=df, groups=["subject", "item"], method="ML")
+m1 = m0.update(". ~ . + condition")
+m2 = m1.update(". ~ . + frequency")
+
+# 2. Test each step with LRT
+for reduced, full, name in [(m0, m1, "condition"), (m1, m2, "frequency")]:
+    stat = 2 * (full.llf - reduced.llf)
+    p    = scipy.stats.chi2.sf(stat, df=1)
+    print(f"{name}: χ²(1) = {stat:.2f}, p = {p:.4f}")
+
+# 3. Refit winner with REML for final estimates
+m_final = m2.update(method="REML")
+print(m_final.summary())
+```
+
+---
+
 ## Notes and caveats
 
 - **LRT p-values for variance components are conservative.** The null hypothesis puts

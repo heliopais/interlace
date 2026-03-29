@@ -117,6 +117,48 @@ Yes — fit both models with `method="ML"` and use a likelihood ratio test (LRT)
 Do not compare models fitted with REML when the fixed-effect structures differ.
 See the [Model Comparison Guide](model-comparison.md) for the full workflow.
 
+**Can I update a model's formula without retyping the full call?**
+
+Yes — use `result.update()`. It accepts a new formula (with lme4-style dot
+notation), a new dataset, or any keyword argument to `fit()`, and inherits
+everything else from the original fit:
+
+```python
+# Add a predictor
+m2 = result.update(". ~ . + frequency")
+
+# Refit on filtered data
+m_sens = result.update(data=df[df["n_obs"] > 5])
+
+# Chain both: add predictor and switch to REML
+m_final = result.update(". ~ . + frequency", method="REML")
+```
+
+See the [Model Comparison Guide](model-comparison.md#iterative-refinement-with-update)
+for a complete step-by-step workflow.
+
+**How do I assess how well my model generalises to new groups?**
+
+Use `interlace.cross_val()`. It splits at the *group* level to avoid leakage —
+observations within the same group share a random effect, so row-level splits
+give over-optimistic error estimates:
+
+```python
+from interlace import cross_val
+
+cv = cross_val(
+    "score ~ hours_studied + prior_gpa",
+    data=df,
+    groups="school_id",
+    cv="logo",       # leave-one-group-out; use cv="kfold" for many groups
+    scoring="rmse",
+)
+print(f"LOGO RMSE: {cv.mean:.3f} ± {cv.std:.3f}")
+```
+
+See the [Cross-Validation Guide](cross-validation.md) for LOGO vs k-fold
+trade-offs, custom scoring, and per-fold model inspection.
+
 ---
 
 ## Solver choice: CHOLMOD vs default
