@@ -24,6 +24,17 @@ This project follows strict TDD. Before writing any implementation code:
 
 Never write implementation code without a corresponding failing test driving it.
 
+```{mermaid}
+flowchart TD
+    A[Pick task from bd ready] --> B[Write failing test]
+    B --> C{make test\nfails?}
+    C -- No --> B
+    C -- Yes --> D[Write minimum implementation]
+    D --> E{make check\npasses?}
+    E -- No --> D
+    E -- Yes --> F[Close task]
+```
+
 ## Validation against lme4
 
 Numerical parity with R's `lme4::lmer()` is enforced by the test suite on every CI run.

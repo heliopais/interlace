@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue)](https://github.com/heliopais/interlace/blob/main/LICENSE)
 
 **interlace** is a pure-Python implementation of profiled [restricted maximum likelihood
-(REML)](https://en.wikipedia.org/wiki/Restricted_maximum_likelihood) estimation for linear mixed models with **crossed random intercepts** — targeting
+(REML)](https://en.wikipedia.org/wiki/Restricted_maximum_likelihood) estimation for linear mixed models with **crossed random effects** — targeting
 parity with R's [`lme4::lmer()`](https://lme4.r-lib.org/reference/lmer.html) and
 designed as a drop-in replacement for
 [`statsmodels.MixedLM`](https://www.statsmodels.org/stable/generated/statsmodels.regression.mixed_linear_model.MixedLM.html)
@@ -34,7 +34,42 @@ and sparse Cholesky machinery as R's [`lme4::lmer()`](https://lme4.r-lib.org/ref
 ## Key features
 
 - Fit models with multiple crossed grouping factors, e.g. `(1|subject) + (1|item)`
+- Random slopes via lme4-style notation: `(1 + x | g)` and `(1 + x || g)`
 - Sparse throughout — Z is never materialised as a dense matrix
 - Full suite of diagnostics: residuals, leverage, Cook's D, MDFFITS, influence plots
 - Compatible result object exposing the same attributes as `statsmodels.MixedLMResults`
 - Validated against R's [`lme4::lmer()`](https://lme4.r-lib.org/reference/lmer.html) to tight tolerances (fixed effects abs diff < 1e-4)
+
+## Get started
+
+::::{grid} 2
+:gutter: 3
+
+:::{grid-item-card} Installation & quickstart
+:link: installation
+:link-type: doc
+
+Install interlace and fit your first crossed random-intercepts model.
+:::
+
+:::{grid-item-card} Examples
+:link: examples
+:link-type: doc
+
+Worked notebooks: simulation, diagnostics, and comparison with lme4.
+:::
+
+:::{grid-item-card} API reference
+:link: api/augment
+:link-type: doc
+
+Full documentation for every public function and result object.
+:::
+
+:::{grid-item-card} Background
+:link: why-python
+:link-type: doc
+
+Why interlace exists, and how it compares to statsmodels and lme4.
+:::
+::::

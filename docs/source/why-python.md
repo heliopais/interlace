@@ -125,12 +125,16 @@ and the test suite that enforces it.
 
 ## What interlace does not cover
 
-`interlace` is scoped to **crossed random intercepts**. If your model needs any of the
-following, `statsmodels.MixedLM` or another library is the right choice:
+`interlace` targets **crossed random effects** for linear (Gaussian) outcomes.
+If your model needs any of the following, `statsmodels.MixedLM` or another library
+is the right choice:
 
-- Random slopes: `(x | g)` — intercept *and* slope vary by group
-- Correlated random effects: `(x || g)` — uncorrelated variant
 - Generalised linear mixed models (Poisson, binomial outcomes)
 - Nested designs with many levels of hierarchy
 
-For a full comparison of lme4 formula syntax, see [For R / lme4 users](why-r.md).
+Random slopes (`(1 + x | g)` and `(1 + x || g)`) are supported as of v0.2.1 via
+the `random=` parameter. See the [Random Slopes Guide](random-slopes.md) for syntax
+and examples.
+
+For a full feature comparison table, see [Comparison](comparison.md).
+For a full mapping of lme4 formula syntax, see [For R / lme4 users](why-r.md).

@@ -1,5 +1,123 @@
 # Changelog
 
+## v0.2.6 — upcoming
+
+### `cross_val()` — group-aware cross-validation
+
+New top-level function for evaluating out-of-group prediction error without
+data leakage. Because observations within a group share a random effect,
+splitting at the observation level inflates apparent accuracy; `cross_val`
+splits at the *group* level instead.
+
+```python
+from interlace import cross_val
+
+cv = cross_val(
+    "score ~ hours_studied + prior_gpa",
+    data=df,
+    groups="school_id",           # grouping factor used for RE and for CV folds
+    cv="logo",                    # leave-one-group-out (default)
+    scoring="rmse",
+)
+print(f"LOGO CV RMSE: {cv.mean:.3f} ± {cv.std:.3f}")
+```
+
+`cv="kfold"` splits groups (not observations) into k folds for faster
+estimates when there are many groups:
+
+```python
+cv_k = cross_val(
+    "score ~ hours_studied + prior_gpa",
+    data=df,
+    groups="school_id",
+    cv="kfold",
+    k=5,
+    scoring="mae",
+)
+```
+
+Custom scoring functions are also accepted — any callable
+`scorer(y_true, y_pred) -> float`. Pass `return_models=True` to inspect
+per-fold fitted models, training groups, and predictions.
+See the [Cross-Validation Guide](cross-validation.md) for the full workflow.
+
+### `CrossedLMEResult.update()` — lme4-style model refitting
+
+Refit a model with a modified formula, new data, or changed fit arguments
+without retyping the full call:
+
+```python
+# Add a predictor
+m2 = result.update(". ~ . + frequency")
+
+# Remove a predictor
+m1 = result.update(". ~ . - prior_gpa")
+
+# Swap the dataset (e.g. sensitivity analysis on a filtered frame)
+m_sens = result.update(data=df[df["school_size"] > 200])
+
+# Combine both
+m_refit = result.update(". ~ . + frequency", data=df_new, method="ML")
+```
+
+Dot notation follows lme4 convention: `.` on either side of `~` expands to
+the corresponding part of the original formula. The original `result` object
+is not modified; `update()` always returns a new `CrossedLMEResult`.
+
+### `random_effects_se` and `random_effects_ci()` — uncertainty in BLUPs
+
+BLUPs (Best Linear Unbiased Predictions) are point estimates. The new
+`random_effects_se` property and `random_effects_ci()` method expose their
+posterior standard errors and normal-approximation confidence intervals:
+
+```python
+# Per-group standard errors (same structure as random_effects)
+se = result.random_effects_se
+print(se["school_id"])          # pd.Series for intercept-only specs
+
+# 95 % confidence intervals (default)
+ci = result.random_effects_ci()
+print(ci["school_id"])
+#             lower    upper
+# school_01   -8.4      2.1
+# school_02    1.3      9.8
+# ...
+
+# Custom coverage
+ci_90 = result.random_effects_ci(level=0.90)
+```
+
+For random-slope models, `random_effects_se` returns a DataFrame with one
+column per random-effect term. `random_effects_ci()` uses a MultiIndex
+column with `(term, "lower"/"upper")` pairs.
+See the [Random Slopes Guide](random-slopes.md#uncertainty-in-blups) for a
+caterpillar-plot example.
+
+### `ols_dfbetas_qr()` — vectorised DFBETAS for OLS models
+
+New function in `interlace.influence` for computing DFBETAS on an OLS model
+via QR decomposition — no Python loops, fully vectorised:
+
+```python
+from interlace.influence import ols_dfbetas_qr
+import statsmodels.formula.api as smf
+
+ols = smf.ols("y ~ x1 + x2", data=df).fit()
+dfbetas = ols_dfbetas_qr(ols)   # shape (n, p)
+
+# Common rule-of-thumb threshold
+import numpy as np
+threshold = 2 / np.sqrt(len(df))
+influential = np.any(np.abs(dfbetas) > threshold, axis=1)
+print(f"{influential.sum()} influential observations")
+```
+
+Useful as a pre-check before fitting the mixed model, or for stage-1
+diagnostics in two-stage workflows. See the
+[Diagnostics Guide](diagnostics.ipynb) for a heatmap visualisation.
+
+---
+
 ## v0.2.4 — 2026-03-27
 
 ### Nested random effects — `(1|g1/g2)` syntax

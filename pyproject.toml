@@ -48,6 +48,12 @@ docs = [
     "sphinx-autodoc-typehints>=2.0",
     "myst-nb>=1.1",
     "ipykernel>=6.0",
+    "sphinxext-opengraph>=0.9",
+    "sphinx-design>=0.6",
+    "sphinx-sitemap>=2.5",
+    "sphinx-gitstamp>=0.4",
+    "sphinx-notfound-page>=1.0",
+    "sphinxcontrib-mermaid>=0.9",
 ]
 
 [tool.hatch.version]

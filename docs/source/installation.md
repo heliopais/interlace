@@ -8,6 +8,28 @@ pip install interlace-lme
 
 Requires **Python ≥ 3.13**.
 
+## Which extras do I need?
+
+Use this decision guide to choose the right install command:
+
+```
+Your dataset:
+├── n < 1 000 obs AND G < 100 group levels
+│   └── pip install interlace-lme       ← base is fine
+│
+├── n > 10 000 OR G > 500 group levels
+│   └── pip install "interlace-lme[cholmod]"   ← CHOLMOD speeds up fitting
+│
+├── Getting ConvergenceWarning / need to match lme4 output?
+│   └── pip install "interlace-lme[bobyqa]"    ← BOBYQA for robustness/parity
+│
+└── Large data AND convergence issues?
+    └── pip install "interlace-lme[cholmod,bobyqa]"
+```
+
+See [Performance](performance.md) for detailed benchmarks, and
+[FAQ](faq.md#solver-choice-cholmod-vs-default) for solver guidance.
+
 ## Optional extras
 
 ### CHOLMOD sparse Cholesky

@@ -1,0 +1,8 @@
+{% extends "!page.html" %}
+
+{% block footer %}
+{% if gitstamp %}
+<p class="last-modified">Last modified: {{ gitstamp }}</p>
+{% endif %}
+{{ super() }}
+{% endblock %}

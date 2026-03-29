@@ -2,13 +2,29 @@ root: index
 subtrees:
 - caption: Background
   entries:
+  - file: concepts
   - file: why-python
   - file: why-r
+  - file: comparison
 - caption: Getting Started
   entries:
   - file: installation
   - file: quickstart
   - file: examples
+  - file: interpreting-results.ipynb
+  - file: diagnostics.ipynb
+- caption: Guides
+  entries:
+  - file: random-slopes
+  - file: model-comparison
+  - file: cross-validation
+- caption: Case Studies
+  entries:
+  - file: case-study-politeness.ipynb
+- caption: Reference
+  entries:
+  - file: faq
+  - file: performance
 - caption: Releases
   entries:
   - file: changelog
