@@ -13,6 +13,7 @@ import scipy.stats as stats
 from interlace.allfit import AllFitResult, allFit
 from interlace.anova import anova
 from interlace.augment import hlm_augment
+from interlace.convergence import isSingular
 from interlace.cross_val import CVResult as CVResult
 from interlace.cross_val import cross_val as cross_val
 from interlace.formula import (
@@ -55,6 +56,7 @@ __all__ = [
     "allFit",
     "AllFitResult",
     "anova",
+    "isSingular",
     "CrossedLMEResult",
     # Residuals
     "hlm_resid",

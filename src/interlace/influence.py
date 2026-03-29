@@ -599,8 +599,9 @@ def lmer_influence_measures(
     optimizer: str = "lbfgsb",
     show_progress: bool = False,
 ) -> dict[str, np.ndarray]:
-    """Compute all influence measures for an lmer model, matching R's HLMdiag convention.
+    """Compute all influence measures for an lmer model.
 
+    Matches R's HLMdiag convention.
     This combines case-deletion Cook's D / mdffits (via :func:`hlm_influence`)
     with analytical leverage and DFBETAS — exactly mirroring R's
     ``gpgap::compute_influence_lmer`` which calls ``HLMdiag::hlm_influence``.
