@@ -23,6 +23,7 @@ from interlace.formula import (
 from interlace.influence import (
     cooks_distance,
     hlm_influence,
+    lmer_influence_measures,
     mdffits,
     n_influential,
     ols_dfbetas_qr,
@@ -61,6 +62,7 @@ __all__ = [
     "leverage",
     # Influence diagnostics
     "hlm_influence",
+    "lmer_influence_measures",
     "cooks_distance",
     "mdffits",
     "n_influential",

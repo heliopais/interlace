@@ -590,6 +590,114 @@ def tau_gap(
 
 
 # ---------------------------------------------------------------------------
+# Combined lmer influence measures (matches R's compute_influence_lmer)
+# ---------------------------------------------------------------------------
+
+
+def lmer_influence_measures(
+    model: Any,
+    optimizer: str = "lbfgsb",
+    show_progress: bool = False,
+) -> dict[str, np.ndarray]:
+    """Compute all influence measures for an lmer model, matching R's HLMdiag convention.
+
+    This combines case-deletion Cook's D / mdffits (via :func:`hlm_influence`)
+    with analytical leverage and DFBETAS — exactly mirroring R's
+    ``gpgap::compute_influence_lmer`` which calls ``HLMdiag::hlm_influence``.
+
+    Parameters
+    ----------
+    model:
+        A ``CrossedLMEResult`` or statsmodels ``MixedLMResults`` object.
+    optimizer:
+        Optimizer for case-deletion refits.  See :func:`hlm_influence`.
+    show_progress:
+        Show a tqdm progress bar during case-deletion refits.  Useful for
+        large datasets (n > 500).
+
+    Returns
+    -------
+    dict with keys:
+        ``cooks``   — Cook's D via case-deletion (matches HLMdiag ``cooksd``)
+        ``hat``     — leverage used for threshold flagging (``overall`` for
+                      single-RE, ``fixef`` for crossed multi-RE — mirrors R)
+        ``hat_overall``  — full leverage H1+H2
+        ``hat_fixef``    — fixed-effects leverage H1 only
+        ``dfbetas`` — DFBETAS matrix (analytical, same formula as R)
+        ``dffits``  — mdffits via case-deletion (matches HLMdiag ``mdffits``)
+        ``residuals``  — conditional residuals
+        ``sigma``      — residual standard deviation sqrt(scale)
+
+    Notes
+    -----
+    Cook's D uses the Demidenko & Stukel (2005) case-deletion formula:
+
+        D_i = (1/p) (β̂ − β̂₍₋ᵢ₎)ᵀ V_β⁻¹ (β̂ − β̂₍₋ᵢ₎)
+
+    mdffits (returned as ``dffits``) uses the case-deletion covariance:
+
+        MDFFITS_i = (1/p) (β̂ − β̂₍₋ᵢ₎)ᵀ V_β₍₋ᵢ₎⁻¹ (β̂ − β̂₍₋ᵢ₎)
+
+    Both require O(n) model refits.  For large datasets consider setting
+    ``show_progress=True`` to monitor progress.
+
+    DFBETAS is computed analytically using the fixed-effects design matrix
+    and conditional residuals, matching R's implementation.
+
+    Leverage flagging uses ``hat_overall`` (H1+H2) for single-RE models and
+    ``hat_fixef`` (H1 only) for crossed multi-RE models, exactly as R does
+    when HLMdiag cannot compute overall leverage for crossed random effects.
+    """
+    from interlace.leverage import leverage as _leverage
+
+    # --- Case-deletion Cook's D and mdffits (exact match to R/HLMdiag) ---
+    infl_df = hlm_influence(model, level=1, optimizer=optimizer)
+
+    def _col(df: Any, name: str) -> np.ndarray:
+        col = df[name]
+        return np.asarray(col.to_numpy() if hasattr(col, "to_numpy") else col.values)
+
+    cooks_arr = _col(infl_df, "cooksd")
+    mdffits_arr = _col(infl_df, "mdffits")
+
+    # --- Leverage: overall (H1+H2) and fixef (H1) ---
+    lev_df = _leverage(model, level=1)
+
+    def _lev_col(df: Any, name: str) -> np.ndarray:
+        col = df[name]
+        return np.asarray(col.to_numpy() if hasattr(col, "to_numpy") else col.values)
+
+    hat_overall = _lev_col(lev_df, "overall")
+    hat_fixef = _lev_col(lev_df, "fixef")
+
+    # R uses leverage.overall for single-RE and falls back to hat_fixef for
+    # crossed multi-RE (HLMdiag can't compute overall leverage for crossed RE).
+    truly_crossed = _is_crossed(model) and len(getattr(model, "_gpgap_vc_cols", [])) > 0
+    hat_for_flag = hat_fixef if truly_crossed else hat_overall
+
+    # --- DFBETAS: analytical from fixed-effects design matrix (same as R) ---
+    X = np.asarray(model.model.exog)
+    XtX_inv = np.linalg.pinv(X.T @ X)
+    residuals = np.asarray(model.resid)
+    sigma = float(np.sqrt(model.scale))
+
+    hat_clamped = np.minimum(hat_fixef, 1.0 - 1e-10)
+    scaling = residuals / (sigma * np.sqrt(1.0 - hat_clamped))
+    dfbetas_mat = (XtX_inv @ (X * scaling[:, None]).T).T
+
+    return {
+        "cooks": cooks_arr,
+        "hat": hat_for_flag,
+        "hat_overall": hat_overall,
+        "hat_fixef": hat_fixef,
+        "dfbetas": dfbetas_mat,
+        "dffits": mdffits_arr,
+        "residuals": residuals,
+        "sigma": sigma,
+    }
+
+
+# ---------------------------------------------------------------------------
 # OLS influence — vectorised QR-based DFBETAS
 # ---------------------------------------------------------------------------
 
