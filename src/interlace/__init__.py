@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import narwhals as nw
@@ -347,7 +348,7 @@ def fit(
         "optimizer": optimizer,
     }
 
-    return CrossedLMEResult(
+    result = CrossedLMEResult(
         fe_params=fe_params,
         fe_bse=fe_bse,
         fe_pvalues=fe_pvalues,
@@ -376,6 +377,15 @@ def fit(
         _n_levels=n_levels_list,
         _fit_kwargs=_fit_kwargs,
     )
+
+    if isSingular(result):
+        warnings.warn(
+            "boundary (singular) fit: see help(interlace.isSingular)",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    return result
 
 
 def update(

@@ -135,6 +135,38 @@ class CrossedLMEResult:
         """
         return self.fe_params / self.fe_bse
 
+    @property
+    def is_singular(self) -> bool:
+        """True if the model is at the boundary of the parameter space.
+
+        A model is singular when one or more variance components have collapsed
+        to zero.  Equivalent to calling :func:`interlace.isSingular(self)`.
+        """
+        from interlace.convergence import isSingular
+
+        return isSingular(self)
+
+    @property
+    def boundary_flags(self) -> dict[str, bool]:
+        """Per-grouping-factor boundary flags.
+
+        Returns a dict mapping each grouping factor name to ``True`` if its
+        variance component is at the boundary (theta diagonal < 1e-4).
+        """
+        from interlace.convergence import _spec_is_singular
+        from interlace.profiled_reml import n_theta_for_spec
+
+        flags: dict[str, bool] = {}
+        theta_idx = 0
+        for spec in self._random_specs:
+            n_theta_j = n_theta_for_spec(spec.n_terms, spec.correlated)
+            theta_j = self.theta[theta_idx : theta_idx + n_theta_j]
+            theta_idx += n_theta_j
+            flags[spec.group] = _spec_is_singular(
+                theta_j, spec.n_terms, spec.correlated, tol=1e-4
+            )
+        return flags
+
     def summary(self) -> object:
         """Return a human-readable summary mirroring lme4's ``summary.merMod()``."""
         from interlace.summary import SummaryResult
