@@ -126,6 +126,34 @@ class CrossedLMEResult:
     # Original fit() kwargs for update() replay
     _fit_kwargs: dict[str, Any] = field(default_factory=dict, repr=False)
 
+    # ------------------------------------------------------------------
+    # statsmodels-compatible aliases
+    # ------------------------------------------------------------------
+
+    @property
+    def params(self) -> Any:
+        """Fixed-effect estimates (alias for ``fe_params``, mirrors statsmodels)."""
+        return self.fe_params
+
+    @property
+    def bse(self) -> Any:
+        """Fixed-effect standard errors (alias for ``fe_bse``, mirrors statsmodels)."""
+        return self.fe_bse
+
+    @property
+    def pvalues(self) -> Any:
+        """Fixed-effect p-values (alias for ``fe_pvalues``, mirrors statsmodels)."""
+        return self.fe_pvalues
+
+    @property
+    def llf_restricted(self) -> float | None:
+        """Restricted log-likelihood for REML fits; ``None`` for ML fits.
+
+        For REML, this equals ``llf`` (the profiled REML criterion).
+        For ML fits there is no restricted log-likelihood, so ``None`` is returned.
+        """
+        return self.llf if self.method == "REML" else None
+
     @property
     def fe_tvalues(self) -> Any:
         """Fixed-effect z-scores (estimate / SE).
@@ -134,6 +162,11 @@ class CrossedLMEResult:
         interlace uses the normal (z) distribution for inference, not t.
         """
         return self.fe_params / self.fe_bse
+
+    @property
+    def tvalues(self) -> Any:
+        """Fixed-effect t/z-values (alias for ``fe_tvalues``, mirrors statsmodels)."""
+        return self.fe_tvalues
 
     @property
     def is_singular(self) -> bool:
