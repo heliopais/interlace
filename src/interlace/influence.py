@@ -152,6 +152,7 @@ def _refit_matrices_crossed(
     n_levels: list[int],
     theta0: np.ndarray | None,
     optimizer: str,
+    tight: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Refit REML on pre-built arrays; return ``(beta_i, Vi, theta_i)``.
 
@@ -159,14 +160,8 @@ def _refit_matrices_crossed(
     ``theta_i`` is in variance units matching :func:`_full_params` output
     (i.e. ``sigma2 * L @ L.T`` diagonal for each spec, then ``sigma2``).
     """
-    import scipy.sparse as _sp
-
     from interlace.profiled_reml import (
-        _build_A11,
-        _precompute,
-        _sparse_solve,
         fit_reml,
-        make_lambda,
         n_theta_for_spec,
     )
 
@@ -179,20 +174,12 @@ def _refit_matrices_crossed(
         n_levels=n_levels,
         optimizer=optimizer,
         theta0=theta0,
+        tight=tight,
     )
     sigma2_i = reml_i.sigma2
 
-    # Recover fe_cov = sigma2 * (X'Ω⁻¹X)⁻¹ at optimum
-    cache_i = _precompute(y_i, X_i, Z_i)
-    Lambda_i = make_lambda(reml_i.theta, specs, n_levels)
-    ZtZ_i = _sp.csc_matrix(cache_i["ZtZ"])
-    ZtX_i = np.asarray(cache_i["ZtX"])
-    A11_i = _build_A11(ZtZ_i, Lambda_i)
-    lZtX_i = np.asarray(Lambda_i.T @ ZtX_i)
-    C_X_i = _sparse_solve(A11_i, lZtX_i)
-    XtX_i = np.asarray(cache_i["XtX"])
-    MX_i = XtX_i - lZtX_i.T @ C_X_i
-    Vi = sigma2_i * np.linalg.inv(MX_i)
+    # fe_cov = sigma2 * (X'Ω⁻¹X)^{-1} is pre-computed inside fit_reml
+    Vi = reml_i.fe_cov  # type: ignore[assignment]
 
     # Extract theta_i in variance units (one entry per VC diagonal, then sigma2)
     theta_vals_i: list[float] = []
@@ -345,6 +332,7 @@ def hlm_influence(
                         _cc["n_levels"],
                         theta0=_cc["theta0"],
                         optimizer=optimizer,
+                        tight=False,
                     )
                 elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
                     # statsmodels bobyqa path — re-route through interlace.

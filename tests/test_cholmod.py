@@ -80,17 +80,18 @@ def test_reml_objective_superlu_fallback_finite(single_re_data):
 
 
 def test_fit_reml_falls_back_when_cholmod_returns_tuple(single_re_data):
-    """fit_reml must not crash when cholmod.cholesky() returns a non-Factor.
+    """fit_reml must not crash when CHOLMOD returns non-Factor objects.
 
     Regression for GitHub #11: broken/incompatible sksparse installations may
     have cholmod.cholesky() return a scipy-style (c, lower) tuple instead of a
-    Factor with .cholesky()/.logdet()/.solve_A().  fit_reml should detect this
-    and fall back to the SuperLU path silently.
+    Factor.  fit_reml should detect this and fall back to the SuperLU path silently.
+    We simulate both old-API (cholesky) and new-API (cho_factor) returning garbage.
     """
     d = single_re_data
 
     mock_cholmod = MagicMock()
     mock_cholmod.cholesky.return_value = (np.eye(5), True)  # scipy cho_factor tuple
+    mock_cholmod.cho_factor.return_value = (np.eye(5), True)  # also garbage
 
     with patch("interlace.profiled_reml._try_cholmod", return_value=mock_cholmod):
         result = fit_reml(d["y"], d["X"], d["Z"], d["q_sizes"])
@@ -100,7 +101,7 @@ def test_fit_reml_falls_back_when_cholmod_returns_tuple(single_re_data):
 
 
 def test_fit_ml_falls_back_when_cholmod_returns_tuple(single_re_data):
-    """fit_ml must not crash when cholmod.cholesky() returns a non-Factor.
+    """fit_ml must not crash when CHOLMOD returns non-Factor objects.
 
     Same regression as GitHub #11 but for the ML objective path.
     """  # noqa: E501
@@ -108,6 +109,7 @@ def test_fit_ml_falls_back_when_cholmod_returns_tuple(single_re_data):
 
     mock_cholmod = MagicMock()
     mock_cholmod.cholesky.return_value = (np.eye(5), True)  # scipy cho_factor tuple
+    mock_cholmod.cho_factor.return_value = (np.eye(5), True)  # also garbage
 
     with patch("interlace.profiled_reml._try_cholmod", return_value=mock_cholmod):
         result = fit_ml(d["y"], d["X"], d["Z"], d["q_sizes"])

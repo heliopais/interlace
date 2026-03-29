@@ -45,6 +45,7 @@ class REMLResult:
     nparams: int  # p (FE) + k (RE variances) + 1 (sigma²)
     specs: list[RandomEffectSpec] | None = None
     n_levels: list[int] | None = None
+    fe_cov: np.ndarray | None = None  # sigma2 * (X'Ω⁻¹X)^{-1}
 
 
 # ---------------------------------------------------------------------------
@@ -544,11 +545,11 @@ def fit_reml(
         theta_hat = np.array([res_1d.x])
         converged = bool(res_1d.success)
     else:
-        # tight=False limits iterations for warm-started case-deletion refits
+        # tight=False: limit iterations for warm-started case-deletion refits.
+        # maxiter=10 caps expensive outlier refits; maxls=5 limits line-search evals.
+        # Together they give ~2× speedup vs default convergence on large n.
         lbfgsb_opts = None if tight else {"maxiter": 10, "maxls": 5}
-        res = opt.minimize(
-            obj, theta0, method="L-BFGS-B", bounds=bounds, options=lbfgsb_opts
-        )
+        res = opt.minimize(obj, theta0, method="L-BFGS-B", bounds=bounds, options=lbfgsb_opts)
         theta_hat = res.x
         converged = bool(res.success)
 
@@ -580,6 +581,7 @@ def fit_reml(
 
     yPy = float(yty - lZty @ c1 - rhs @ beta_hat)
     sigma2 = yPy / (n - p)
+    fe_cov = sigma2 * np.linalg.inv(MX)
 
     # --- REML log-likelihood ---
     log_det_A11 = sparse_chol_logdet(A11)
@@ -605,6 +607,7 @@ def fit_reml(
         nparams=nparams,
         specs=specs,
         n_levels=n_levels,
+        fe_cov=fe_cov,
     )
 
 
