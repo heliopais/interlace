@@ -142,6 +142,61 @@ class SummaryResult:
     def __repr__(self) -> str:
         return self._render()
 
+    @property
+    def tables(self) -> list[Any]:
+        """List of DataFrames mirroring statsmodels ``Summary.tables``.
+
+        ``tables[0]`` — model-level info (method, nobs, log-likelihood, AIC, BIC).
+        ``tables[1]`` — fixed-effects table with columns
+        ``Coef.``, ``Std.Err.``, ``z``, ``P>|z|``, ``[0.025``, ``0.975]``.
+        """
+        import pandas as _pd
+        from scipy.stats import norm as _norm
+
+        r = self._result
+
+        # --- tables[0]: model info ---
+        info = _pd.DataFrame(
+            {
+                "": [
+                    r.method,
+                    str(r.nobs),
+                    f"{r.llf:.4f}",
+                    f"{r.aic:.4f}",
+                    f"{r.bic:.4f}",
+                ]
+            },
+            index=["Method:", "No. Observations:", "Log-Likelihood:", "AIC:", "BIC:"],
+        )
+
+        # --- tables[1]: fixed effects ---
+        fe = np.asarray(r.fe_params)
+        bse = np.asarray(r.fe_bse)
+        z = fe / bse
+        pv = np.asarray(r.fe_pvalues)
+        z_crit = float(_norm.ppf(0.975))
+        lower = fe - z_crit * bse
+        upper = fe + z_crit * bse
+
+        try:
+            idx = r.fe_params.index
+        except AttributeError:
+            idx = [f"x{i}" for i in range(len(fe))]
+
+        fe_table = _pd.DataFrame(
+            {
+                "Coef.": fe,
+                "Std.Err.": bse,
+                "z": z,
+                "P>|z|": pv,
+                "[0.025": lower,
+                "0.975]": upper,
+            },
+            index=idx,
+        )
+
+        return [info, fe_table]
+
     def _render(self) -> str:
         r = self._result
         lines: list[str] = []

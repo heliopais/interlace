@@ -273,3 +273,80 @@ def test_varcorr_importable_from_interlace():
     from interlace import VarCorr as VC
 
     assert VC is not None
+
+
+# ---------------------------------------------------------------------------
+# interlace-8ko: summary().tables[] statsmodels compatibility
+# ---------------------------------------------------------------------------
+
+
+class TestSummaryTables:
+    """summary().tables[1] should return a DataFrame of fixed effects."""
+
+    def test_tables_attribute_exists(self, single_re_result):
+        s = single_re_result.summary()
+        assert hasattr(s, "tables")
+
+    def test_tables_is_list_of_length_2(self, single_re_result):
+        tables = single_re_result.summary().tables
+        assert isinstance(tables, list)
+        assert len(tables) == 2
+
+    def test_tables_1_is_dataframe(self, single_re_result):
+        tables = single_re_result.summary().tables
+        assert isinstance(tables[1], pd.DataFrame)
+
+    def test_tables_1_has_statsmodels_columns(self, single_re_result):
+        df = single_re_result.summary().tables[1]
+        expected_cols = {"Coef.", "Std.Err.", "z", "P>|z|", "[0.025", "0.975]"}
+        assert expected_cols.issubset(set(df.columns))
+
+    def test_tables_1_row_count_matches_fe_params(self, single_re_result):
+        df = single_re_result.summary().tables[1]
+        assert len(df) == len(single_re_result.fe_params)
+
+    def test_tables_1_index_matches_fe_params_index(self, single_re_result):
+        df = single_re_result.summary().tables[1]
+        assert list(df.index) == list(single_re_result.fe_params.index)
+
+    def test_tables_1_coef_matches_fe_params(self, single_re_result):
+        df = single_re_result.summary().tables[1]
+        np.testing.assert_allclose(
+            df["Coef."].values,
+            np.asarray(single_re_result.fe_params),
+            rtol=1e-12,
+        )
+
+    def test_tables_1_std_err_matches_fe_bse(self, single_re_result):
+        df = single_re_result.summary().tables[1]
+        np.testing.assert_allclose(
+            df["Std.Err."].values,
+            np.asarray(single_re_result.fe_bse),
+            rtol=1e-12,
+        )
+
+    def test_tables_1_z_matches_tvalues(self, single_re_result):
+        df = single_re_result.summary().tables[1]
+        np.testing.assert_allclose(
+            df["z"].values,
+            np.asarray(single_re_result.tvalues),
+            rtol=1e-12,
+        )
+
+    def test_tables_1_pvalues_match(self, single_re_result):
+        df = single_re_result.summary().tables[1]
+        np.testing.assert_allclose(
+            df["P>|z|"].values,
+            np.asarray(single_re_result.pvalues),
+            rtol=1e-12,
+        )
+
+    def test_tables_1_conf_int_bounds(self, single_re_result):
+        df = single_re_result.summary().tables[1]
+        # lower bound should be < coef, upper > coef for typical estimates
+        assert (df["[0.025"] < df["Coef."]).all()
+        assert (df["0.975]"] > df["Coef."]).all()
+
+    def test_tables_0_is_dataframe(self, single_re_result):
+        tables = single_re_result.summary().tables
+        assert isinstance(tables[0], pd.DataFrame)

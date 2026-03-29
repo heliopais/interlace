@@ -10,6 +10,8 @@ mixed-effects models. Statistics in Medicine, 24(6), 893–909.
 
 from __future__ import annotations
 
+import os
+import sys
 import warnings
 from typing import Any
 
@@ -211,6 +213,57 @@ def _refit_matrices_crossed(
 
 
 # ---------------------------------------------------------------------------
+# Module-level worker for multiprocessing (must be picklable)
+# ---------------------------------------------------------------------------
+
+
+def _refit_unit_worker(
+    payload: dict[str, Any],
+) -> tuple[int, float, float, float, float, np.ndarray]:
+    """Case-deletion refit for a single unit; designed for ProcessPoolExecutor.
+
+    Returns ``(unit_idx, cooks_d, mdffits, covtrace, covratio, rvc)`` where
+    each scalar is ``nan`` if the refit fails.
+    """
+    i: int = payload["i"]
+    theta: np.ndarray = payload["theta"]
+    n_theta = len(theta)
+
+    try:
+        import warnings as _w
+
+        with _w.catch_warnings():
+            _w.simplefilter("ignore")
+            beta_i, Vi, theta_i = _refit_matrices_crossed(
+                payload["y_i"],
+                payload["X_i"],
+                payload["Z_i"],
+                payload["specs"],
+                payload["n_levels"],
+                theta0=payload["theta0"],
+                optimizer=payload["optimizer"],
+                tight=False,
+            )
+
+        p: int = payload["p"]
+        beta: np.ndarray = payload["beta"]
+        V_inv: np.ndarray = payload["V_inv"]
+        det_V: float = payload["det_V"]
+
+        diff = beta - np.asarray(beta_i)
+        cooks_d_i = (1.0 / p) * float(diff @ V_inv @ diff)
+        Vi_inv = np.linalg.inv(Vi)
+        mdffits_i = (1.0 / p) * float(diff @ Vi_inv @ diff)
+        covtrace_i = float(np.trace(V_inv @ Vi)) - p
+        covratio_i = float(np.linalg.det(Vi)) / det_V
+        rvc_i: np.ndarray = theta_i / theta
+        return (i, cooks_d_i, mdffits_i, covtrace_i, covratio_i, rvc_i)
+
+    except Exception:  # noqa: BLE001
+        return (i, np.nan, np.nan, np.nan, np.nan, np.full(n_theta, np.nan))
+
+
+# ---------------------------------------------------------------------------
 # Main function
 # ---------------------------------------------------------------------------
 
@@ -220,6 +273,8 @@ def hlm_influence(
     level: int | str = 1,
     vc_formula: Any = None,
     optimizer: str = "lbfgsb",
+    n_jobs: int = 1,
+    show_progress: bool = False,
 ) -> Any:
     """Calculate multiple influence diagnostics via exact deletion.
 
@@ -240,6 +295,16 @@ def hlm_influence(
         interlace REML, which is more robust near variance-parameter
         boundaries and reduces the Cook's D gap relative to R/HLMdiag.
         Requires the ``bobyqa`` optional extra when set to ``"bobyqa"``.
+    n_jobs:
+        Number of parallel worker processes for case-deletion refits.
+        ``1`` (default) runs sequentially.  ``-1`` uses all available
+        CPUs (``os.cpu_count()``).  Values > 1 are used as-is.
+        Parallelism is only applied on the ``CrossedLMEResult`` path;
+        statsmodels refits always run sequentially.  On Linux, workers
+        are forked (fast startup); on macOS/Windows, they are spawned
+        (slower startup — parallelism helps mainly when n ≳ 500).
+    show_progress:
+        Show a tqdm progress bar.  Default: ``False``.
 
     Returns
     -------
@@ -311,111 +376,176 @@ def hlm_influence(
             "theta0": model.theta,
         }
 
-    for i, unit in tqdm(enumerate(units), total=n_units, desc=desc, disable=True):
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                if _cc is not None:
-                    # Crossed path: slice pre-built arrays — no formula parsing.
-                    if level == 1:
-                        row_mask = np.ones(n_rows, dtype=bool)
-                        row_mask[i] = False
-                    else:
-                        lc = level if isinstance(level, str) else None
-                        row_mask = (
-                            nw_data[lc].to_numpy() != unit
-                            if lc is not None
-                            else groups != unit
+    # ------------------------------------------------------------------
+    # Parallel path: CrossedLMEResult + n_jobs != 1
+    # ------------------------------------------------------------------
+    use_parallel = _cc is not None and n_jobs != 1
+
+    if use_parallel:
+        import concurrent.futures
+        import multiprocessing
+
+        assert _cc is not None  # guaranteed by use_parallel condition
+        # Build one payload dict per unit (slicing is cheap — arrays are views)
+        payloads: list[dict[str, Any]] = []
+        for i, unit in enumerate(units):
+            if level == 1:
+                row_mask = np.ones(n_rows, dtype=bool)
+                row_mask[i] = False
+            else:
+                lc = level if isinstance(level, str) else None
+                row_mask = (
+                    nw_data[lc].to_numpy() != unit if lc is not None else groups != unit
+                )
+            payloads.append(
+                {
+                    "i": i,
+                    "y_i": _cc["y"][row_mask],
+                    "X_i": _cc["X"][row_mask],
+                    "Z_i": _cc["Z"][row_mask].tocsc(),
+                    "specs": _cc["specs"],
+                    "n_levels": _cc["n_levels"],
+                    "theta0": _cc["theta0"],
+                    "optimizer": optimizer,
+                    "p": p,
+                    "beta": np.asarray(beta),
+                    "V_inv": V_inv,
+                    "det_V": det_V,
+                    "theta": theta,
+                }
+            )
+
+        actual_workers = os.cpu_count() or 1 if n_jobs == -1 else max(1, n_jobs)
+        # On Linux, fork is safe and fast (no reimport of numpy/scipy per worker).
+        # On macOS/Windows, spawn is required to avoid fork-related crashes with
+        # multi-threaded BLAS.
+        mp_ctx_name = "fork" if sys.platform == "linux" else "spawn"
+        ctx = multiprocessing.get_context(mp_ctx_name)
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=actual_workers, mp_context=ctx
+        ) as pool:
+            results_iter = pool.map(_refit_unit_worker, payloads)
+            for r in tqdm(
+                results_iter, total=n_units, desc=desc, disable=not show_progress
+            ):
+                i_r, cd, md, ct, cr, rvc_i = r
+                cooks_d[i_r] = cd
+                mdffits_val[i_r] = md
+                covtrace_val[i_r] = ct
+                covratio_val[i_r] = cr
+                rvc_val[i_r] = rvc_i
+
+    else:
+        # ------------------------------------------------------------------
+        # Sequential path (original loop)
+        # ------------------------------------------------------------------
+        for i, unit in tqdm(
+            enumerate(units), total=n_units, desc=desc, disable=not show_progress
+        ):
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    if _cc is not None:
+                        # Crossed path: slice pre-built arrays — no formula parsing.
+                        if level == 1:
+                            row_mask = np.ones(n_rows, dtype=bool)
+                            row_mask[i] = False
+                        else:
+                            lc = level if isinstance(level, str) else None
+                            row_mask = (
+                                nw_data[lc].to_numpy() != unit
+                                if lc is not None
+                                else groups != unit
+                            )
+                        beta_i, Vi, theta_i = _refit_matrices_crossed(
+                            _cc["y"][row_mask],
+                            _cc["X"][row_mask],
+                            _cc["Z"][row_mask].tocsc(),
+                            _cc["specs"],
+                            _cc["n_levels"],
+                            theta0=_cc["theta0"],
+                            optimizer=optimizer,
+                            tight=False,
                         )
-                    beta_i, Vi, theta_i = _refit_matrices_crossed(
-                        _cc["y"][row_mask],
-                        _cc["X"][row_mask],
-                        _cc["Z"][row_mask].tocsc(),
-                        _cc["specs"],
-                        _cc["n_levels"],
-                        theta0=_cc["theta0"],
-                        optimizer=optimizer,
-                        tight=False,
-                    )
-                elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
-                    # statsmodels bobyqa path — re-route through interlace.
-                    if level == 1:
-                        nw_before = nw_data[:i]
-                        nw_after = nw_data[i + 1 :]
-                        if i == 0:
-                            data_i = nw.to_native(nw_after)
-                        elif i == n_rows - 1:
-                            data_i = nw.to_native(nw_before)
+                    elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
+                        # statsmodels bobyqa path — re-route through interlace.
+                        if level == 1:
+                            nw_before = nw_data[:i]
+                            nw_after = nw_data[i + 1 :]
+                            if i == 0:
+                                data_i = nw.to_native(nw_after)
+                            elif i == n_rows - 1:
+                                data_i = nw.to_native(nw_before)
+                            else:
+                                data_i = nw.to_native(nw.concat([nw_before, nw_after]))
                         else:
-                            data_i = nw.to_native(nw.concat([nw_before, nw_after]))
+                            level_col = level if isinstance(level, str) else None
+                            if level_col is not None:
+                                keep_mask = nw_data[level_col].to_numpy() != unit
+                            else:
+                                keep_mask = groups != unit
+                            data_i = _filter_rows(data_native, keep_mask)
+                        import interlace
+
+                        model_i = interlace.fit(
+                            model.model.formula,
+                            data_i,
+                            groups=model._gpgap_group_col,
+                            optimizer=optimizer,
+                        )
+                        beta_i, Vi, theta_i = _reduced_params(model_i, p, theta_names)
                     else:
-                        level_col = level if isinstance(level, str) else None
-                        if level_col is not None:
-                            keep_mask = nw_data[level_col].to_numpy() != unit
+                        # Pure statsmodels path — requires pandas (already checked).
+                        if level == 1:
+                            nw_before = nw_data[:i]
+                            nw_after = nw_data[i + 1 :]
+                            if i == 0:
+                                data_i = nw.to_native(nw_after)
+                            elif i == n_rows - 1:
+                                data_i = nw.to_native(nw_before)
+                            else:
+                                data_i = nw.to_native(nw.concat([nw_before, nw_after]))
+                            groups_i = np.delete(model.model.groups, i)
                         else:
-                            keep_mask = groups != unit
-                        data_i = _filter_rows(data_native, keep_mask)
-                    import interlace
+                            level_col = level if isinstance(level, str) else None
+                            if level_col is not None:
+                                keep_mask = nw_data[level_col].to_numpy() != unit
+                                groups_i = model.model.groups[
+                                    data_native[level_col] != unit
+                                ]
+                            else:
+                                keep_mask = groups != unit
+                                groups_i = model.model.groups[groups != unit]
+                            data_i = _filter_rows(data_native, keep_mask)
+                        model_i_obj = model.model.__class__.from_formula(
+                            model.model.formula,
+                            data=data_i,
+                            groups=groups_i,
+                            vc_formula=vc_formula,
+                        )
+                        model_i = model_i_obj.fit(reml=model.method == "REML")
+                        beta_i, Vi, theta_i = _reduced_params(model_i, p, theta_names)
 
-                    model_i = interlace.fit(
-                        model.model.formula,
-                        data_i,
-                        groups=model._gpgap_group_col,
-                        optimizer=optimizer,
-                    )
-                    beta_i, Vi, theta_i = _reduced_params(model_i, p, theta_names)
-                else:
-                    # Pure statsmodels path — requires pandas (already checked above).
-                    if level == 1:
-                        nw_before = nw_data[:i]
-                        nw_after = nw_data[i + 1 :]
-                        if i == 0:
-                            data_i = nw.to_native(nw_after)
-                        elif i == n_rows - 1:
-                            data_i = nw.to_native(nw_before)
-                        else:
-                            data_i = nw.to_native(nw.concat([nw_before, nw_after]))
-                        groups_i = np.delete(model.model.groups, i)
-                    else:
-                        level_col = level if isinstance(level, str) else None
-                        if level_col is not None:
-                            keep_mask = nw_data[level_col].to_numpy() != unit
-                            groups_i = model.model.groups[
-                                data_native[level_col] != unit
-                            ]
-                        else:
-                            keep_mask = groups != unit
-                            groups_i = model.model.groups[groups != unit]
-                        data_i = _filter_rows(data_native, keep_mask)
-                    model_i_obj = model.model.__class__.from_formula(
-                        model.model.formula,
-                        data=data_i,
-                        groups=groups_i,
-                        vc_formula=vc_formula,
-                    )
-                    model_i = model_i_obj.fit(reml=model.method == "REML")
-                    beta_i, Vi, theta_i = _reduced_params(model_i, p, theta_names)
+                diff = np.asarray(beta) - np.asarray(beta_i)
 
-            diff = np.asarray(beta) - np.asarray(beta_i)
+                # Cook's Distance
+                cooks_d[i] = (1 / p) * float(diff @ V_inv @ diff)
 
-            # Cook's Distance
-            cooks_d[i] = (1 / p) * float(diff @ V_inv @ diff)
+                # MDFFITS
+                Vi_inv = np.linalg.inv(Vi)
+                mdffits_val[i] = (1 / p) * float(diff @ Vi_inv @ diff)
 
-            # MDFFITS
-            Vi_inv = np.linalg.inv(Vi)
-            mdffits_val[i] = (1 / p) * float(diff @ Vi_inv @ diff)
+                # COVTRACE
+                covtrace_val[i] = float(np.trace(V_inv @ Vi)) - p
 
-            # COVTRACE
-            covtrace_val[i] = float(np.trace(V_inv @ Vi)) - p
+                # COVRATIO
+                covratio_val[i] = float(np.linalg.det(Vi)) / det_V
 
-            # COVRATIO
-            covratio_val[i] = float(np.linalg.det(Vi)) / det_V
+                # RVC
+                rvc_val[i] = theta_i / theta
 
-            # RVC
-            rvc_val[i] = theta_i / theta
-
-        except Exception:  # noqa: BLE001
-            pass  # leave as nan
+            except Exception:  # noqa: BLE001
+                pass  # leave as nan
 
     res: dict[str, Any] = {
         level if isinstance(level, str) else "index": units,
@@ -589,6 +719,7 @@ def lmer_influence_measures(
     model: Any,
     optimizer: str = "lbfgsb",
     show_progress: bool = False,
+    n_jobs: int = 1,
 ) -> dict[str, np.ndarray]:
     """Compute all influence measures for an lmer model.
 
@@ -606,6 +737,9 @@ def lmer_influence_measures(
     show_progress:
         Show a tqdm progress bar during case-deletion refits.  Useful for
         large datasets (n > 500).
+    n_jobs:
+        Number of parallel worker processes.  ``1`` = sequential (default),
+        ``-1`` = all CPUs.  See :func:`hlm_influence` for details.
 
     Returns
     -------
@@ -643,7 +777,13 @@ def lmer_influence_measures(
     from interlace.leverage import leverage as _leverage
 
     # --- Case-deletion Cook's D and mdffits (exact match to R/HLMdiag) ---
-    infl_df = hlm_influence(model, level=1, optimizer=optimizer)
+    infl_df = hlm_influence(
+        model,
+        level=1,
+        optimizer=optimizer,
+        n_jobs=n_jobs,
+        show_progress=show_progress,
+    )
 
     def _col(df: Any, name: str) -> np.ndarray:
         col = df[name]
