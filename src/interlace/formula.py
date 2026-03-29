@@ -38,6 +38,10 @@ class RandomEffectSpec:
     predictors: list[str] = field(default_factory=list)
     intercept: bool = True
     correlated: bool = True
+    interaction_cols: list[str] = field(default_factory=list)
+    # Non-empty when this group is a derived interaction of multiple columns.
+    # e.g. interaction_cols=['batch', 'cask'] → group='batch:cask' is built
+    # at Z-construction time as str(batch) + ':' + str(cask).
 
     @property
     def n_terms(self) -> int:
@@ -45,9 +49,9 @@ class RandomEffectSpec:
         return int(self.intercept) + len(self.predictors)
 
 
-# Regex: optional outer parens, effects side, pipe (single or double), group name
+# Regex: effects side, pipe (single or double), group name (allows a/b/c nesting)
 _RE_SPEC = re.compile(
-    r"^\(\s*(?P<effects>.+?)\s*(?P<pipe>\|\|?)\s*(?P<group>\w+)\s*\)$"
+    r"^\(\s*(?P<effects>.+?)\s*(?P<pipe>\|\|?)\s*(?P<group>\w+(?:/\w+)*)\s*\)$"
 )
 
 
@@ -96,14 +100,30 @@ def parse_random_effects(random: list[str]) -> list[RandomEffectSpec]:
                 predictors.append(term)
 
         # If no explicit 1 or 0, intercept defaults to False (slope-only)
-        specs.append(
-            RandomEffectSpec(
-                group=group,
-                predictors=predictors,
-                intercept=intercept,
-                correlated=correlated,
+        if "/" in group:
+            # lme4 nesting shorthand: (1|a/b/c) → (1|a) + (1|a:b) + (1|a:b:c)
+            parts = group.split("/")
+            for depth in range(1, len(parts) + 1):
+                cols = parts[:depth]
+                derived_group = ":".join(cols)
+                specs.append(
+                    RandomEffectSpec(
+                        group=derived_group,
+                        predictors=predictors,
+                        intercept=intercept,
+                        correlated=correlated,
+                        interaction_cols=cols if depth > 1 else [],
+                    )
+                )
+        else:
+            specs.append(
+                RandomEffectSpec(
+                    group=group,
+                    predictors=predictors,
+                    intercept=intercept,
+                    correlated=correlated,
+                )
             )
-        )
     return specs
 
 

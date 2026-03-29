@@ -141,6 +141,30 @@ print(result.random_effects["student_id"])
 # ...
 ```
 
+## Nested designs
+
+Use the lme4 `/` nesting shorthand in the `random` parameter.
+`(1|batch/cask)` expands to `(1|batch) + (1|batch:cask)`, matching lme4 exactly:
+
+```python
+result = interlace.fit(
+    "strength ~ 1",
+    data=df,
+    random=["(1|batch/cask)"],
+)
+
+# random_effects has one entry per expanded term
+batch_blups      = result.random_effects["batch"]
+batch_cask_blups = result.random_effects["batch:cask"]
+
+# variance_components likewise
+print(result.variance_components["batch"])
+print(result.variance_components["batch:cask"])
+```
+
+Depth-3 nesting (`(1|a/b/c)`) is also supported and expands to three terms:
+`(1|a)`, `(1|a:b)`, `(1|a:b:c)`.
+
 ## Bootstrap standard error
 
 `CrossedLMEResult.bootstrap_se()` computes a cluster-bootstrap SE for the

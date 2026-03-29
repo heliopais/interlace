@@ -13,7 +13,7 @@ Test strategy:
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -22,6 +22,7 @@ from interlace.profiled_reml import (
     _build_A11,
     _precompute,
     _try_cholmod,
+    fit_ml,
     fit_reml,
     make_lambda_diag,
     reml_objective,
@@ -76,6 +77,43 @@ def test_reml_objective_superlu_fallback_finite(single_re_data):
     assert "chol_factor" not in cache
     val = reml_objective(np.ones(1), d["y"], d["X"], d["Z"], d["q_sizes"], cache)
     assert np.isfinite(val)
+
+
+def test_fit_reml_falls_back_when_cholmod_returns_tuple(single_re_data):
+    """fit_reml must not crash when cholmod.cholesky() returns a non-Factor.
+
+    Regression for GitHub #11: broken/incompatible sksparse installations may
+    have cholmod.cholesky() return a scipy-style (c, lower) tuple instead of a
+    Factor with .cholesky()/.logdet()/.solve_A().  fit_reml should detect this
+    and fall back to the SuperLU path silently.
+    """
+    d = single_re_data
+
+    mock_cholmod = MagicMock()
+    mock_cholmod.cholesky.return_value = (np.eye(5), True)  # scipy cho_factor tuple
+
+    with patch("interlace.profiled_reml._try_cholmod", return_value=mock_cholmod):
+        result = fit_reml(d["y"], d["X"], d["Z"], d["q_sizes"])
+
+    assert result.converged
+    assert np.isfinite(result.llf)
+
+
+def test_fit_ml_falls_back_when_cholmod_returns_tuple(single_re_data):
+    """fit_ml must not crash when cholmod.cholesky() returns a non-Factor.
+
+    Same regression as GitHub #11 but for the ML objective path.
+    """  # noqa: E501
+    d = single_re_data
+
+    mock_cholmod = MagicMock()
+    mock_cholmod.cholesky.return_value = (np.eye(5), True)  # scipy cho_factor tuple
+
+    with patch("interlace.profiled_reml._try_cholmod", return_value=mock_cholmod):
+        result = fit_ml(d["y"], d["X"], d["Z"], d["q_sizes"])
+
+    assert result.converged
+    assert np.isfinite(result.llf)
 
 
 # ---------------------------------------------------------------------------

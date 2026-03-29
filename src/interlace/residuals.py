@@ -107,7 +107,7 @@ def hlm_resid(
             msg = f"level '{level}' not found in random_effects; available: {available}"
             raise ValueError(msg)
         re_obj = model.random_effects[level]
-        # re_obj: pd.Series/_SimpleRE (intercept-only) or pd.DataFrame/ndarray (slopes)
+        # re_obj: pd.Series (intercept-only) or pd.DataFrame (slopes)
         re_arr = np.asarray(re_obj.values if hasattr(re_obj, "values") else re_obj)
         re_index = (
             list(re_obj.index) if hasattr(re_obj, "index") else list(range(len(re_arr)))
@@ -133,14 +133,7 @@ def hlm_resid(
         return native_ns.DataFrame(result_dict)
 
     # statsmodels: random_effects is {group_label: Series}
-    # This path requires pandas (statsmodels itself depends on pandas).
-    try:
-        import pandas as pd
-    except ImportError as exc:
-        raise ImportError(
-            "The statsmodels compat path for group-level residuals requires pandas. "
-            "Install it with: pip install interlace-lme[pandas]"
-        ) from exc
+    import pandas as pd
 
     re = model.random_effects
     re_df = pd.DataFrame.from_dict(re, orient="index")

@@ -259,3 +259,119 @@ def test_predict_categorical_vs_patsy_column_order_differs():
         "formulaic and patsy produced the same column order — re-evaluate if "
         "the regression test below is still meaningful"
     )
+
+
+# ---------------------------------------------------------------------------
+# Regression: formulaic column-order mismatch during prediction (GitHub #10)
+# ---------------------------------------------------------------------------
+# formulaic.model_matrix may return columns in a different order during
+# prediction than during fitting.  predict() must reindex X_new to match
+# fe_params.index before the dot product, not blindly use positional order.
+
+
+@pytest.fixture(scope="module")
+def categorical_result_for_column_order():
+    """Fit a model with categorical + numeric predictors for issue-#10 tests."""
+    rng = np.random.default_rng(10)
+    n = 120
+    cat = np.tile(["A", "B", "C", "D"], n // 4)
+    x = rng.standard_normal(n)
+    group = np.repeat([f"g{i}" for i in range(6)], n // 6)
+    u = rng.normal(0, 1.0, 6)
+    eps = rng.normal(0, 0.5, n)
+    group_idx = np.repeat(np.arange(6), n // 6)
+    y = 1.0 + 0.5 * x + u[group_idx] + eps
+    df = pd.DataFrame({"y": y, "x": x, "cat": cat, "group": group})
+    result = interlace.fit("y ~ cat + x", data=df, groups="group")
+    return df, result
+
+
+def test_predict_survives_shuffled_formulaic_columns(
+    categorical_result_for_column_order,
+):
+    """predict() must reindex X_new to fe_params.index even when formulaic
+    returns columns in a different order than during fitting (GitHub issue #10).
+
+    We simulate the mismatch by patching formulaic.model_matrix to return a
+    DataFrame whose columns are in reversed order.  Without the reindex fix,
+    the positional dot-product produces wrong predictions.
+    """
+    from unittest.mock import patch
+
+    import formulaic
+
+    df, result = categorical_result_for_column_order
+    newdata = df.iloc[:20].reset_index(drop=True)
+
+    # Compute the "true" formulaic design matrix for newdata
+    fe_formula = result.model.formula.split("~", 1)[1].strip()
+    real_X = formulaic.model_matrix(fe_formula, newdata)
+    # Reverse column order to simulate a mismatch
+    shuffled_X = real_X[list(reversed(real_X.columns))]
+
+    with patch("interlace.predict.formulaic.model_matrix", return_value=shuffled_X):
+        pred_shuffled = result.predict(newdata=newdata, include_re=False)
+
+    # Reference: predict without any patching (correct column order)
+    pred_correct = result.predict(newdata=newdata, include_re=False)
+
+    np.testing.assert_allclose(
+        pred_shuffled,
+        pred_correct,
+        rtol=1e-8,
+        err_msg=(
+            "predict() returned wrong values when formulaic columns were shuffled. "
+            "Fix: reindex X_new to result.fe_params.index before the dot product."
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Regression: ColumnNotFoundError when formulaic returns narwhals-backed frame
+# (GitHub issue #12)
+# ---------------------------------------------------------------------------
+# When newdata is a non-pandas frame (e.g. polars), formulaic's NarwhalsMaterializer
+# returns a narwhals-wrapped ModelMatrix.  Indexing it with `mm[list_of_col_names]`
+# goes through narwhals __getitem__ and can fail with ColumnNotFoundError on
+# some narwhals/polars version combinations.
+# Fix: extract numpy array first, then reorder columns positionally.
+
+
+def test_predict_does_not_use_narwhals_column_selection(
+    categorical_result_for_column_order,
+):
+    """predict() must not rely on narwhals __getitem__ for column selection.
+
+    Simulates the GitHub issue #12 scenario: formulaic returns a ModelMatrix
+    whose __getitem__ raises ColumnNotFoundError (as happens with certain
+    narwhals/polars version combos). predict() must succeed by using
+    np.asarray() + positional indexing instead.
+    """
+    from unittest.mock import MagicMock, patch
+
+    import formulaic
+
+    df, result = categorical_result_for_column_order
+    newdata = df.iloc[:20].reset_index(drop=True)
+
+    # Compute the real model matrix
+    fe_formula = result.model.formula.split("~", 1)[1].strip()
+    real_mm = formulaic.model_matrix(fe_formula, newdata)
+
+    # Build a mock that exposes .columns and __array__ but raises on __getitem__
+    mock_mm = MagicMock()
+    mock_mm.columns = real_mm.columns
+    mock_mm.__array__ = lambda *a, **kw: np.asarray(real_mm)
+    mock_mm.__getitem__ = MagicMock(
+        side_effect=Exception(
+            "Simulated ColumnNotFoundError: narwhals __getitem__ must not be used"
+        )
+    )
+
+    with patch("interlace.predict.formulaic.model_matrix", return_value=mock_mm):
+        # Should NOT raise — fix uses np.asarray + positional reorder
+        pred = result.predict(newdata=newdata, include_re=False)
+
+    # Compare against correct prediction (no mock)
+    pred_correct = result.predict(newdata=newdata, include_re=False)
+    np.testing.assert_allclose(pred, pred_correct, rtol=1e-8)

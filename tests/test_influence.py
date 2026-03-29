@@ -18,10 +18,20 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 import pytest
+import statsmodels.formula.api as smf
 from statsmodels.regression.mixed_linear_model import MixedLM
 
 import interlace
-from interlace.influence import cooks_distance, hlm_influence, mdffits
+from interlace.influence import (
+    _reduced_params,
+    _refit,
+    _refit_groups_arg,
+    _vc_to_scalars,
+    cooks_distance,
+    hlm_influence,
+    mdffits,
+    ols_dfbetas_qr,
+)
 
 
 @pytest.fixture(scope="module")
@@ -288,3 +298,173 @@ class TestMatrixCacheOptimization:
             rtol=1e-6,
             err_msg="cooksd changed after matrix-cache optimisation",
         )
+
+
+# ---------------------------------------------------------------------------
+# Private helper unit tests (covers dead-code / rarely-reached paths)
+# ---------------------------------------------------------------------------
+
+
+class TestVcToScalars:
+    def test_scalar_vc(self):
+        vals, names = _vc_to_scalars(np.float64(2.5), "grp")
+        assert vals == [2.5]
+        assert names == ["var_grp"]
+
+    def test_array_vc_with_index(self):
+        """pandas Series VC (has .index) — existing covered path."""
+        s = pd.Series([1.0, 2.0], index=["(Intercept)", "x"])
+        vals, names = _vc_to_scalars(s, "grp")
+        assert vals == [1.0, 2.0]
+        assert names == ["var_grp_(Intercept)", "var_grp_x"]
+
+    def test_array_vc_without_index(self):
+        """Line 61: plain numpy array — no .index attribute."""
+        vc = np.array([3.0, 4.0])
+        vals, names = _vc_to_scalars(vc, "grp")
+        assert vals == [3.0, 4.0]
+        assert names == ["var_grp_0", "var_grp_1"]
+
+    def test_matrix_vc_with_index(self):
+        """2-D VC array uses diagonal elements."""
+        vc = np.array([[4.0, 1.0], [1.0, 9.0]])
+        vals, names = _vc_to_scalars(vc, "grp")
+        assert vals == pytest.approx([4.0, 9.0])
+
+
+class TestRefitDirect:
+    """Lines 105-127: _refit is dead code in hlm_influence but is a valid
+    internal function; test both branches directly."""
+
+    def test_refit_crossed_no_slopes(self, data):
+        """Lines 114-117: single random-intercept CrossedLMEResult."""
+        il = interlace.fit("y ~ x", data=data, groups="group")
+        subset = data.iloc[:-5].reset_index(drop=True)
+        result = _refit(il, subset)
+        assert hasattr(result, "fe_params")
+        assert hasattr(result, "scale")
+
+    def test_refit_crossed_with_slopes(self, data):
+        """Lines 111-113: random-slopes CrossedLMEResult."""
+        il = interlace.fit("y ~ x", data=data, random=["(1 + x | group)"])
+        subset = data.iloc[:-5].reset_index(drop=True)
+        result = _refit(il, subset)
+        assert hasattr(result, "fe_params")
+
+
+class TestReducedParamsCrossed:
+    """Lines 137-145: _reduced_params with a CrossedLMEResult model_i."""
+
+    def test_returns_correct_shapes(self, data):
+        il = interlace.fit("y ~ x", data=data, groups="group")
+        theta_names = ["var_group", "error_var"]
+        beta_i, Vi, theta_i = _reduced_params(il, p=2, theta_names=theta_names)
+        assert len(np.asarray(beta_i)) == 2
+        assert Vi.shape == (2, 2)
+        assert len(theta_i) == 2
+
+
+class TestRefitGroupsArgNotCrossed:
+    """Line 158: _refit_groups_arg returns None for non-crossed models."""
+
+    def test_non_crossed_returns_none(self, models):
+        sm, _ = models
+        assert _refit_groups_arg(sm) is None
+
+
+class TestIndependentSlopesInfluence:
+    """Line 232: else branch in _refit_matrices_crossed for independent slopes."""
+
+    @pytest.fixture(scope="class")
+    def indep_data(self):
+        rng = np.random.default_rng(99)
+        n_groups, n_per = 6, 6
+        n = n_groups * n_per
+        g = np.repeat(np.arange(n_groups), n_per).astype(str)
+        x = rng.standard_normal(n)
+        b0 = rng.normal(0, 0.5, n_groups)
+        b1 = rng.normal(0, 0.3, n_groups)
+        eps = rng.normal(0, 0.5, n)
+        y = 1.0 + 0.5 * x + b0[g.astype(int)] + b1[g.astype(int)] * x + eps
+        return pd.DataFrame({"y": y, "x": x, "g": g})
+
+    @pytest.fixture(scope="class")
+    def indep_model(self, indep_data):
+        return interlace.fit("y ~ x", data=indep_data, random=["(1 + x || g)"])
+
+    def test_hlm_influence_independent_slopes(self, indep_model, indep_data):
+        result = hlm_influence(indep_model, level=1)
+        assert isinstance(result, pd.DataFrame)
+        assert "cooksd" in result.columns
+        assert len(result) == len(indep_data)
+
+    def test_cooksd_nonnegative(self, indep_model):
+        result = hlm_influence(indep_model, level=1)
+        assert (result["cooksd"].fillna(0) >= -1e-10).all()
+
+
+class TestIntegerLevelGroupDeletion:
+    """Lines 313 + 416-417: hlm_influence with a non-1, non-string integer level.
+
+    When level is not 1 and not a str, the code falls back to
+    np.unique(groups) for units and groups != unit for masking.
+    """
+
+    def test_integer_level_statsmodels(self, models, data):
+        sm, _ = models
+        result = hlm_influence(sm, level=2)
+        assert isinstance(result, pd.DataFrame)
+        assert "cooksd" in result.columns
+        n_groups = data["group"].nunique()
+        assert len(result) == n_groups
+
+    def test_integer_level_crossed(self, models, data):
+        _, il = models
+        result = hlm_influence(il, level=2)
+        assert isinstance(result, pd.DataFrame)
+        n_groups = data["group"].nunique()
+        assert len(result) == n_groups
+
+
+class TestExceptionSilencing:
+    """Lines 446-447: exception inside refit loop leaves row as NaN."""
+
+    def test_failed_refit_produces_nan(self, models):
+        from interlace import influence
+
+        _, il = models
+        side_effect = RuntimeError("simulated failure")
+        with mock.patch.object(
+            influence, "_refit_matrices_crossed", side_effect=side_effect
+        ):
+            result = hlm_influence(il, level=1)
+        assert result["cooksd"].isna().all()
+
+
+# ---------------------------------------------------------------------------
+# ols_dfbetas_qr (lines 648-680)
+# ---------------------------------------------------------------------------
+
+
+class TestOlsDfbetasQr:
+    @pytest.fixture(scope="class")
+    def ols_result(self, data):
+        return smf.ols("y ~ x", data=data).fit()
+
+    def test_returns_correct_shape(self, ols_result, data):
+        result = ols_dfbetas_qr(ols_result)
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (len(data), 2)  # n obs × (Intercept + x)
+
+    def test_values_finite(self, ols_result):
+        result = ols_dfbetas_qr(ols_result)
+        assert np.all(np.isfinite(result))
+
+    def test_matches_r_convention_small_influence(self, ols_result, data):
+        """Obs with small leverage should have small DFBETAS."""
+        result = ols_dfbetas_qr(ols_result)
+        # Most observations in a well-conditioned dataset should be < 2/sqrt(n)
+        n = len(data)
+        threshold = 2 / np.sqrt(n)
+        frac_large = np.mean(np.abs(result) > threshold)
+        assert frac_large < 0.2, f"Too many large DFBETAS: {frac_large:.2%}"

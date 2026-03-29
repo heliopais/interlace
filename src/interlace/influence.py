@@ -25,19 +25,6 @@ def _is_crossed(model: Any) -> bool:
     return isinstance(model, CrossedLMEResult)
 
 
-def _require_pandas() -> Any:
-    """Import and return pandas, raising a helpful error if not installed."""
-    try:
-        import pandas as pd
-
-        return pd
-    except ImportError as exc:
-        raise ImportError(
-            "The statsmodels compat path requires pandas. "
-            "Install it with: pip install interlace-lme[pandas]"
-        ) from exc
-
-
 # ---------------------------------------------------------------------------
 # Helpers to extract a unified parameter set from either model type
 # ---------------------------------------------------------------------------
@@ -82,7 +69,6 @@ def _full_params(
         theta = np.array(theta_vals)
         theta_names = theta_names_list
     else:
-        pd = _require_pandas()
         p = model.k_fe
         beta = model.fe_params
         V = model.cov_params().iloc[:p, :p].values
@@ -90,7 +76,6 @@ def _full_params(
         re_names = [f"var_{name}" for name in model.cov_re.index]
         theta = np.append(re_vars, model.scale)
         theta_names = list(re_names) + ["error_var"]
-        del pd  # only imported for the statsmodels path
 
     V_inv = np.linalg.inv(V)
     return beta, V, V_inv, theta, theta_names, p
@@ -116,7 +101,6 @@ def _refit(model: Any, data_i: Any) -> Any:
             groups_arg = group_cols[0] if len(group_cols) == 1 else group_cols
             return interlace.fit(model.model.formula, data_i, groups=groups_arg)
     else:
-        _require_pandas()
         model_i = model.model.__class__.from_formula(
             model.model.formula,
             data=data_i,
@@ -276,10 +260,6 @@ def hlm_influence(
     if optimizer not in ("lbfgsb", "bobyqa"):
         msg = f"optimizer must be 'lbfgsb' or 'bobyqa', got {optimizer!r}"
         raise ValueError(msg)
-
-    # Guard statsmodels path: requires pandas.
-    if not _is_crossed(model):
-        _require_pandas()
 
     beta, V, V_inv, theta, theta_names, p = _full_params(model)
     det_V = np.linalg.det(V)
@@ -577,8 +557,7 @@ def tau_gap(
             }
             vc_reduced = model_reduced.variance_components
         else:
-            # statsmodels path — requires pandas
-            _require_pandas()
+            # statsmodels path
             groups_reduced_arr = model.model.groups[~influential_mask]
             model_i_obj = model.model.__class__.from_formula(
                 model.model.formula, data=data_reduced, groups=groups_reduced_arr
@@ -608,3 +587,73 @@ def tau_gap(
         gaps[factor] = float(abs(tau_f - tau_r))
 
     return gaps
+
+
+# ---------------------------------------------------------------------------
+# OLS influence — vectorised QR-based DFBETAS
+# ---------------------------------------------------------------------------
+
+
+def ols_dfbetas_qr(model: Any) -> np.ndarray:
+    """Compute DFBETAS for an OLS model via QR decomposition (no Python loops).
+
+    Implements the exact closed-form formula using the Sherman-Morrison-Woodbury
+    identity and thin QR decomposition, matching R's ``influence.measures()``
+    convention (LOO sigma in the denominator).
+
+    For a design matrix X = QR (thin QR) with residuals e and MSE s²:
+
+    - Hat diagonal: hᵢ = ‖Qᵢ‖²
+    - LOO sigma²: s²ᵢ = (s²(n−p) − eᵢ²/(1−hᵢ)) / (n−p−1)
+    - C = R⁻¹Qᵀ  (p×n), the "influence matrix" (X'X)⁻¹Xᵀ
+    - se_coef[j] = ‖row j of R⁻¹‖ = √(diag[(X'X)⁻¹]ⱼ)
+    - DFBETAS[i,j] = C[j,i] · eᵢ / ((1−hᵢ) · sᵢ · se_coef[j])
+
+    Parameters
+    ----------
+    model :
+        A fitted statsmodels ``RegressionResultsWrapper`` (OLS).
+
+    Returns
+    -------
+    np.ndarray of shape (n, p)
+        DFBETAS matrix, one row per observation, one column per parameter.
+
+    References
+    ----------
+    Belsley, Kuh & Welsch (1980). *Regression Diagnostics*. Wiley.
+    R's ``stats::dfbetas.lm`` / ``stats::influence.measures``.
+    """
+    X = np.asarray(model.model.exog)
+    e = np.asarray(model.resid)
+    n, p = X.shape
+    df_resid = int(model.df_resid)  # n - p
+    mse = float(model.mse_resid)
+
+    # Thin QR decomposition
+    Q, R = np.linalg.qr(X, mode="reduced")  # Q: (n,p), R: (p,p)
+
+    # Hat diagonal
+    h = np.einsum("ij,ij->i", Q, Q)  # (n,) — faster than (Q**2).sum(axis=1)
+
+    # LOO sigma squared (clamped to avoid numerical negatives near h=1)
+    loo_var = (mse * df_resid - e**2 / np.maximum(1 - h, 1e-10)) / (df_resid - 1)
+    loo_sigma = np.sqrt(np.maximum(loo_var, 0.0))  # (n,)
+
+    # Influence matrix C = R⁻¹ Qᵀ  (p×n) = (X'X)⁻¹ Xᵀ
+    R_inv = np.linalg.solve(R, np.eye(p))  # (p,p)
+    C = R_inv @ Q.T  # (p,n)
+
+    # se_coef[j] = sqrt(diag[(X'X)⁻¹]_j) = ‖R_inv[j,:]‖
+    se_coef = np.sqrt(np.einsum("ij,ij->i", R_inv, R_inv))  # (p,)
+
+    # Scaled residuals for numerator
+    scale = e / np.maximum(1 - h, 1e-10)  # (n,)
+
+    # Numerator: (n, p)
+    numerator = (C * scale[np.newaxis, :]).T
+
+    # Denominator: (n, p)
+    denominator = loo_sigma[:, np.newaxis] * se_coef[np.newaxis, :]
+
+    return np.asarray(numerator / np.maximum(denominator, 1e-300))

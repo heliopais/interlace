@@ -100,6 +100,19 @@ def build_z_block(
     return sp.hstack(col_blocks, format="csc")
 
 
+def group_array(spec: RandomEffectSpec, nw_data: Any) -> np.ndarray:
+    """Return the grouping factor array for *spec*, deriving interactions if needed."""
+    if spec.interaction_cols:
+        parts = [
+            nw_data[col].cast(nw.String).to_numpy() for col in spec.interaction_cols
+        ]
+        arr: np.ndarray = np.asarray(parts[0], dtype=str)
+        for part in parts[1:]:
+            arr = np.char.add(np.char.add(arr, ":"), np.asarray(part, dtype=str))
+        return arr
+    return np.asarray(nw_data[spec.group].to_numpy())
+
+
 def build_joint_z_from_specs(
     specs: list[RandomEffectSpec],
     data: Any,
@@ -107,7 +120,9 @@ def build_joint_z_from_specs(
     """Build the joint Z matrix from a list of RandomEffectSpec objects.
 
     For each spec, factorizes the group column, builds a Z block via
-    :func:`build_z_block`, and horizontally stacks all blocks.
+    :func:`build_z_block`, and horizontally stacks all blocks.  When
+    ``spec.interaction_cols`` is non-empty the grouping factor is derived
+    on the fly rather than read from a pre-existing column.
 
     Parameters
     ----------
@@ -123,7 +138,7 @@ def build_joint_z_from_specs(
     nw_data = nw.from_native(data, eager_only=True)
     col_blocks: list[sp.csc_matrix] = []
     for spec in specs:
-        arr = nw_data[spec.group].to_numpy()
+        arr = group_array(spec, nw_data)
         _, codes = np.unique(arr, return_inverse=True)
         codes = codes.astype(np.intp)
         n_levels = int(np.max(codes)) + 1
