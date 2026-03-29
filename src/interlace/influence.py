@@ -179,7 +179,10 @@ def _refit_matrices_crossed(
     sigma2_i = reml_i.sigma2
 
     # fe_cov = sigma2 * (X'Ω⁻¹X)^{-1} is pre-computed inside fit_reml
-    Vi = reml_i.fe_cov  # type: ignore[assignment]
+    if reml_i.fe_cov is None:
+        msg = "fit_reml did not return fe_cov; this should never happen"
+        raise RuntimeError(msg)
+    Vi: np.ndarray = reml_i.fe_cov
 
     # Extract theta_i in variance units (one entry per VC diagonal, then sigma2)
     theta_vals_i: list[float] = []
