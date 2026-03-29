@@ -175,6 +175,44 @@ def _try_cholmod() -> Any:
         return None
 
 
+def _init_chol_factor(cholmod_mod: Any, A11: sp.csc_matrix) -> tuple[Any, str | None]:
+    """Initialise a CHOLMOD factor, handling both sksparse API versions.
+
+    sksparse >= 0.5.0 changed the public API:
+      - New: ``cho_factor(A)`` → ``CholeskyFactor`` with ``.factorize()``,
+        ``.logdet()``, ``.solve(b, 'A')`` methods.
+      - Old: ``cholesky(A)`` → ``Factor`` with ``.cholesky()``,
+        ``.logdet()``, ``.solve_A(b)`` methods.
+
+    Returns ``(factor, api)`` where *api* is ``"new"``, ``"old"``, or
+    ``None`` on failure.
+    """
+    # Try new API first (sksparse >= 0.5.0)
+    if hasattr(cholmod_mod, "cho_factor"):
+        try:
+            factor = cholmod_mod.cho_factor(A11)
+            if (
+                hasattr(factor, "factorize")
+                and hasattr(factor, "logdet")
+                and hasattr(factor, "solve")
+            ):
+                return factor, "new"
+        except Exception:  # noqa: BLE001
+            pass
+    # Fall back to old API (sksparse < 0.5.0)
+    try:
+        factor = cholmod_mod.cholesky(A11)
+        if (
+            hasattr(factor, "cholesky")
+            and hasattr(factor, "logdet")
+            and hasattr(factor, "solve_A")
+        ):
+            return factor, "old"
+    except Exception:  # noqa: BLE001
+        pass
+    return None, None
+
+
 # ---------------------------------------------------------------------------
 # Sparse Cholesky helpers
 # ---------------------------------------------------------------------------
@@ -337,24 +375,34 @@ def reml_objective(
     n, p = X.shape
 
     # --- Build Lambda and A11 ---
-    if specs is not None:
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
+        # General path: random slopes require full sparse Lambda
         Lambda = make_lambda(theta, specs, n_levels)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, Lambda)
         lZty = np.asarray(Lambda.T @ Zty).squeeze()
         lZtX = np.asarray(Lambda.T @ ZtX)
     else:
-        lambda_diag = make_lambda_diag(theta, q_sizes)
+        # Fast diagonal path: intercept-only specs (p_j=1 for all j)
+        _q_sizes = n_levels if specs is not None else q_sizes
+        lambda_diag = make_lambda_diag(theta, _q_sizes)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, lambda_diag)
         lZty = lambda_diag * Zty  # (q,)
         lZtX = lambda_diag[:, None] * ZtX  # (q, p)
 
     # --- Sparse Cholesky: prefer CHOLMOD (one numeric refactorisation) ---
     chol_factor = _cache.get("chol_factor") if _cache is not None else None
+    chol_api = _cache.get("chol_api", "old") if _cache is not None else "old"
     if chol_factor is not None:
-        chol_factor.cholesky(A11)  # type: ignore[union-attr]
-        log_det_A11 = float(chol_factor.logdet())  # type: ignore[union-attr]
-        c1 = np.asarray(chol_factor.solve_A(lZty)).squeeze()  # type: ignore[union-attr]
-        C_X = np.asarray(chol_factor.solve_A(lZtX))  # type: ignore[union-attr]
+        if chol_api == "new":
+            chol_factor.factorize(A11)  # type: ignore[union-attr]
+            log_det_A11 = float(chol_factor.logdet())  # type: ignore[union-attr]
+            c1 = np.asarray(chol_factor.solve(lZty, "A")).squeeze()  # type: ignore[union-attr]
+            C_X = np.asarray(chol_factor.solve(lZtX, "A"))  # type: ignore[union-attr]
+        else:
+            chol_factor.cholesky(A11)  # type: ignore[union-attr]
+            log_det_A11 = float(chol_factor.logdet())  # type: ignore[union-attr]
+            c1 = np.asarray(chol_factor.solve_A(lZty)).squeeze()  # type: ignore[union-attr]
+            C_X = np.asarray(chol_factor.solve_A(lZtX))  # type: ignore[union-attr]
     else:
         log_det_A11 = sparse_chol_logdet(A11)
         c1 = _sparse_solve(A11, lZty)  # (q,)
@@ -394,6 +442,7 @@ def fit_reml(
     specs: list[RandomEffectSpec] | None = None,
     n_levels: list[int] | None = None,
     optimizer: str = "lbfgsb",
+    tight: bool = True,
 ) -> REMLResult:
     """Fit a linear mixed model by profiled REML.
 
@@ -445,19 +494,17 @@ def fit_reml(
     # numeric refactorisation is needed per call (factor.cholesky reuses the pattern).
     cholmod = _try_cholmod()
     if cholmod is not None:
-        if specs is not None:
+        if specs is not None and not all(s.n_terms == 1 for s in specs):
             Lambda0 = make_lambda(theta0, specs, n_levels)  # type: ignore[arg-type]
             A11_0 = _build_A11(cache["ZtZ"], Lambda0)
         else:
-            lambda_diag_0 = make_lambda_diag(theta0, q_sizes)
+            _q_init = n_levels if specs is not None else q_sizes
+            lambda_diag_0 = make_lambda_diag(theta0, _q_init)  # type: ignore[arg-type]
             A11_0 = _build_A11(cache["ZtZ"], lambda_diag_0)
-        factor = cholmod.cholesky(A11_0)
-        if (
-            hasattr(factor, "cholesky")
-            and hasattr(factor, "logdet")
-            and hasattr(factor, "solve_A")
-        ):
+        factor, api = _init_chol_factor(cholmod, A11_0)
+        if factor is not None:
             cache["chol_factor"] = factor
+            cache["chol_api"] = api
 
     lower_bounds = np.array([lo if lo is not None else -np.inf for lo, _ in bounds])
 
@@ -482,8 +529,26 @@ def fit_reml(
         res = opt.minimize(obj_bounded, theta0, method="Nelder-Mead")
         theta_hat = np.maximum(res.x, lower_bounds)
         converged = bool(res.success)
+    elif not tight and n_theta == 1:
+        # Fast path for warm-started 1-D case-deletion refits: Brent's method
+        # uses ~14 evals vs ~28 for L-BFGS-B, roughly 2× faster per refit.
+        lo = lower_bounds[0]
+        hi = bounds[0][1] if bounds[0][1] is not None else np.inf
+        # Upper bound: search up to max(100 * theta0, 100) to avoid missing optimum
+        hi_search = min(hi, max(100.0 * float(theta0[0]), 100.0))
+        res_1d = opt.minimize_scalar(
+            lambda t: obj(np.array([t])),  # noqa: E731
+            bounds=(lo, hi_search),
+            method="bounded",
+        )
+        theta_hat = np.array([res_1d.x])
+        converged = bool(res_1d.success)
     else:
-        res = opt.minimize(obj, theta0, method="L-BFGS-B", bounds=bounds)
+        # tight=False limits iterations for warm-started case-deletion refits
+        lbfgsb_opts = None if tight else {"maxiter": 10, "maxls": 5}
+        res = opt.minimize(
+            obj, theta0, method="L-BFGS-B", bounds=bounds, options=lbfgsb_opts
+        )
         theta_hat = res.x
         converged = bool(res.success)
 
@@ -495,13 +560,14 @@ def fit_reml(
     Xty = cache["Xty"]
     yty = cache["yty"]
 
-    if specs is not None:
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
         Lambda = make_lambda(theta_hat, specs, n_levels)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, Lambda)
         lZty = np.asarray(Lambda.T @ Zty).squeeze()
         lZtX = np.asarray(Lambda.T @ ZtX)
     else:
-        lambda_diag = make_lambda_diag(theta_hat, q_sizes)
+        _q_hat = n_levels if specs is not None else q_sizes
+        lambda_diag = make_lambda_diag(theta_hat, _q_hat)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, lambda_diag)
         lZty = lambda_diag * Zty
         lZtX = lambda_diag[:, None] * ZtX
@@ -547,6 +613,56 @@ def fit_reml(
 # ---------------------------------------------------------------------------
 
 
+def profile_loglik(
+    theta: np.ndarray,
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    q_sizes: list[int],
+    _cache: dict[str, np.ndarray | sp.csc_matrix | float] | None = None,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
+) -> float:
+    """Profile ML log-likelihood L(theta) at the profiled beta and sigma^2.
+
+    For a given theta, beta and sigma^2 are set to their MLEs:
+
+        beta_hat(theta) = (X' Omega^{-1} X)^{-1} X' Omega^{-1} y
+        sigma2_hat(theta) = y' P(theta) y / n
+
+    and the resulting log-likelihood is returned:
+
+        L(theta) = -n/2 * (1 + log(2*pi*sigma2_hat)) - 1/2 * log|A11(theta)|
+
+    Equivalently:
+
+        L(theta) = -n/2 * (1 + log(2*pi/n)) - ml_objective(theta) / 2
+
+    This is the foundation for profile confidence intervals: the CI endpoints
+    are the theta values where 2*(L(theta_hat) - L(theta)) = chi2(level, df=1).
+
+    Parameters
+    ----------
+    theta, y, X, Z, q_sizes, _cache, specs, n_levels:
+        Same as :func:`ml_objective`.
+
+    Returns
+    -------
+    float
+        Profile log-likelihood at *theta*.  Returns ``-inf`` when the
+        objective is non-finite (e.g. invalid theta).
+    """
+    n = len(y)
+    deviance = ml_objective(
+        theta, y, X, Z, q_sizes, _cache, specs=specs, n_levels=n_levels
+    )
+    if not np.isfinite(deviance):
+        return -np.inf
+    constant = -n / 2.0 * (1.0 + np.log(2.0 * np.pi / n))
+    return float(constant - deviance / 2.0)
+
+
 def ml_objective(
     theta: np.ndarray,
     y: np.ndarray,
@@ -588,23 +704,31 @@ def ml_objective(
 
     n, p = X.shape
 
-    if specs is not None:
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
         Lambda = make_lambda(theta, specs, n_levels)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, Lambda)
         lZty = np.asarray(Lambda.T @ Zty).squeeze()
         lZtX = np.asarray(Lambda.T @ ZtX)
     else:
-        lambda_diag = make_lambda_diag(theta, q_sizes)
+        _q_sizes = n_levels if specs is not None else q_sizes
+        lambda_diag = make_lambda_diag(theta, _q_sizes)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, lambda_diag)
         lZty = lambda_diag * Zty
         lZtX = lambda_diag[:, None] * ZtX
 
     chol_factor = _cache.get("chol_factor") if _cache is not None else None
+    chol_api = _cache.get("chol_api", "old") if _cache is not None else "old"
     if chol_factor is not None:
-        chol_factor.cholesky(A11)  # type: ignore[union-attr]
-        log_det_A11 = float(chol_factor.logdet())  # type: ignore[union-attr]
-        c1 = np.asarray(chol_factor.solve_A(lZty)).squeeze()  # type: ignore[union-attr]
-        C_X = np.asarray(chol_factor.solve_A(lZtX))  # type: ignore[union-attr]
+        if chol_api == "new":
+            chol_factor.factorize(A11)  # type: ignore[union-attr]
+            log_det_A11 = float(chol_factor.logdet())  # type: ignore[union-attr]
+            c1 = np.asarray(chol_factor.solve(lZty, "A")).squeeze()  # type: ignore[union-attr]
+            C_X = np.asarray(chol_factor.solve(lZtX, "A"))  # type: ignore[union-attr]
+        else:
+            chol_factor.cholesky(A11)  # type: ignore[union-attr]
+            log_det_A11 = float(chol_factor.logdet())  # type: ignore[union-attr]
+            c1 = np.asarray(chol_factor.solve_A(lZty)).squeeze()  # type: ignore[union-attr]
+            C_X = np.asarray(chol_factor.solve_A(lZtX))  # type: ignore[union-attr]
     else:
         log_det_A11 = sparse_chol_logdet(A11)
         c1 = _sparse_solve(A11, lZty)
@@ -679,19 +803,17 @@ def fit_ml(
 
     cholmod = _try_cholmod()
     if cholmod is not None:
-        if specs is not None:
+        if specs is not None and not all(s.n_terms == 1 for s in specs):
             Lambda0 = make_lambda(theta0, specs, n_levels)  # type: ignore[arg-type]
             A11_0 = _build_A11(cache["ZtZ"], Lambda0)
         else:
-            lambda_diag_0 = make_lambda_diag(theta0, q_sizes)
+            _q_init_ml = n_levels if specs is not None else q_sizes
+            lambda_diag_0 = make_lambda_diag(theta0, _q_init_ml)  # type: ignore[arg-type]
             A11_0 = _build_A11(cache["ZtZ"], lambda_diag_0)
-        factor = cholmod.cholesky(A11_0)
-        if (
-            hasattr(factor, "cholesky")
-            and hasattr(factor, "logdet")
-            and hasattr(factor, "solve_A")
-        ):
+        factor, api = _init_chol_factor(cholmod, A11_0)
+        if factor is not None:
             cache["chol_factor"] = factor
+            cache["chol_api"] = api
 
     lower_bounds = np.array([lo if lo is not None else -np.inf for lo, _ in bounds])
 
@@ -728,13 +850,14 @@ def fit_ml(
     Xty = cache["Xty"]
     yty = cache["yty"]
 
-    if specs is not None:
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
         Lambda = make_lambda(theta_hat, specs, n_levels)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, Lambda)
         lZty = np.asarray(Lambda.T @ Zty).squeeze()
         lZtX = np.asarray(Lambda.T @ ZtX)
     else:
-        lambda_diag = make_lambda_diag(theta_hat, q_sizes)
+        _q_hat_ml = n_levels if specs is not None else q_sizes
+        lambda_diag = make_lambda_diag(theta_hat, _q_hat_ml)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, lambda_diag)
         lZty = lambda_diag * Zty
         lZtX = lambda_diag[:, None] * ZtX
