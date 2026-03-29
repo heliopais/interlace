@@ -418,6 +418,35 @@ class CrossedLMEResult:
 
         return result
 
+    def confint(
+        self,
+        method: str = "profile",
+        level: float = 0.95,
+    ) -> Any:
+        """Confidence intervals for variance parameters.
+
+        Parameters
+        ----------
+        method:
+            ``'profile'`` (default) uses profile likelihood CIs via 1D
+            Brent root-finding.  Other values raise :class:`ValueError`.
+        level:
+            Nominal coverage probability (default 0.95).
+
+        Returns
+        -------
+        pd.DataFrame
+            Columns ``['estimate', lo_col, hi_col]``; rows are named after
+            the theta parameters.  See
+            :func:`~interlace.profile_ci.profile_confint` for details.
+        """
+        if method == "profile":
+            from interlace.profile_ci import profile_confint
+
+            return profile_confint(self, level=level)
+        msg = f"method={method!r} is not supported; choose 'profile'"
+        raise ValueError(msg)
+
     def update(
         self,
         formula: str | None = None,
