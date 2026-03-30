@@ -35,6 +35,7 @@ from interlace.influence import (
     tau_gap,
 )
 from interlace.leverage import leverage
+from interlace.ols import OLSResult, ols
 from interlace.plotting import dotplot_diag, plot_influence, plot_resid
 from interlace.profiled_reml import (
     _build_A11,
@@ -44,7 +45,6 @@ from interlace.profiled_reml import (
     fit_reml,
     make_lambda,
 )
-from interlace.ols import OLSResult, ols
 from interlace.quantreg import QuantRegResult, quantreg, quantreg_ker_se
 from interlace.residuals import hlm_resid
 from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper
