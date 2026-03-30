@@ -133,7 +133,7 @@ class TestQuantregKerSE:
         assert np.all(se > 0)
 
     def test_matches_explicit_formula_hs_true(self, simple_qr_data):
-        """SE matches step-by-step Hendricks-Koenker Gaussian kernel formula (hs=TRUE)."""
+        """SE matches Hendricks-Koenker Gaussian kernel formula (hs=TRUE)."""
         residuals = simple_qr_data["residuals"]
         X = simple_qr_data["X"]
         n, p = X.shape
@@ -148,9 +148,9 @@ class TestQuantregKerSE:
         # Step 2: data-scale bandwidth
         std_scale = np.std(residuals, ddof=1)
         iqr_scale = (np.quantile(residuals, 0.75) - np.quantile(residuals, 0.25)) / 1.34
-        h_data = (scipy_stats.norm.ppf(tau + h_q) - scipy_stats.norm.ppf(tau - h_q)) * min(
-            std_scale, iqr_scale
-        )
+        h_data = (
+            scipy_stats.norm.ppf(tau + h_q) - scipy_stats.norm.ppf(tau - h_q)
+        ) * min(std_scale, iqr_scale)
 
         # Step 3: Gaussian kernel density
         fdens = scipy_stats.norm.pdf(residuals / h_data) / h_data
@@ -184,9 +184,9 @@ class TestQuantregKerSE:
         # Step 2: data-scale bandwidth
         std_scale = np.std(residuals, ddof=1)
         iqr_scale = (np.quantile(residuals, 0.75) - np.quantile(residuals, 0.25)) / 1.34
-        h_data = (scipy_stats.norm.ppf(tau + h_q) - scipy_stats.norm.ppf(tau - h_q)) * min(
-            std_scale, iqr_scale
-        )
+        h_data = (
+            scipy_stats.norm.ppf(tau + h_q) - scipy_stats.norm.ppf(tau - h_q)
+        ) * min(std_scale, iqr_scale)
 
         # Step 3: Gaussian kernel density
         fdens = scipy_stats.norm.pdf(residuals / h_data) / h_data
