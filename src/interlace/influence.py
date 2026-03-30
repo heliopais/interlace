@@ -897,3 +897,80 @@ def ols_dfbetas_qr(model: Any) -> np.ndarray:
     denominator = loo_sigma[:, np.newaxis] * se_coef[np.newaxis, :]
 
     return np.asarray(numerator / np.maximum(denominator, 1e-300))
+
+
+def ols_influence_measures(model: Any) -> dict[str, np.ndarray]:
+    """Full OLS influence diagnostics from a single QR decomposition.
+
+    Computes hat diagonal, Cook's D, DFFITS, DFBETAS, residuals, and sigma in
+    one vectorized pass — avoiding the double O(n·p²) work that arises when hat
+    and DFBETAS are computed separately.
+
+    All measures match R's ``influence.measures()`` convention:
+
+    - ``hat_i   = ‖Qᵢ‖²``  (from thin QR)
+    - ``D_i     = eᵢ² · hᵢ / (p · MSE · (1−hᵢ)²)``
+    - ``DFFITS_i = eᵢ · √hᵢ / (sᵢ · (1−hᵢ))``  (LOO sigma in denominator)
+    - ``DFBETAS`` — see :func:`ols_dfbetas_qr`
+
+    Parameters
+    ----------
+    model :
+        A fitted statsmodels ``RegressionResultsWrapper`` (OLS).
+
+    Returns
+    -------
+    dict with keys:
+        ``cooks``     (n,)   Cook's distance
+        ``hat``       (n,)   hat / leverage diagonal
+        ``dfbetas``   (n,p)  DFBETAS matrix
+        ``dffits``    (n,)   DFFITS
+        ``residuals`` (n,)   OLS residuals
+        ``sigma``     scalar √MSE
+
+    References
+    ----------
+    Belsley, Kuh & Welsch (1980). *Regression Diagnostics*. Wiley.
+    R ``stats::influence.measures``.
+    """
+    X = np.asarray(model.model.exog)
+    e = np.asarray(model.resid)
+    n, p = X.shape
+    df_resid = int(model.df_resid)
+    mse = float(model.mse_resid)
+    sigma = np.sqrt(mse)
+
+    # Single thin QR — all measures derive from Q and R
+    Q, R = np.linalg.qr(X, mode="reduced")  # Q: (n,p), R: (p,p)
+
+    # Hat diagonal: h_i = ‖Q_i‖²
+    hat = np.einsum("ij,ij->i", Q, Q)  # (n,)
+    denom = np.maximum(1.0 - hat, 1e-10)
+
+    # LOO sigma²: s²_(i) = (MSE·df − e_i²/(1−h_i)) / (df−1)
+    loo_var = (mse * df_resid - e**2 / denom) / (df_resid - 1)
+    loo_sigma = np.sqrt(np.maximum(loo_var, 0.0))  # (n,)
+
+    # Cook's D
+    cooks = e**2 * hat / (p * mse * denom**2)
+
+    # DFFITS (uses LOO sigma, matching R)
+    dffits = e * np.sqrt(np.maximum(hat, 0.0)) / (loo_sigma * denom)
+
+    # DFBETAS — same path as ols_dfbetas_qr, reusing Q and R already computed
+    R_inv = np.linalg.solve(R, np.eye(p))  # (p,p)
+    C = R_inv @ Q.T  # (p,n) — influence matrix (X'X)⁻¹Xᵀ
+    se_coef = np.sqrt(np.einsum("ij,ij->i", R_inv, R_inv))  # (p,)
+    scale = e / denom  # (n,)
+    dfbetas = (C * scale[np.newaxis, :]).T / np.maximum(
+        loo_sigma[:, np.newaxis] * se_coef[np.newaxis, :], 1e-300
+    )  # (n,p)
+
+    return {
+        "cooks": cooks,
+        "hat": hat,
+        "dfbetas": np.asarray(dfbetas),
+        "dffits": dffits,
+        "residuals": e,
+        "sigma": sigma,
+    }

@@ -29,6 +29,7 @@ from interlace.influence import (
     mdffits,
     n_influential,
     ols_dfbetas_qr,
+    ols_influence_measures,
     tau_gap,
 )
 from interlace.leverage import leverage
@@ -70,6 +71,7 @@ __all__ = [
     "mdffits",
     "n_influential",
     "ols_dfbetas_qr",
+    "ols_influence_measures",
     "tau_gap",
     # Combined
     "hlm_augment",
