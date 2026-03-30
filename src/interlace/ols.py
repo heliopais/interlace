@@ -56,6 +56,13 @@ class OLSResult:
         self.normalized_cov_params = normalized_cov_params
         self.model = model
 
+    @property
+    def scale(self) -> float:
+        """Residual variance: RSS / (n - p), matching statsmodels OLS scale."""
+        n = len(self.resid)
+        p = len(self.params)
+        return float(np.sum(self.resid**2) / (n - p))
+
     def hc3_bse(self) -> np.ndarray:
         """HC3 heteroskedasticity-consistent standard errors.
 

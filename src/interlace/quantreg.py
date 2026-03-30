@@ -81,6 +81,10 @@ def quantreg_ker_se(
 ) -> np.ndarray:
     """Quantile regression kernel SE matching R's ``summary.rq(se="ker")``.
 
+    Exact port of R quantreg's Hendricks-Koenker sandwich kernel estimator:
+    uses a Gaussian kernel density evaluated at each residual, with bandwidth
+    derived from the Hall-Sheather (or Bofinger) formula scaled to data units.
+
     Parameters
     ----------
     residuals : array-like, shape (n,)
@@ -99,20 +103,6 @@ def quantreg_ker_se(
     ------
     ValueError
         If the bandwidth is too large for the given sample size and tau.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> import statsmodels.regression.quantile_regression as sqr
-    >>> from interlace.quantreg import quantreg_ker_se
-    >>> rng = np.random.default_rng(0)
-    >>> n = 500; male = np.concatenate([np.ones(n//2), np.zeros(n//2)])
-    >>> y = 10_000 + 3_000 * male + rng.normal(0, 2_000, n)
-    >>> X = np.column_stack([np.ones(n), male])
-    >>> fit = sqr.QuantReg(y, X).fit(q=0.5, disp=False)
-    >>> se = quantreg_ker_se(fit.resid, X, tau=0.5)
-    >>> se.shape
-    (2,)
     """
     residuals = np.asarray(residuals, dtype=float)
     X = np.asarray(X, dtype=float)
@@ -269,7 +259,7 @@ def quantreg(formula: str, data: Any, tau: float = 0.5) -> QuantRegResult:
         A_eq=A_eq,
         b_eq=b_eq,
         bounds=bounds,
-        method="highs",
+        method="highs-ipm",
     )
 
     beta = result.x[:p]
