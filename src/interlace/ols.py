@@ -57,11 +57,14 @@ class OLSResult:
         self.model = model
 
     @property
+    def df_resid(self) -> float:
+        """Residual degrees of freedom: n - p, matching statsmodels OLS df_resid."""
+        return float(len(self.resid) - len(self.params))
+
+    @property
     def scale(self) -> float:
         """Residual variance: RSS / (n - p), matching statsmodels OLS scale."""
-        n = len(self.resid)
-        p = len(self.params)
-        return float(np.sum(self.resid**2) / (n - p))
+        return float(np.sum(self.resid**2) / self.df_resid)
 
     def hc3_bse(self) -> np.ndarray:
         """HC3 heteroskedasticity-consistent standard errors.
