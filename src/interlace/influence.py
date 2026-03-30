@@ -773,7 +773,9 @@ def _gls_loo_influence(model: Any) -> dict[str, np.ndarray]:
         n_levels = getattr(model, "_n_levels", None)
         theta = np.asarray(model.theta)
 
-        if specs is not None and not all(s.n_terms == 1 for s in specs):
+        if specs is not None and n_levels is not None and not all(
+            s.n_terms == 1 for s in specs
+        ):
             Lambda = make_lambda(theta, specs, n_levels)
             W = (Z @ Lambda).tocsc()
         else:
@@ -782,14 +784,19 @@ def _gls_loo_influence(model: Any) -> dict[str, np.ndarray]:
             W = (Z @ sp.diags(lambda_diag, format="csc")).tocsc()
 
         ZtZ = (Z.T @ Z).tocsc()
-        lam_arg = Lambda if (specs is not None and not all(s.n_terms == 1 for s in specs)) else lambda_diag  # noqa: E501
+        use_full_lambda = (
+            specs is not None
+            and n_levels is not None
+            and not all(s.n_terms == 1 for s in specs)
+        )
+        lam_arg = Lambda if use_full_lambda else lambda_diag
         A11 = _build_A11(ZtZ, lam_arg)
 
     W = sp.csc_matrix(W)
     A11 = sp.csc_matrix(A11)
 
     # --- Woodbury: V⁻¹X and V⁻¹e ---
-    WtX = np.asarray((W.T @ X))  # (q, p)
+    WtX = np.asarray(W.T @ X)  # (q, p)
     A11inv_WtX = np.asarray(spla.spsolve(A11, WtX))  # (q, p)
     VinvX = (X - W @ A11inv_WtX) / sigma2  # (n, p)
 
@@ -941,7 +948,9 @@ def lmer_influence_measures(
 
         def _col(df: Any, name: str) -> np.ndarray:
             col = df[name]
-            return np.asarray(col.to_numpy() if hasattr(col, "to_numpy") else col.values)
+            return np.asarray(
+                col.to_numpy() if hasattr(col, "to_numpy") else col.values
+            )
 
         cooks_arr = _col(infl_df, "cooksd")
         mdffits_arr = _col(infl_df, "mdffits")
