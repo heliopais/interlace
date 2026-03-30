@@ -17,7 +17,7 @@ for random slopes:
 | `y ~ x + (1\|g1) + (1\|g2)` | `formula="y ~ x", groups=["g1", "g2"]` | **Crossed** random intercepts |
 | `y ~ x + (x\|g)` | `formula="y ~ x", random=["(1 + x \| g)"]` | Correlated random intercept + slope *(v0.2.1+)* |
 | `y ~ x + (x\|\|g)` | `formula="y ~ x", random=["(1 + x \|\| g)"]` | Independent (uncorrelated) parameterisation *(v0.2.1+)* |
-| `y ~ x + (1\|g1/g2)` | — | Nested designs: not yet supported |
+| `y ~ x + (1\|g1/g2)` | `formula="y ~ x", random=["(1 \| g1/g2)"]` | Nested designs *(v0.2.4+)*; expands to `(1\|g1) + (1\|g1:g2)` automatically |
 
 **`groups` vs `random`:** use `groups=` for random intercepts only (shorter syntax); use
 `random=` when you need random slopes or want to mix intercept-only and slope terms

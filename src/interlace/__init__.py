@@ -116,7 +116,11 @@ def fit(
         independent (``||``) parameterisations.  Takes precedence over
         *groups* when both are provided.
     method:
-        Estimation method; only ``"REML"`` is currently supported.
+        Estimation method.  ``"REML"`` (default) maximises the restricted
+        likelihood and is recommended for variance-component estimation.
+        ``"ML"`` maximises the full likelihood and is required for
+        likelihood-ratio tests (LRT) comparing models with different fixed
+        effects via :func:`interlace.anova`.
     optimizer:
         Optimizer for the REML criterion.  ``"lbfgsb"`` (default) uses
         ``scipy.optimize.minimize`` with L-BFGS-B.  ``"bobyqa"`` uses
