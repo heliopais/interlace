@@ -80,17 +80,7 @@ df["x_scaled"] = StandardScaler().fit_transform(df[["x"]])
 model = interlace.fit("y ~ x_scaled", data=df, groups="firm")
 ```
 
-### 2. Increase the iteration limit
-
-Pass `maxiter` to allow more optimisation steps:
-
-```python
-model = interlace.fit("y ~ x", data=df, groups="firm", maxiter=500)
-```
-
-The default is 100 for the scipy L-BFGS-B backend and 200 for BOBYQA.
-
-### 3. Switch optimisers
+### 2. Switch optimisers
 
 The default L-BFGS-B optimiser uses gradients and can struggle near variance-component boundaries. BOBYQA is gradient-free and often more robust in these cases:
 
@@ -99,7 +89,7 @@ The default L-BFGS-B optimiser uses gradients and can struggle near variance-com
 model = interlace.fit("y ~ x", data=df, groups="firm", optimizer="bobyqa")
 ```
 
-### 4. Check your model structure
+### 3. Check your model structure
 
 A model that does not converge is often overparameterised. Ask:
 
