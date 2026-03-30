@@ -24,7 +24,6 @@ import pytest
 import interlace
 from interlace.influence import _gls_loo_influence, hlm_influence
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -149,11 +148,7 @@ def test_gls_loo_delta_beta_close_to_refit(model_single_re):
     loo = _gls_loo_influence(model_single_re)
     refit = hlm_influence(model_single_re, level=1)
 
-    beta_full = np.asarray(model_single_re.fe_params)
-    p = len(beta_full)
-    delta_beta_loo = loo["delta_beta"]  # (n, p)
-
-    # Reconstruct delta_beta from refit Cook's D: we compare Cook's D directly
+    # Compare Cook's D directly (correlation check)
     cooks_loo = loo["cooks"]
     cooks_refit = np.asarray(refit["cooksd"])
 
@@ -184,7 +179,9 @@ def test_cooks_d_close_to_hlm_influence_single_re(model_single_re):
     mask = cooks_refit > 1e-6
     if mask.sum() == 0:
         return  # all near zero, skip
-    mare = float(np.mean(np.abs(cooks_loo[mask] - cooks_refit[mask]) / cooks_refit[mask]))
+    mare = float(
+        np.mean(np.abs(cooks_loo[mask] - cooks_refit[mask]) / cooks_refit[mask])
+    )
     assert mare < 0.25, f"Mean abs relative error on Cook's D: {mare:.2%} > 25%"
 
 
@@ -195,7 +192,6 @@ def test_cooks_d_close_to_hlm_influence_single_re(model_single_re):
 
 def test_n_influential_agrees_single_re(model_single_re):
     """GLS-LOO n_influential should match REML-refit within 1 obs (small n=50)."""
-    from interlace.influence import n_influential
 
     loo = _gls_loo_influence(model_single_re)
     refit = hlm_influence(model_single_re, level=1)
