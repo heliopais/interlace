@@ -18,6 +18,7 @@ subtrees:
   - file: random-slopes
   - file: model-comparison
   - file: cross-validation
+  - file: variance-inference
 - caption: Case Studies
   entries:
   - file: case-study-politeness.ipynb

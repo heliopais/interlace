@@ -139,6 +139,48 @@ print(m_final.variance_components)
 
 ---
 
+## `anova()` — likelihood-ratio test shortcut
+
+The manual LRT (compute `2 * (m_full.llf - m_reduced.llf)`, look up the χ²
+p-value) works but is repetitive. `interlace.anova()` automates it, producing
+a two-row table that matches lme4's `anova.merMod()` output:
+
+```python
+import interlace
+
+m0 = interlace.fit("rt ~ 1",         data=df, groups=["subject", "item"], method="ML")
+m1 = interlace.fit("rt ~ condition", data=df, groups=["subject", "item"], method="ML")
+
+print(interlace.anova(m0, m1))
+#    Df   AIC    BIC  logLik  deviance  Chisq  Chi Df  Pr(>Chisq)
+# 0   4  ...    ...    ...      ...     NaN     NaN       NaN
+# 1   5  ...    ...    ...      ...    18.4     1.0     0.0000
+```
+
+The simpler model is always shown first regardless of argument order. `Chisq`,
+`Chi Df`, and `Pr(>Chisq)` are `NaN` for the reduced model row.
+
+`anova()` raises `ValueError` if either model was fitted with REML — a
+deliberate guard against comparing incomparable likelihoods.
+
+### With `update()`
+
+`anova()` and `update()` compose naturally for incremental model building:
+
+```python
+m0 = interlace.fit("rt ~ 1", data=df, groups=["subject", "item"], method="ML")
+m1 = m0.update(". ~ . + condition")
+m2 = m1.update(". ~ . + frequency")
+
+print(interlace.anova(m0, m1))
+print(interlace.anova(m1, m2))
+
+# Refit winner with REML for final estimates
+m_final = m2.update(method="REML")
+```
+
+---
+
 ## Iterative refinement with `update()`
 
 Repeatedly calling `interlace.fit()` with slightly different formulas is
