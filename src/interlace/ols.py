@@ -62,9 +62,14 @@ class OLSResult:
         return float(len(self.resid) - len(self.params))
 
     @property
+    def mse_resid(self) -> float:
+        """Mean squared error of residuals: RSS / (n - p), matching statsmodels."""
+        return float(np.sum(self.resid**2) / self.df_resid)
+
+    @property
     def scale(self) -> float:
         """Residual variance: RSS / (n - p), matching statsmodels OLS scale."""
-        return float(np.sum(self.resid**2) / self.df_resid)
+        return self.mse_resid
 
     def hc3_bse(self) -> np.ndarray:
         """HC3 heteroskedasticity-consistent standard errors.
