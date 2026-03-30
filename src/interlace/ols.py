@@ -95,8 +95,8 @@ class OLSResult:
         """
         nw_data = nw.from_native(data, eager_only=True)
         rhs_spec = self.model._rhs_model_spec
-        X_new = np.asarray(formulaic.model_matrix(rhs_spec, nw_data))
-        return X_new @ self.params.values
+        X_new = np.asarray(formulaic.model_matrix(rhs_spec, nw_data), dtype=float)
+        return np.asarray(X_new @ self.params.values, dtype=float)
 
 
 def ols(formula: str, data: Any) -> OLSResult:
