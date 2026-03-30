@@ -1,12 +1,15 @@
-"""Tests for quantreg_ker_se: Hall-Sheather kernel SE matching R's quantreg.
+"""Tests for quantreg_ker_se: Hendricks-Koenker kernel SE matching R's quantreg.
 
-Acceptance criteria (GitHub issue #9):
+Acceptance criteria:
   - _hall_sheather_bandwidth replicates R's bandwidth.rq(tau, n, hs=TRUE)
   - _bofinger_bandwidth replicates R's bandwidth.rq(tau, n, hs=FALSE)
   - quantreg_ker_se(residuals, X, tau, hs=True) returns SE array of length p
   - SEs are positive
   - Hall-Sheather and Bofinger bandwidths differ → different SEs
-  - Formula: f_hat = 2h / (Q(tau+h) - Q(tau-h)); cov = tau*(1-tau)/f_hat^2 * inv(X'X)
+  - Formula: Hendricks-Koenker Gaussian kernel sandwich estimator:
+      h_data = (Φ⁻¹(τ+h) - Φ⁻¹(τ-h)) * min(σ̂, IQR/1.34)
+      f_i = φ(rᵢ/h_data) / h_data
+      cov = τ(1-τ) * (X' diag(f) X)⁻¹ X'X (X' diag(f) X)⁻¹
   - Invalid bandwidth (tau+h>1 or tau-h<0) raises ValueError
 """
 
@@ -30,14 +33,17 @@ from interlace.quantreg import (
 @pytest.fixture(scope="module")
 def simple_qr_data():
     """Synthetic y ~ intercept + male data; residuals from median QR fit."""
-    import statsmodels.regression.quantile_regression as sqr
+    import polars as pl
+
+    from interlace.quantreg import quantreg
 
     rng = np.random.default_rng(42)
     n = 400
     male = np.concatenate([np.ones(n // 2), np.zeros(n // 2)])
     y = 10_000 + 3_000 * male + rng.normal(0, 2_000, n)
     X = np.column_stack([np.ones(n), male])
-    result = sqr.QuantReg(y, X).fit(q=0.5, disp=False)
+    data = pl.DataFrame({"y": y, "male": male})
+    result = quantreg("y ~ male", data, tau=0.5)
     return {"residuals": result.resid, "X": X, "n": n}
 
 
@@ -127,26 +133,36 @@ class TestQuantregKerSE:
         assert np.all(se > 0)
 
     def test_matches_explicit_formula_hs_true(self, simple_qr_data):
-        """SE matches step-by-step replication of R's formula (hs=TRUE)."""
+        """SE matches step-by-step Hendricks-Koenker Gaussian kernel formula (hs=TRUE)."""
         residuals = simple_qr_data["residuals"]
         X = simple_qr_data["X"]
-        n = simple_qr_data["n"]
+        n, p = X.shape
         tau = 0.5
 
-        # Bandwidth
+        # Step 1: quantile-scale bandwidth (Hall-Sheather)
         x = scipy_stats.norm.ppf(tau)
         f = scipy_stats.norm.pdf(x)
         z = scipy_stats.norm.ppf(0.975)
-        h = n ** (-1 / 3) * z ** (2 / 3) * ((1.5 * f**2) / (2 * x**2 + 1)) ** (1 / 3)
+        h_q = n ** (-1 / 3) * z ** (2 / 3) * ((1.5 * f**2) / (2 * x**2 + 1)) ** (1 / 3)
 
-        # Sparsity
-        bhi = np.quantile(residuals, tau + h)
-        blo = np.quantile(residuals, tau - h)
-        f_hat = 2 * h / (bhi - blo)
+        # Step 2: data-scale bandwidth
+        std_scale = np.std(residuals, ddof=1)
+        iqr_scale = (np.quantile(residuals, 0.75) - np.quantile(residuals, 0.25)) / 1.34
+        h_data = (scipy_stats.norm.ppf(tau + h_q) - scipy_stats.norm.ppf(tau - h_q)) * min(
+            std_scale, iqr_scale
+        )
 
-        # Covariance
-        XtX_inv = np.linalg.inv(X.T @ X)
-        cov = (tau * (1 - tau) / f_hat**2) * XtX_inv
+        # Step 3: Gaussian kernel density
+        fdens = scipy_stats.norm.pdf(residuals / h_data) / h_data
+
+        # Step 4: fxxinv via QR
+        sqrtf_X = np.sqrt(fdens)[:, None] * X
+        _, R_mat = np.linalg.qr(sqrtf_X)
+        R_inv = np.linalg.solve(R_mat, np.eye(p))
+        fxxinv = R_inv @ R_inv.T
+
+        # Step 5: sandwich covariance
+        cov = tau * (1 - tau) * fxxinv @ (X.T @ X) @ fxxinv
         expected = np.sqrt(np.diag(cov))
 
         np.testing.assert_allclose(
@@ -154,23 +170,35 @@ class TestQuantregKerSE:
         )
 
     def test_matches_explicit_formula_hs_false(self, simple_qr_data):
-        """SE matches step-by-step replication of R's formula (hs=FALSE / Bofinger)."""
+        """SE matches step-by-step Gaussian kernel formula (hs=FALSE / Bofinger)."""
         residuals = simple_qr_data["residuals"]
         X = simple_qr_data["X"]
-        n = simple_qr_data["n"]
+        n, p = X.shape
         tau = 0.5
 
-        # Bofinger bandwidth
+        # Step 1: quantile-scale bandwidth (Bofinger)
         x = scipy_stats.norm.ppf(tau)
         f = scipy_stats.norm.pdf(x)
-        h = ((4.5 * f**4) / (2 * x**2 + 1) ** 2) ** 0.2 * n ** (-0.2)
+        h_q = ((4.5 * f**4) / (2 * x**2 + 1) ** 2) ** 0.2 * n ** (-0.2)
 
-        bhi = np.quantile(residuals, tau + h)
-        blo = np.quantile(residuals, tau - h)
-        f_hat = 2 * h / (bhi - blo)
+        # Step 2: data-scale bandwidth
+        std_scale = np.std(residuals, ddof=1)
+        iqr_scale = (np.quantile(residuals, 0.75) - np.quantile(residuals, 0.25)) / 1.34
+        h_data = (scipy_stats.norm.ppf(tau + h_q) - scipy_stats.norm.ppf(tau - h_q)) * min(
+            std_scale, iqr_scale
+        )
 
-        XtX_inv = np.linalg.inv(X.T @ X)
-        cov = (tau * (1 - tau) / f_hat**2) * XtX_inv
+        # Step 3: Gaussian kernel density
+        fdens = scipy_stats.norm.pdf(residuals / h_data) / h_data
+
+        # Step 4: fxxinv via QR
+        sqrtf_X = np.sqrt(fdens)[:, None] * X
+        _, R_mat = np.linalg.qr(sqrtf_X)
+        R_inv = np.linalg.solve(R_mat, np.eye(p))
+        fxxinv = R_inv @ R_inv.T
+
+        # Step 5: sandwich covariance
+        cov = tau * (1 - tau) * fxxinv @ (X.T @ X) @ fxxinv
         expected = np.sqrt(np.diag(cov))
 
         np.testing.assert_allclose(
