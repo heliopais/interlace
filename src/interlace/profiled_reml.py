@@ -549,7 +549,9 @@ def fit_reml(
         # maxiter=10 caps expensive outlier refits; maxls=5 limits line-search evals.
         # Together they give ~2× speedup vs default convergence on large n.
         lbfgsb_opts = None if tight else {"maxiter": 10, "maxls": 5}
-        res = opt.minimize(obj, theta0, method="L-BFGS-B", bounds=bounds, options=lbfgsb_opts)
+        res = opt.minimize(
+            obj, theta0, method="L-BFGS-B", bounds=bounds, options=lbfgsb_opts
+        )
         theta_hat = res.x
         converged = bool(res.success)
 
