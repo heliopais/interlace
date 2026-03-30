@@ -363,9 +363,90 @@ def _satterthwaite_df_contrasts(
 # ---------------------------------------------------------------------------
 
 
+def _adjust_pvalues(
+    p_raw: np.ndarray,
+    adjust: str,
+    t_ratios: np.ndarray,
+    dfs: np.ndarray,
+    n_levels: int,
+) -> np.ndarray:
+    """Apply multiple-comparison p-value adjustment.
+
+    Parameters
+    ----------
+    p_raw:
+        Unadjusted p-values, shape (n,).
+    adjust:
+        Adjustment method: ``'none'``, ``'bonferroni'``, ``'holm'``,
+        ``'fdr'``, or ``'tukey'``.
+    t_ratios:
+        t-statistics (used only for ``'tukey'``).
+    dfs:
+        Denominator DFs (used only for ``'tukey'``).
+    n_levels:
+        Number of EMM levels (used only for ``'tukey'``).
+
+    Returns
+    -------
+    np.ndarray of shape (n,) with adjusted p-values in [0, 1].
+    """
+    n = len(p_raw)
+
+    if adjust == "none":
+        return p_raw.copy()
+
+    if adjust == "bonferroni":
+        return np.asarray(np.minimum(p_raw * n, 1.0), dtype=float)
+
+    if adjust == "holm":
+        # Step-down Bonferroni: sort ascending, multiply by (n - rank), cummax
+        order = np.argsort(p_raw)
+        p_adj = np.empty(n)
+        cummax = 0.0
+        for k, idx in enumerate(order):
+            val = min(p_raw[idx] * (n - k), 1.0)
+            cummax = max(cummax, val)
+            p_adj[idx] = cummax
+        return p_adj
+
+    if adjust == "fdr":
+        # Benjamini-Hochberg: sort ascending, multiply by n/rank, cummin from right
+        order = np.argsort(p_raw)
+        p_adj = np.empty(n)
+        cummin = 1.0
+        for k in range(n - 1, -1, -1):
+            idx = order[k]
+            val = min(p_raw[idx] * n / (k + 1), 1.0)
+            cummin = min(cummin, val)
+            p_adj[idx] = cummin
+        return p_adj
+
+    if adjust == "tukey":
+        # Tukey HSD: use studentized range distribution q ~ Tukey(n_levels, df)
+        # p = P(q > |t| * sqrt(2)) where q is studentized range
+        # scipy: studentized_range(k=n_levels, df=df).sf(|t|*sqrt(2))
+        p_adj = np.empty(n)
+        for i in range(n):
+            df_i = float(dfs[i])
+            q_stat = float(np.abs(t_ratios[i])) * np.sqrt(2.0)
+            try:
+                p_adj[i] = float(
+                    stats.studentized_range.sf(q_stat, k=n_levels, df=df_i)
+                )
+            except Exception:
+                p_adj[i] = float(p_raw[i])
+        return np.minimum(p_adj, 1.0)
+
+    raise ValueError(
+        f"adjust must be 'none', 'bonferroni', 'holm', 'fdr', or 'tukey'; "
+        f"got {adjust!r}"
+    )
+
+
 def contrast(
     emm: EmmResult,
     method: str | list[np.ndarray] | dict[str, np.ndarray] = "pairwise",
+    adjust: str = "none",
 ) -> Any:
     """Apply linear contrasts to estimated marginal means.
 
@@ -387,6 +468,9 @@ def contrast(
             rows).  Generic names ``contrast1``, ``contrast2``, … are used.
         dict mapping str → np.ndarray
             Same as a list but uses the dict keys as contrast names.
+    adjust:
+        Multiple-comparison p-value adjustment: ``'none'`` (default),
+        ``'bonferroni'``, ``'holm'``, ``'fdr'``, or ``'tukey'``.
 
     Returns
     -------
@@ -396,7 +480,8 @@ def contrast(
     Raises
     ------
     ValueError
-        If *method* is a string other than ``'pairwise'`` or ``'trt.vs.ctrl'``.
+        If *method* is a string other than ``'pairwise'`` or ``'trt.vs.ctrl'``,
+        or if *adjust* is not a recognised method.
     """
     if not isinstance(emm, EmmResult) or not hasattr(emm, "_emm_model"):
         raise TypeError(
@@ -459,9 +544,12 @@ def contrast(
     # Satterthwaite DFs for the projected contrasts
     dfs = _satterthwaite_df_contrasts(model, L_c)
 
-    # t-ratios and p-values
+    # t-ratios and (unadjusted) p-values
     t_ratios = np.where(se > 0, estimates / se, np.nan)
-    p_values = 2.0 * (1.0 - stats.t.cdf(np.abs(t_ratios), df=dfs))
+    p_raw = 2.0 * (1.0 - stats.t.cdf(np.abs(t_ratios), df=dfs))
+
+    # p-value adjustment
+    p_values = _adjust_pvalues(p_raw, adjust, t_ratios, dfs, n_cells)
 
     rows = [
         {
@@ -478,3 +566,25 @@ def contrast(
     return pd.DataFrame(
         rows, columns=["contrast", "estimate", "SE", "df", "t.ratio", "p.value"]
     )
+
+
+def pairs(emm: EmmResult, adjust: str = "tukey") -> Any:
+    """All pairwise comparisons of estimated marginal means.
+
+    Convenience wrapper for ``contrast(emm, method='pairwise', adjust=adjust)``.
+    Matches R's ``pairs()`` ergonomics with Tukey HSD adjustment by default.
+
+    Parameters
+    ----------
+    emm:
+        An :class:`EmmResult` returned by :func:`emmeans`.
+    adjust:
+        Multiple-comparison adjustment (default ``'tukey'``).  Any value
+        accepted by :func:`contrast` is valid.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns: ``["contrast", "estimate", "SE", "df", "t.ratio", "p.value"]``.
+    """
+    return contrast(emm, method="pairwise", adjust=adjust)
