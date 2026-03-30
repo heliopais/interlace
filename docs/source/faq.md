@@ -80,17 +80,7 @@ df["x_scaled"] = StandardScaler().fit_transform(df[["x"]])
 model = interlace.fit("y ~ x_scaled", data=df, groups="firm")
 ```
 
-### 2. Increase the iteration limit
-
-Pass `maxiter` to allow more optimisation steps:
-
-```python
-model = interlace.fit("y ~ x", data=df, groups="firm", maxiter=500)
-```
-
-The default is 100 for the scipy L-BFGS-B backend and 200 for BOBYQA.
-
-### 3. Switch optimisers
+### 2. Switch optimisers
 
 The default L-BFGS-B optimiser uses gradients and can struggle near variance-component boundaries. BOBYQA is gradient-free and often more robust in these cases:
 
@@ -99,7 +89,7 @@ The default L-BFGS-B optimiser uses gradients and can struggle near variance-com
 model = interlace.fit("y ~ x", data=df, groups="firm", optimizer="bobyqa")
 ```
 
-### 4. Check your model structure
+### 3. Check your model structure
 
 A model that does not converge is often overparameterised. Ask:
 
@@ -158,6 +148,61 @@ print(f"LOGO RMSE: {cv.mean:.3f} ± {cv.std:.3f}")
 
 See the [Cross-Validation Guide](cross-validation.md) for LOGO vs k-fold
 trade-offs, custom scoring, and per-fold model inspection.
+
+---
+
+## How do I know if my model has a boundary/singular fit?
+
+Call `isSingular()` or check `result.is_singular`. A singular fit means one or
+more variance components have collapsed to zero — the model is at the boundary
+of its parameter space.
+
+```python
+from interlace import isSingular
+
+if isSingular(result):
+    print(result.boundary_flags)   # {'school_id': True, 'student_id': False}
+```
+
+`fit()` also issues a `ConvergenceWarning` automatically when this happens.
+See the [Variance Inference Guide](variance-inference.md) for what to do.
+
+## How do I get confidence intervals for variance components?
+
+Use `result.confint()` for profile likelihood CIs, which are more accurate
+than Wald intervals near the boundary:
+
+```python
+ci = result.confint()       # 95 % by default
+print(ci)
+#                 estimate   2.5 %  97.5 %
+# school_id          0.412   0.201   0.731
+# residual           1.000   1.000   1.000
+```
+
+CIs are on the theta (relative Cholesky factor) scale. Multiply by
+`result.scale ** 0.5` to convert to the standard-deviation scale.
+See the [Variance Inference Guide](variance-inference.md#profile-likelihood-cis-for-variance-parameters)
+for full details.
+
+## How do I speed up influence diagnostics on large models?
+
+Pass `n_jobs=-1` to `hlm_influence()` or `lmer_influence_measures()` to
+parallelise the case-deletion loop across all available CPUs:
+
+```python
+from interlace.influence import hlm_influence, lmer_influence_measures
+
+# Parallel — uses all CPUs
+infl = hlm_influence(result, n_jobs=-1, show_progress=True)
+
+# Or the all-in-one HLMdiag-parity version
+measures = lmer_influence_measures(result, n_jobs=-1)
+```
+
+On Linux, parallel workers use `fork` (fast). On macOS/Windows they use
+`spawn` (slower startup), so parallelism pays off most for larger models
+(n > 500 or slow per-deletion refits).
 
 ---
 

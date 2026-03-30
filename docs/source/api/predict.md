@@ -54,7 +54,7 @@ preds = result.predict(newdata=df_new)
 
 ```python
 # Set all group columns to a sentinel unseen value, or omit them if supported
-preds_marginal = result.predict(newdata=df_new, use_re=False)
+preds_marginal = result.predict(newdata=df_new, include_re=False)
 ```
 
 ## See also

@@ -12,9 +12,9 @@ This page compares `interlace` with `statsmodels.MixedLM` (Python) and `lme4::lm
 | **Random effect structures** | | | |
 | Single random intercept | ✓ | ✓ | ✓ |
 | Crossed random intercepts | ✓ | Workaround¹ | ✓ |
-| Nested random effects | ✗ | ✓ | ✓ |
-| Random slopes | ✗ | ✓ | ✓ |
-| Correlated random effects | ✗ | ✓ | ✓ |
+| Nested random effects | ✓ *(v0.2.4+)* | ✓ | ✓ |
+| Random slopes | ✓ *(v0.2.1+)* | ✓ | ✓ |
+| Correlated random effects | ✓ *(v0.2.1+)* | ✓ | ✓ |
 | Generalised LMM (Poisson, binomial) | ✗ | ✗² | ✓ (`glmer`) |
 | **Estimation** | | | |
 | REML (default) | ✓ | ✓ | ✓ |
@@ -92,8 +92,9 @@ See [For R / lme4 users](why-r.md#diagnostics) for the function-by-function mapp
 
 ### Random slopes and nested designs
 
-`interlace` is scoped to **crossed random intercepts**. For random slopes, nested
-hierarchies, or generalised outcomes, use `statsmodels.MixedLM` or `lme4`.
+`interlace` supports random slopes (v0.2.1+) and nested random effects (v0.2.4+)
+via the `random=` parameter using lme4-style `(term | group)` notation.
+For generalised outcomes (Poisson, binomial), use `statsmodels` or `lme4`.
 
 ---
 
@@ -104,7 +105,7 @@ hierarchies, or generalised outcomes, use `statsmodels.MixedLM` or `lme4`.
 | Crossed random intercepts in Python | **interlace** |
 | Need lme4 numerical parity from Python | **interlace** |
 | Need built-in diagnostics in Python | **interlace** |
-| Random slopes or nested designs in Python | statsmodels MixedLM |
+| Random slopes or nested designs in Python | **interlace** *(v0.2.1+ / v0.2.4+)* or statsmodels MixedLM |
 | GLMM (Poisson, binomial) | lme4 (R) or statsmodels GLM |
 | Full lme4 feature set | lme4 (R) |
 

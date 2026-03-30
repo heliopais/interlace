@@ -1,6 +1,207 @@
 # Changelog
 
-## v0.2.6 — upcoming
+## v0.2.8 — upcoming
+
+### `emmeans()` — estimated marginal means
+
+New top-level function for computing estimated marginal means (EMMs) for a
+fitted LMM. Mirrors R's `emmeans` package: for each level combination of the
+specified factor(s), the marginal mean of the fixed-effects predictor is
+computed after averaging continuous covariates at their observed means.
+Standard errors and degrees of freedom use the Satterthwaite approximation.
+
+```python
+import interlace
+
+result = interlace.fit("rt ~ condition", data=df, groups=["subject", "item"])
+emm = interlace.emmeans(result, specs="condition")
+print(emm)
+#   condition  estimate     SE      df   lower   upper  t.ratio  p.value
+# 0   control     456.3   12.4    38.2   431.2   481.4     36.8    0.000
+# 1      high     502.7   13.1    39.5   476.2   529.2     38.4    0.000
+```
+
+Crossed two-way grids and custom covariate values via `at=` are both
+supported. See the [emmeans API page](api/emmeans.md) for full details.
+
+### `contrast()` and `pairs()` — linear contrasts with p-value adjustment
+
+`contrast()` applies named linear contrasts to an `emmeans()` result.
+`pairs()` is a convenience wrapper for all pairwise differences with Tukey
+HSD adjustment by default — matching R's `pairs()` ergonomics.
+
+```python
+# All pairwise, Tukey HSD
+pw = interlace.pairs(emm)
+
+# Treatment vs. control, Holm correction
+tvc = interlace.contrast(emm, method="trt.vs.ctrl", adjust="holm")
+
+# Custom contrast vectors
+import numpy as np
+custom = interlace.contrast(emm, method={
+    "avg(low,high) - control": np.array([-1.0, 0.5, 0.5]),
+})
+```
+
+Supported `adjust=` methods: `'none'`, `'bonferroni'`, `'holm'`, `'fdr'`,
+`'tukey'`. See the [contrast API page](api/contrast.md).
+
+### `Anova()` — car::Anova()-style F and chi-square tables
+
+`car::Anova()`-style per-term ANOVA tables with Satterthwaite denominator
+degrees of freedom. Supports Type II and Type III tests and both F and
+Wald chi-square statistics.
+
+```python
+tbl = interlace.Anova(result)               # Type III F (default)
+tbl2 = interlace.Anova(result, type="II")   # Type II F (ML refit internally)
+tbl_chi = interlace.Anova(result, test="Chisq")
+
+# Two-model LRT (delegates to interlace.anova)
+interlace.Anova([m0, m1])
+```
+
+The lower-level `anova_type2()` and `anova_type3()` functions are also
+exported for direct use. See the [Anova API page](api/anova_table.md).
+
+### `isSingular()` / `result.is_singular` — boundary detection
+
+Singular fits occur when one or more variance components collapse to zero,
+placing the model at the boundary of the parameter space. This can inflate
+fixed-effect standard errors and makes profile CIs unreliable.
+
+`interlace.isSingular()` mirrors lme4's function of the same name:
+
+```python
+from interlace import isSingular
+
+if isSingular(result):
+    print("Warning: model is at a boundary — interpret SEs with caution")
+```
+
+The property shorthand and per-factor flags are also available on the result
+object:
+
+```python
+result.is_singular          # True/False
+result.boundary_flags       # {'school_id': False, 'student_id': True}
+```
+
+`fit()` now issues a `ConvergenceWarning` automatically when a boundary fit is
+detected. See the [Variance Inference Guide](variance-inference.md) for
+guidance on what to do when `is_singular` is `True`.
+
+### `result.confint()` — profile likelihood CIs for variance parameters
+
+Profile likelihood confidence intervals for the variance parameters (theta),
+matching lme4's `confint(method="profile")`:
+
+```python
+ci = result.confint()            # 95 % by default
+print(ci)
+#                 estimate   2.5 %  97.5 %
+# school_id          0.412   0.201   0.731
+# student_id         0.638   0.389   1.042
+# residual           1.000   1.000   1.000
+
+ci_90 = result.confint(level=0.90)
+```
+
+CIs are reported on the theta (relative Cholesky factor) scale. For
+intercept-only specs, `sigma_b ≈ theta * sqrt(sigma2)`. If the profile drops
+to the boundary before reaching the lower quantile, the lower bound is set to
+0. See the [Variance Inference Guide](variance-inference.md) for
+interpretation guidance.
+
+### `lmer_influence_measures()` — HLMdiag-parity all-in-one influence
+
+New convenience function that combines case-deletion diagnostics, analytical
+leverage, and DFBETAS into a single dict matching R's `HLMdiag::hlm_influence`
+output exactly:
+
+```python
+measures = interlace.lmer_influence_measures(result, n_jobs=-1)
+# Keys: 'cooks', 'hat', 'hat_overall', 'hat_fixef',
+#       'dfbetas', 'dffits', 'residuals', 'sigma'
+```
+
+`n_jobs=-1` uses all available CPUs for the case-deletion loop; `n_jobs=1`
+(default) runs sequentially. `hlm_influence()` also gains `n_jobs` and
+`show_progress` parameters.
+
+Pass `analytical=True` to use the **GLS-LOO Woodbury fast path** instead of
+O(n) REML refits. This fixes variance components at the full-model estimates
+and is thousands of times faster on large datasets while matching
+`n_influential` counts exactly (n ≥ 200):
+
+```python
+measures = interlace.lmer_influence_measures(result, analytical=True)
+# ~3700× faster vs case-deletion on n=2000
+```
+
+### `ols()` and `quantreg()` — statsmodels-free fitting
+
+New formulaic-based fitting functions that replace `statsmodels.OLS` and
+`statsmodels.QuantReg` without pulling in the statsmodels dependency.
+Both accept any narwhals-compatible DataFrame (pandas, polars, …).
+
+```python
+# OLS with HC3 robust standard errors
+ols_result = interlace.ols("salary ~ experience + education", data=df)
+print(ols_result.params)
+se_hc3 = ols_result.hc3_bse()        # HC3 SEs, matches statsmodels to 6 sig figs
+
+# Quantile regression via HiGHS LP solver
+qr = interlace.quantreg("salary ~ experience + education", data=df, tau=0.9)
+print(qr.params)
+se_ker = qr.ker_se()                  # Hall-Sheather kernel SEs
+```
+
+See the [ols API page](api/ols.md) and [quantreg API page](api/quantreg.md).
+
+### `ols_influence_measures()` — single-QR OLS influence diagnostics
+
+New function that computes hat diagonal, Cook's D, DFFITS, DFBETAS,
+residuals, and sigma from a **single QR decomposition**, replacing the
+previous two-pass approach (~10% faster at n=50,000, p=100):
+
+```python
+measures = interlace.ols_influence_measures(ols_result)
+# Keys: 'hat', 'cooks', 'dffits', 'dfbetas', 'residuals', 'sigma'
+```
+
+### `summary().tables` — statsmodels compatibility
+
+`SummaryResult` gains a `.tables` property returning `[info_df, fe_df]`.
+`tables[1]` is a DataFrame with columns `Coef.`, `Std.Err.`, `z`, `P>|z|`,
+`[0.025`, `0.975]` — matching `statsmodels.MixedLMResults.summary()` so that
+downstream code written against statsmodels works without modification.
+
+### statsmodels-compatible attribute aliases on `CrossedLMEResult`
+
+`CrossedLMEResult` now exposes the following aliases, allowing code written
+against statsmodels `MixedLMResults` to work without modification:
+
+| Alias | Maps to |
+|---|---|
+| `params` | `fe_params` |
+| `bse` | `fe_bse` |
+| `tvalues` | `fe_tvalues` |
+| `pvalues` | `fe_pvalues` |
+| `llf_restricted` | `llf` (REML fits) / `None` (ML fits) |
+
+### Analytical REML gradient (`use_gradient=True`)
+
+`fit_reml()` gains a `use_gradient=True` keyword that passes an exact
+analytical gradient to L-BFGS-B, reducing objective evaluations by ~3×
+compared to the default finite-difference approximation. Gradient matches
+finite differences to `rtol < 1e-3` on single- and two-factor crossed models.
+See the [gradient API page](api/gradient.md).
+
+---
+
+## v0.2.7 — 2026-03-30
 
 ### `cross_val()` — group-aware cross-validation
 
@@ -169,6 +370,82 @@ Set `hs=False` to use the Bofinger bandwidth instead
 
 - CHOLMOD compat: replaced deprecated `cholmod.analyze()` call with
   `cholmod.cholesky()` for `scikit-sparse` ≥ 0.5.0 (issue #8).
+
+---
+
+## v0.2.6 — 2026-03-27
+
+### Satterthwaite denominator degrees of freedom
+
+Fixed-effect t-statistics now carry Satterthwaite-approximated denominator
+degrees of freedom, giving more accurate p-values for small or unbalanced
+designs (particularly when the number of groups is modest):
+
+```python
+print(result.fe_df)
+# Intercept         28.4
+# hours_studied     41.7
+# prior_gpa         38.2
+```
+
+These are also shown in `result.summary()` and match lme4's `summary.merMod`
+output to within rounding.
+
+### Fixes
+
+- `predict()`: fixed column-alignment bug (GitHub #12) where predictions were
+  incorrect when `newdata` columns arrived in a different order than the
+  training frame.
+- CHOLMOD: guarded against non-`Factor` return value from
+  `cholmod.cholesky()` in newer `scikit-sparse` releases (GitHub #11).
+
+---
+
+## v0.2.5 — 2026-03-27
+
+### ML fitting and `anova()` — likelihood-ratio tests as a first-class API
+
+`interlace.fit()` now accepts `method="ML"` to fit by maximum likelihood
+instead of REML. This is required for likelihood-ratio tests that compare
+models with different fixed-effect structures.
+
+The new `interlace.anova()` function automates the LRT, matching lme4's
+`anova.merMod()` output format:
+
+```python
+import interlace
+
+m0 = interlace.fit("score ~ 1",                    data=df, groups="school_id", method="ML")
+m1 = interlace.fit("score ~ hours_studied",        data=df, groups="school_id", method="ML")
+m2 = interlace.fit("score ~ hours_studied + gpa",  data=df, groups="school_id", method="ML")
+
+print(interlace.anova(m0, m1))
+#    Df   AIC   BIC  logLik  deviance  Chisq  Chi Df  Pr(>Chisq)
+# 0   3  ...   ...    ...      ...     NaN     NaN        NaN
+# 1   4  ...   ...    ...      ...    14.3     1.0      0.0002
+```
+
+`anova()` sorts by parameter count automatically and raises `ValueError` if
+either model was fitted with REML.
+
+### `summary()` and `VarCorr()` — lme4-style output
+
+`result.summary()` now returns a `SummaryResult` with a `tables` property
+compatible with statsmodels' `Summary.tables`, making it easy to embed in
+notebooks or export to LaTeX.
+
+`VarCorr()` returns variance-covariance components in the same format as R's
+`as.data.frame(VarCorr(fit))`:
+
+```python
+from interlace import VarCorr
+
+vc = VarCorr(result)
+print(vc.as_dataframe())
+#         grp           var1  var2    vcov    sdcor
+# 0  school_id  (Intercept)  None   0.412    0.642
+# 1   Residual         None  None   1.284    1.133
+```
 
 ---
 

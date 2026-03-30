@@ -35,6 +35,7 @@ from interlace.influence import (
     tau_gap,
 )
 from interlace.leverage import leverage
+from interlace.ols import OLSResult, ols
 from interlace.plotting import dotplot_diag, plot_influence, plot_resid
 from interlace.profiled_reml import (
     _build_A11,
@@ -44,7 +45,6 @@ from interlace.profiled_reml import (
     fit_reml,
     make_lambda,
 )
-from interlace.ols import OLSResult, ols
 from interlace.quantreg import QuantRegResult, quantreg, quantreg_ker_se
 from interlace.residuals import hlm_resid
 from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper
@@ -133,7 +133,11 @@ def fit(
         independent (``||``) parameterisations.  Takes precedence over
         *groups* when both are provided.
     method:
-        Estimation method; only ``"REML"`` is currently supported.
+        Estimation method.  ``"REML"`` (default) maximises the restricted
+        likelihood and is recommended for variance-component estimation.
+        ``"ML"`` maximises the full likelihood and is required for
+        likelihood-ratio tests (LRT) comparing models with different fixed
+        effects via :func:`interlace.anova`.
     optimizer:
         Optimizer for the REML criterion.  ``"lbfgsb"`` (default) uses
         ``scipy.optimize.minimize`` with L-BFGS-B.  ``"bobyqa"`` uses

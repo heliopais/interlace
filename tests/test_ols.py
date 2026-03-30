@@ -19,7 +19,6 @@ import statsmodels.formula.api as smf
 
 from interlace.ols import OLSResult, ols
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
@@ -135,9 +134,7 @@ class TestNormalizedCovParams:
         df = synthetic_data_pd
         X = np.column_stack([np.ones(len(df)), df["x1"].values, df["x2"].values])
         XtX_inv = np.linalg.inv(X.T @ X)
-        np.testing.assert_allclose(
-            ols_fit_pd.normalized_cov_params, XtX_inv, rtol=1e-8
-        )
+        np.testing.assert_allclose(ols_fit_pd.normalized_cov_params, XtX_inv, rtol=1e-8)
 
     def test_normalized_cov_params_matches_statsmodels(
         self, ols_fit_pd, statsmodels_fit
@@ -211,7 +208,9 @@ class TestModelAttribute:
 
 
 class TestPredict:
-    def test_predict_in_sample_matches_fittedvalues(self, ols_fit_pd, synthetic_data_pd):
+    def test_predict_in_sample_matches_fittedvalues(
+        self, ols_fit_pd, synthetic_data_pd
+    ):
         preds = ols_fit_pd.predict(synthetic_data_pd)
         np.testing.assert_allclose(preds, ols_fit_pd.fittedvalues, rtol=1e-10)
 
@@ -226,10 +225,12 @@ class TestPredict:
         new_data = pd.DataFrame({"x1": [1.0, -1.0], "x2": [0.5, -0.5]})
         preds = ols_fit_pd.predict(new_data)
         # Manual: [1, x1, x2] @ beta
-        expected = np.array([
-            beta[0] + beta[1] * 1.0 + beta[2] * 0.5,
-            beta[0] + beta[1] * (-1.0) + beta[2] * (-0.5),
-        ])
+        expected = np.array(
+            [
+                beta[0] + beta[1] * 1.0 + beta[2] * 0.5,
+                beta[0] + beta[1] * (-1.0) + beta[2] * (-0.5),
+            ]
+        )
         np.testing.assert_allclose(preds, expected, rtol=1e-10)
 
     def test_predict_polars_new_data(self, ols_fit_pd):

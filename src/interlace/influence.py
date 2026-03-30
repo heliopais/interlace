@@ -773,8 +773,10 @@ def _gls_loo_influence(model: Any) -> dict[str, np.ndarray]:
         n_levels = getattr(model, "_n_levels", None)
         theta = np.asarray(model.theta)
 
-        if specs is not None and n_levels is not None and not all(
-            s.n_terms == 1 for s in specs
+        if (
+            specs is not None
+            and n_levels is not None
+            and not all(s.n_terms == 1 for s in specs)
         ):
             Lambda = make_lambda(theta, specs, n_levels)
             W = (Z @ Lambda).tocsc()

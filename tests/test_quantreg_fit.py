@@ -18,7 +18,6 @@ import statsmodels.formula.api as smf
 
 from interlace.quantreg import QuantRegResult, quantreg, quantreg_ker_se
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
@@ -93,7 +92,9 @@ class TestParams:
         y = synthetic_data_pd["y"].values
 
         def qr_obj(params_vals):
-            resid = y - params_vals[0] - params_vals[1] * synthetic_data_pd["male"].values
+            resid = (
+                y - params_vals[0] - params_vals[1] * synthetic_data_pd["male"].values
+            )
             return tau * np.sum(np.maximum(resid, 0)) + (1 - tau) * np.sum(
                 np.maximum(-resid, 0)
             )
@@ -181,9 +182,7 @@ class TestKerSe:
         np.testing.assert_array_equal(qr_fit_pd.ker_se(hs=False), expected)
 
     def test_ker_se_polars_matches_pandas(self, qr_fit_pd, qr_fit_pl):
-        np.testing.assert_allclose(
-            qr_fit_pd.ker_se(), qr_fit_pl.ker_se(), rtol=1e-7
-        )
+        np.testing.assert_allclose(qr_fit_pd.ker_se(), qr_fit_pl.ker_se(), rtol=1e-7)
 
 
 # ---------------------------------------------------------------------------
@@ -205,10 +204,12 @@ class TestPredict:
         beta = qr_fit_pd.params.values
         new_data = pd.DataFrame({"male": [1.0, 0.0]})
         preds = qr_fit_pd.predict(new_data)
-        expected = np.array([
-            beta[0] + beta[1] * 1.0,
-            beta[0] + beta[1] * 0.0,
-        ])
+        expected = np.array(
+            [
+                beta[0] + beta[1] * 1.0,
+                beta[0] + beta[1] * 0.0,
+            ]
+        )
         np.testing.assert_allclose(preds, expected, rtol=1e-10)
 
     def test_predict_polars_new_data(self, qr_fit_pd):
@@ -225,9 +226,7 @@ class TestPredict:
 
 
 class TestPolarsNative:
-    def test_quantreg_polars_no_pandas_conversion(
-        self, synthetic_data_pl, monkeypatch
-    ):
+    def test_quantreg_polars_no_pandas_conversion(self, synthetic_data_pl, monkeypatch):
         """Fitting on a Polars frame should not call .to_pandas() internally."""
         original_to_pandas = pl.DataFrame.to_pandas
         calls = []

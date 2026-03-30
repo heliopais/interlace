@@ -60,6 +60,23 @@ following tolerances:
 When adding a new feature that touches estimation, extend the relevant parity test or
 add a new fixture to keep these tolerances enforced.
 
+## Notebook execution policy
+
+All Jupyter notebooks in `docs/source/` are **pre-executed**: outputs are committed to git and Sphinx/MyST-NB renders them as static documents (no kernel required at build time).
+
+**Rationale:** `fit()` uses BOBYQA optimisation and bootstrapping whose numerical outputs vary across environments and scipy versions. Run-on-build would require the full scipy/numpy/pandas/sparse stack in CI, slow builds significantly, and risk non-deterministic diffs. Pre-executed notebooks serve as stable documentation artifacts showing canonical outputs.
+
+**Trade-off:** Notebooks must be re-executed manually before each release. This is a discipline requirement, not a technical one.
+
+**Release checklist addition:** Before tagging a release, re-execute every notebook and commit the fresh outputs:
+
+```bash
+# From the repo root, with the dev environment active:
+jupyter nbconvert --to notebook --execute --inplace docs/source/*.ipynb
+git add docs/source/*.ipynb
+git commit -m "docs: re-execute notebooks for vX.Y.Z"
+```
+
 ## Releasing a new version
 
 Releases are fully automated once a version tag is pushed.
