@@ -259,7 +259,7 @@ def quantreg(formula: str, data: Any, tau: float = 0.5) -> QuantRegResult:
         A_eq=A_eq,
         b_eq=b_eq,
         bounds=bounds,
-        method="highs-ipm",
+        method="highs",
     )
 
     beta = result.x[:p]
