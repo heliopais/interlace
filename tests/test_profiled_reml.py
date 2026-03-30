@@ -22,6 +22,7 @@ from interlace.profiled_reml import (
     make_lambda_diag,
     ml_objective,
     n_theta_for_spec,
+    reml_gradient,
     reml_objective,
     sparse_chol_logdet,
 )
@@ -800,3 +801,115 @@ class TestFitMlBobyqa:
         r_lbfgsb = fit_ml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="lbfgsb")
         r_bobyqa = fit_ml(d["y"], d["X"], d["Z"], d["q_sizes"], optimizer="bobyqa")
         np.testing.assert_allclose(r_bobyqa.beta, r_lbfgsb.beta, atol=1e-3)
+
+
+# ---------------------------------------------------------------------------
+# reml_gradient — analytical gradient of the profiled REML deviance
+# ---------------------------------------------------------------------------
+
+
+class TestRemlGradient:
+    """Verify reml_gradient matches finite differences and improves optimisation."""
+
+    def test_gradient_matches_fd_single_factor(self, single_re_dataset: dict) -> None:
+        """Gradient matches scipy finite-diff to rtol=1e-4 for a 1-factor model."""
+        import scipy.optimize as opt
+
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        cache = _precompute(d["y"], d["X"], Z)
+
+        def obj(theta: np.ndarray) -> float:
+            return reml_objective(theta, d["y"], d["X"], Z, d["q_sizes"], _cache=cache)
+
+        def grad(theta: np.ndarray) -> np.ndarray:
+            return reml_gradient(theta, d["y"], d["X"], Z, d["q_sizes"], _cache=cache)
+
+        theta_test = d["theta_true"] * 1.2
+        err = opt.check_grad(obj, grad, theta_test)
+        fd_norm = np.linalg.norm(opt.approx_fprime(theta_test, obj, 1e-5))
+        assert err / (fd_norm + 1e-10) < 1e-3
+
+    def test_gradient_matches_fd_two_factors(self, rng: np.random.Generator) -> None:
+        """Gradient matches scipy finite-diff to rtol=1e-3 for a 2-factor model."""
+        import scipy.optimize as opt
+
+        n, q1, q2 = 240, 8, 6
+        sigma2, sb1, sb2 = 2.0, 1.0, 0.5
+        gc1 = np.repeat(np.arange(q1), n // q1)
+        gc2 = np.tile(np.arange(q2), n // q2)
+        b1 = rng.normal(scale=np.sqrt(sb1), size=q1)
+        b2 = rng.normal(scale=np.sqrt(sb2), size=q2)
+        X = np.column_stack([np.ones(n), rng.normal(size=n)])
+        y = (
+            X @ [1.5, 0.8]
+            + b1[gc1]
+            + b2[gc2]
+            + rng.normal(scale=np.sqrt(sigma2), size=n)
+        )
+
+        Z1 = _make_Z(gc1, q1)
+        Z2 = _make_Z(gc2, q2)
+        Z = sp.hstack([Z1, Z2], format="csc")
+        q_sizes = [q1, q2]
+        cache = _precompute(y, X, Z)
+
+        def obj(theta: np.ndarray) -> float:
+            return reml_objective(theta, y, X, Z, q_sizes, _cache=cache)
+
+        def grad(theta: np.ndarray) -> np.ndarray:
+            return reml_gradient(theta, y, X, Z, q_sizes, _cache=cache)
+
+        theta_test = np.array(
+            [np.sqrt(sb1 / sigma2) * 1.1, np.sqrt(sb2 / sigma2) * 0.9]
+        )
+        err = opt.check_grad(obj, grad, theta_test)
+        fd_norm = np.linalg.norm(opt.approx_fprime(theta_test, obj, 1e-5))
+        assert err / (fd_norm + 1e-10) < 1e-3
+
+    def test_fit_reml_with_gradient_matches_without(
+        self, single_re_dataset: dict
+    ) -> None:
+        """fit_reml with jac=reml_gradient gives same beta/theta/llf as without."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+
+        r_no_jac = fit_reml(d["y"], d["X"], Z, d["q_sizes"])
+        r_with_jac = fit_reml(d["y"], d["X"], Z, d["q_sizes"], use_gradient=True)
+
+        np.testing.assert_allclose(r_with_jac.beta, r_no_jac.beta, rtol=1e-4)
+        np.testing.assert_allclose(r_with_jac.theta, r_no_jac.theta, rtol=1e-4)
+        assert abs(r_with_jac.llf - r_no_jac.llf) < 1e-4
+
+    def test_gradient_reduces_eval_count(self, single_re_dataset: dict) -> None:
+        """fit_reml with gradient uses fewer objective evaluations than without."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+
+        counts: dict[str, int] = {"no_jac": 0, "with_jac": 0}
+
+        orig = reml_objective
+
+        def counting_obj_no_jac(
+            theta: np.ndarray, *args: object, **kw: object
+        ) -> float:
+            counts["no_jac"] += 1
+            return orig(theta, *args, **kw)  # type: ignore[arg-type]
+
+        def counting_obj_with_jac(
+            theta: np.ndarray, *args: object, **kw: object
+        ) -> float:
+            counts["with_jac"] += 1
+            return orig(theta, *args, **kw)  # type: ignore[arg-type]
+
+        import unittest.mock as mock
+
+        with mock.patch("interlace.profiled_reml.reml_objective", counting_obj_no_jac):
+            fit_reml(d["y"], d["X"], Z, d["q_sizes"])
+        with mock.patch(
+            "interlace.profiled_reml.reml_objective", counting_obj_with_jac
+        ):
+            fit_reml(d["y"], d["X"], Z, d["q_sizes"], use_gradient=True)
+
+        # Using gradient should require fewer objective evaluations
+        assert counts["with_jac"] < counts["no_jac"]
