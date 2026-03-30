@@ -46,6 +46,8 @@ class REMLResult:
     specs: list[RandomEffectSpec] | None = None
     n_levels: list[int] | None = None
     fe_cov: np.ndarray | None = None  # sigma2 * (X'Ω⁻¹X)^{-1}
+    _A11: Any = None  # A11 = I + W'W (q×q sparse) at optimum theta
+    _W: Any = None  # W = Z @ Lambda (n×q sparse) at optimum theta
 
 
 # ---------------------------------------------------------------------------
@@ -684,12 +686,14 @@ def fit_reml(
         A11 = _build_A11(ZtZ, Lambda)
         lZty = np.asarray(Lambda.T @ Zty).squeeze()
         lZtX = np.asarray(Lambda.T @ ZtX)
+        W_final: sp.csc_matrix = (Z @ Lambda).tocsc()
     else:
         _q_hat = n_levels if specs is not None else q_sizes
         lambda_diag = make_lambda_diag(theta_hat, _q_hat)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, lambda_diag)
         lZty = lambda_diag * Zty
         lZtX = lambda_diag[:, None] * ZtX
+        W_final = (Z @ sp.diags(lambda_diag, format="csc")).tocsc()
 
     c1 = _sparse_solve(A11, lZty)
     C_X = _sparse_solve(A11, lZtX)
@@ -726,6 +730,8 @@ def fit_reml(
         specs=specs,
         n_levels=n_levels,
         fe_cov=fe_cov,
+        _A11=A11,
+        _W=W_final,
     )
 
 

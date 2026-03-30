@@ -380,6 +380,8 @@ def fit(
         _Z=Z,
         _n_levels=n_levels_list,
         _fit_kwargs=_fit_kwargs,
+        _A11=reml._A11,
+        _W=reml._W,
     )
 
     if isSingular(result):
