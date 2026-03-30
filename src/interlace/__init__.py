@@ -13,7 +13,7 @@ import scipy.stats as stats
 
 from interlace.allfit import AllFitResult, allFit
 from interlace.anova import anova
-from interlace.anova_type import anova_type2, anova_type3
+from interlace.anova_type import Anova, anova_type2, anova_type3
 from interlace.augment import hlm_augment
 from interlace.convergence import isSingular
 from interlace.cross_val import CVResult as CVResult
@@ -60,6 +60,7 @@ __all__ = [
     "allFit",
     "AllFitResult",
     "anova",
+    "Anova",
     "anova_type2",
     "anova_type3",
     "emmeans",

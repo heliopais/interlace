@@ -31,6 +31,9 @@ from interlace.satterthwaite import satterthwaite_dfs
 if TYPE_CHECKING:
     from interlace.result import CrossedLMEResult
 
+# Sentinel for accepting both a single model and a list of models
+_SINGLE_MODEL = object()
+
 
 def _group_columns_by_term(col_names: list[str]) -> dict[str, list[int]]:
     """Map each formula term to its column indices, skipping the intercept.
@@ -183,3 +186,78 @@ def anova_type2(result: CrossedLMEResult) -> Any:
     # Delegate to Type III logic using the ML-fitted model
     # (same hypothesis matrices for additive models)
     return anova_type3(ml_result)
+
+
+def Anova(
+    model: Any,
+    type: str = "III",
+    test: str = "F",
+) -> Any:
+    """car::Anova()-style ANOVA table for a fitted LMM.
+
+    Parameters
+    ----------
+    model:
+        A fitted :class:`~interlace.result.CrossedLMEResult`, **or** a list of
+        two such results for likelihood-ratio test (LRT) comparison.  When a
+        list is supplied, *type* and *test* are ignored and the LRT table from
+        :func:`interlace.anova` is returned.
+    type:
+        ANOVA type: ``'II'`` or ``'III'`` (default).  Ignored when *model* is
+        a list.
+    test:
+        Test statistic: ``'F'`` (default) or ``'Chisq'``.  ``'F'`` returns the
+        same table as :func:`anova_type2` / :func:`anova_type3`.  ``'Chisq'``
+        converts to Wald chi-square statistics (``Chisq = F * df1``) and
+        reports chi-square p-values.  Ignored when *model* is a list.
+
+    Returns
+    -------
+    pandas.DataFrame
+        For ``test='F'``: columns ``["term", "df1", "df2", "F", "Pr(>F)"]``.
+        For ``test='Chisq'``: columns ``["term", "df", "Chisq", "Pr(>Chisq)"]``.
+        For a list of models: LRT table from :func:`interlace.anova`.
+
+    Raises
+    ------
+    ValueError
+        If *type* is not ``'II'`` or ``'III'``, *test* is not ``'F'`` or
+        ``'Chisq'``, or if a list of REML-fitted models is passed.
+    """
+    import scipy.stats as _stats
+
+    # --- LRT comparison for a list of models ---
+    if isinstance(model, (list, tuple)):
+        from interlace.anova import anova as _lrt_anova
+
+        if len(model) != 2:
+            raise ValueError(
+                "When model is a list, exactly two models must be provided "
+                "for LRT comparison."
+            )
+        return _lrt_anova(model[0], model[1])
+
+    # --- Single-model ANOVA table ---
+    if type not in ("II", "III"):
+        raise ValueError(f"type must be 'II' or 'III'; got {type!r}")
+    if test not in ("F", "Chisq"):
+        raise ValueError(f"test must be 'F' or 'Chisq'; got {test!r}")
+
+    f_table = anova_type2(model) if type == "II" else anova_type3(model)
+
+    if test == "F":
+        return f_table
+
+    # Convert Wald F → chi-square: Chisq = F * df1, df = df1
+    import pandas as _pd
+
+    rows = []
+    for _, row in f_table.iterrows():
+        df1 = int(row["df1"])
+        chisq = float(row["F"]) * df1
+        p_val = float(_stats.chi2.sf(chisq, df=df1))
+        rows.append(
+            {"term": row["term"], "df": df1, "Chisq": chisq, "Pr(>Chisq)": p_val}
+        )
+
+    return _pd.DataFrame(rows, columns=["term", "df", "Chisq", "Pr(>Chisq)"])
