@@ -18,11 +18,13 @@ R reference:
 The Hall-Sheather bandwidth (hs=True):
     h = n^(-1/3) * z_{α/2}^(2/3) * [(1.5 * φ(Φ⁻¹(τ))²) / (2*Φ⁻¹(τ)² + 1)]^(1/3)
 
-Sparsity estimate from residuals:
-    f̂ = 2h / (Q(τ+h; r) − Q(τ−h; r))
+Bandwidth-scaled Gaussian kernel density:
+    h_data = (Φ⁻¹(τ+h) − Φ⁻¹(τ−h)) × min(σ̂, IQR/1.34)
+    f_i = φ(rᵢ/h_data) / h_data
 
-Covariance:
-    Cov(β̂) = τ(1−τ) / f̂² * (X'X)⁻¹
+Sandwich covariance (Hendricks-Koenker):
+    fxxinv = (X' diag(f) X)⁻¹
+    Cov(β̂) = τ(1−τ) × fxxinv × X'X × fxxinv
 """
 
 from __future__ import annotations
@@ -81,7 +83,7 @@ def quantreg_ker_se(
 ) -> np.ndarray:
     """Quantile regression kernel SE matching R's ``summary.rq(se="ker")``.
 
-    Exact port of R quantreg's Hendricks-Koenker sandwich kernel estimator:
+    Port of R quantreg's Hendricks-Koenker sandwich kernel estimator:
     uses a Gaussian kernel density evaluated at each residual, with bandwidth
     derived from the Hall-Sheather (or Bofinger) formula scaled to data units.
 
@@ -106,29 +108,36 @@ def quantreg_ker_se(
     """
     residuals = np.asarray(residuals, dtype=float)
     X = np.asarray(X, dtype=float)
-    n = len(residuals)
+    n, p = X.shape
 
-    h = _hall_sheather_bandwidth(n, tau) if hs else _bofinger_bandwidth(n, tau)
+    # Step 1: compute quantile-scale bandwidth h_q
+    h_q = _hall_sheather_bandwidth(n, tau) if hs else _bofinger_bandwidth(n, tau)
 
-    if tau + h > 1.0 or tau - h < 0.0:
+    if tau + h_q > 1.0 or tau - h_q < 0.0:
         raise ValueError(
-            f"bandwidth h={h:.4f} is too large for tau={tau} and n={n}; "
+            f"bandwidth h={h_q:.4f} is too large for tau={tau} and n={n}; "
             "decrease tau distance from boundaries or increase sample size."
         )
 
-    bhi = float(np.quantile(residuals, tau + h))
-    blo = float(np.quantile(residuals, tau - h))
+    # Step 2: convert quantile bandwidth to data-scale bandwidth
+    # h_data = (Φ^{-1}(τ+h_q) - Φ^{-1}(τ-h_q)) * min(σ_hat, IQR/1.34)
+    std_scale = float(np.std(residuals, ddof=1))
+    iqr_scale = float((np.quantile(residuals, 0.75) - np.quantile(residuals, 0.25)) / 1.34)
+    h_data = float(
+        (stats.norm.ppf(tau + h_q) - stats.norm.ppf(tau - h_q)) * min(std_scale, iqr_scale)
+    )
 
-    if bhi == blo:
-        raise ValueError(
-            "Residual quantiles Q(tau+h) and Q(tau-h) are equal; "
-            "sparsity is undefined. Try a larger sample or different tau."
-        )
+    # Step 3: Gaussian kernel density at each residual: f_i = φ(u_i/h) / h
+    f = stats.norm.pdf(residuals / h_data) / h_data
 
-    f_hat = 2.0 * h / (bhi - blo)
+    # Step 4: fxxinv = (X' diag(f) X)^{-1} via QR decomposition of sqrt(f)*X
+    sqrtf_X = np.sqrt(f)[:, None] * X
+    _, R_mat = np.linalg.qr(sqrtf_X)
+    R_inv = np.linalg.solve(R_mat, np.eye(p))
+    fxxinv = R_inv @ R_inv.T
 
-    XtX_inv = np.linalg.inv(X.T @ X)
-    cov = (tau * (1.0 - tau) / f_hat**2) * XtX_inv
+    # Step 5: Sandwich SE = sqrt(diag(τ(1-τ) * fxxinv @ X'X @ fxxinv))
+    cov = tau * (1.0 - tau) * fxxinv @ (X.T @ X) @ fxxinv
     return np.sqrt(np.diag(cov))
 
 
