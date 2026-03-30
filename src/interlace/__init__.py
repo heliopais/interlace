@@ -44,7 +44,8 @@ from interlace.profiled_reml import (
     fit_reml,
     make_lambda,
 )
-from interlace.quantreg import quantreg_ker_se
+from interlace.ols import OLSResult, ols
+from interlace.quantreg import QuantRegResult, quantreg, quantreg_ker_se
 from interlace.residuals import hlm_resid
 from interlace.result import CrossedLMEResult, ModelInfo, _DataWrapper
 from interlace.satterthwaite import satterthwaite_dfs
@@ -84,7 +85,12 @@ __all__ = [
     "tau_gap",
     # Combined
     "hlm_augment",
-    # Quantile regression utilities
+    # OLS
+    "ols",
+    "OLSResult",
+    # Quantile regression
+    "quantreg",
+    "QuantRegResult",
     "quantreg_ker_se",
     # Simulation and bootstrap
     "simulate",
