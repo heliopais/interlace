@@ -12,16 +12,46 @@ J. Stat. Softw. 69(1).
 
 from __future__ import annotations
 
-from itertools import product
+from itertools import combinations, product
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import pandas as pd
 import scipy.linalg as la
 import scipy.sparse as sp
 import scipy.stats as stats
 
 if TYPE_CHECKING:
     from interlace.result import CrossedLMEResult
+
+
+class EmmResult(pd.DataFrame):
+    """DataFrame subclass returned by :func:`emmeans`.
+
+    Fully backwards compatible with pandas DataFrame.  Carries extra
+    attributes used by :func:`contrast`:
+
+    Attributes
+    ----------
+    _emm_model : CrossedLMEResult
+        The fitted model used to build the EMMs.
+    _emm_L : np.ndarray
+        Contrast matrix (n_cells × p) — each row is the linear combination
+        of fixed-effect coefficients that gives one EMM.
+    _emm_specs : list[str]
+        The specs factor column names.
+    """
+
+    # Required by pandas to preserve subclass through operations
+    _metadata = ["_emm_model", "_emm_L", "_emm_specs"]
+
+    _emm_model: Any
+    _emm_L: np.ndarray
+    _emm_specs: list[str]
+
+    @property
+    def _constructor(self) -> type[EmmResult]:
+        return EmmResult
 
 
 def emmeans(
@@ -103,7 +133,11 @@ def emmeans(
         row["p.value"] = float(p_values[i])
         rows.append(row)
 
-    return _pd.DataFrame(rows)
+    result = EmmResult(rows)
+    result._emm_model = model
+    result._emm_L = L
+    result._emm_specs = specs_list
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -322,3 +356,125 @@ def _satterthwaite_df_contrasts(
             dfs[row_idx] = V_c**2 / denom
 
     return np.maximum(dfs, 1.0)
+
+
+# ---------------------------------------------------------------------------
+# contrast(): linear contrasts on emmeans results
+# ---------------------------------------------------------------------------
+
+
+def contrast(
+    emm: EmmResult,
+    method: str | list[np.ndarray] | dict[str, np.ndarray] = "pairwise",
+) -> Any:
+    """Apply linear contrasts to estimated marginal means.
+
+    Parameters
+    ----------
+    emm:
+        An :class:`EmmResult` returned by :func:`emmeans`.
+    method:
+        How to form the contrasts:
+
+        ``'pairwise'``
+            All pairwise differences ``i - j`` for ``i < j`` (alphabetical
+            level order).  Produces ``n*(n-1)//2`` rows.
+        ``'trt.vs.ctrl'``
+            Each non-first level minus the first (control) level.  Produces
+            ``n-1`` rows.
+        list of np.ndarray
+            Each array is a contrast vector of length ``n`` (number of EMM
+            rows).  Generic names ``contrast1``, ``contrast2``, … are used.
+        dict mapping str → np.ndarray
+            Same as a list but uses the dict keys as contrast names.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns: ``["contrast", "estimate", "SE", "df", "t.ratio", "p.value"]``.
+
+    Raises
+    ------
+    ValueError
+        If *method* is a string other than ``'pairwise'`` or ``'trt.vs.ctrl'``.
+    """
+    if not isinstance(emm, EmmResult) or not hasattr(emm, "_emm_model"):
+        raise TypeError(
+            "emm must be an EmmResult returned by emmeans(). "
+            "Plain DataFrames are not supported."
+        )
+
+    model: Any = emm._emm_model
+    L_emm: np.ndarray = np.asarray(emm._emm_L)  # (n_cells, p)
+    n_cells = L_emm.shape[0]
+
+    # Build named contrast matrix C (n_contrasts, n_cells) in EMM space,
+    # then project to FE space: L_c = C @ L_emm  (n_contrasts, p)
+    specs_col: str = emm._emm_specs[0] if emm._emm_specs else "level"
+    levels = list(emm[specs_col]) if specs_col in emm.columns else list(range(n_cells))
+
+    if method == "pairwise":
+        pairs = list(combinations(range(n_cells), 2))
+        names = [f"{levels[i]} - {levels[j]}" for i, j in pairs]
+        C = np.zeros((len(pairs), n_cells))
+        for k, (i, j) in enumerate(pairs):
+            C[k, i] = 1.0
+            C[k, j] = -1.0
+
+    elif method == "trt.vs.ctrl":
+        ctrl = 0  # first level (sorted order) is control
+        names = [f"{levels[i]} - {levels[ctrl]}" for i in range(1, n_cells)]
+        C = np.zeros((n_cells - 1, n_cells))
+        for k, i in enumerate(range(1, n_cells)):
+            C[k, i] = 1.0
+            C[k, ctrl] = -1.0
+
+    elif isinstance(method, dict):
+        names = list(method.keys())
+        vectors = list(method.values())
+        C = np.array(vectors, dtype=float)
+
+    elif isinstance(method, (list, tuple)):
+        C = np.array(list(method), dtype=float)
+        names = [f"contrast{i + 1}" for i in range(len(C))]
+
+    else:
+        raise ValueError(
+            f"method must be 'pairwise', 'trt.vs.ctrl', a list, or a dict; "
+            f"got {method!r}"
+        )
+
+    # Project: (n_contrasts, p)
+    L_c = C @ L_emm
+
+    # Point estimates
+    beta = np.asarray(model.fe_params)
+    estimates = L_c @ beta
+
+    # Variances and standard errors
+    fe_cov = model.fe_cov
+    var_c = np.einsum("ij,jk,ik->i", L_c, fe_cov, L_c)
+    se = np.sqrt(np.maximum(var_c, 0.0))
+
+    # Satterthwaite DFs for the projected contrasts
+    dfs = _satterthwaite_df_contrasts(model, L_c)
+
+    # t-ratios and p-values
+    t_ratios = np.where(se > 0, estimates / se, np.nan)
+    p_values = 2.0 * (1.0 - stats.t.cdf(np.abs(t_ratios), df=dfs))
+
+    rows = [
+        {
+            "contrast": names[i],
+            "estimate": float(estimates[i]),
+            "SE": float(se[i]),
+            "df": float(dfs[i]),
+            "t.ratio": float(t_ratios[i]),
+            "p.value": float(p_values[i]),
+        }
+        for i in range(len(names))
+    ]
+
+    return pd.DataFrame(
+        rows, columns=["contrast", "estimate", "SE", "df", "t.ratio", "p.value"]
+    )

@@ -18,7 +18,7 @@ from interlace.augment import hlm_augment
 from interlace.convergence import isSingular
 from interlace.cross_val import CVResult as CVResult
 from interlace.cross_val import cross_val as cross_val
-from interlace.emmeans import emmeans
+from interlace.emmeans import EmmResult, contrast, emmeans
 from interlace.formula import (
     groups_to_random_effects,
     parse_formula,
@@ -64,6 +64,8 @@ __all__ = [
     "anova_type2",
     "anova_type3",
     "emmeans",
+    "contrast",
+    "EmmResult",
     "isSingular",
     "CrossedLMEResult",
     # Residuals
