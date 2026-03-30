@@ -126,6 +126,10 @@ class CrossedLMEResult:
     # Original fit() kwargs for update() replay
     _fit_kwargs: dict[str, Any] = field(default_factory=dict, repr=False)
 
+    # GLS-LOO precomputed matrices (Woodbury): W = Z@Lambda (n×q), A11 = I+W'W (q×q)
+    _A11: Any = field(default=None, repr=False)
+    _W: Any = field(default=None, repr=False)
+
     # ------------------------------------------------------------------
     # statsmodels-compatible aliases
     # ------------------------------------------------------------------

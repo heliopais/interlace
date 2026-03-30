@@ -46,6 +46,8 @@ class REMLResult:
     specs: list[RandomEffectSpec] | None = None
     n_levels: list[int] | None = None
     fe_cov: np.ndarray | None = None  # sigma2 * (X'Ω⁻¹X)^{-1}
+    _A11: Any = None  # A11 = I + W'W (q×q sparse) at optimum theta
+    _W: Any = None  # W = Z @ Lambda (n×q sparse) at optimum theta
 
 
 # ---------------------------------------------------------------------------
@@ -428,6 +430,115 @@ def reml_objective(
     return float(log_det_A11 + log_det_MX + (n - p) * np.log(yPy))
 
 
+def reml_gradient(
+    theta: np.ndarray,
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    q_sizes: list[int],
+    _cache: dict[str, np.ndarray | sp.csc_matrix | float] | None = None,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
+) -> np.ndarray:
+    """Analytical gradient of the profiled REML deviance w.r.t. theta.
+
+    Only supported for the diagonal (intercept-only) path.  Raises
+    ``NotImplementedError`` for random-slope specs.
+
+    The gradient decomposes into three terms per theta_k:
+
+        d obj / d theta_k
+            = tr(A11^{-1} dA11_k)               [log|A11| term]
+            + tr(MX^{-1} dMX_k)                 [log|MX|  term]
+            + (n-p)/yPy * d(yPy)/d theta_k      [log(yPy) term]
+
+    Parameters mirror :func:`reml_objective`.
+    """
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
+        msg = "reml_gradient is only implemented for the diagonal (intercept-only) path"
+        raise NotImplementedError(msg)
+
+    if _cache is None:
+        _cache = _precompute(y, X, Z)
+
+    ZtZ = sp.csc_matrix(_cache["ZtZ"])
+    ZtX = np.asarray(_cache["ZtX"])
+    Zty = np.asarray(_cache["Zty"])
+    XtX = np.asarray(_cache["XtX"])
+    Xty = np.asarray(_cache["Xty"])
+    yty = float(_cache["yty"])
+
+    _q_sizes: list[int] = n_levels if specs is not None else q_sizes  # type: ignore[assignment]
+    lambda_diag = make_lambda_diag(theta, _q_sizes)
+    A11 = _build_A11(ZtZ, lambda_diag)
+    lZty = lambda_diag * Zty
+    lZtX = lambda_diag[:, None] * ZtX
+
+    n, p = X.shape
+    q = A11.shape[0]
+
+    c1 = _sparse_solve(A11, lZty)  # A11^{-1} lZty   (q,)
+    C_X = _sparse_solve(A11, lZtX)  # A11^{-1} lZtX   (q, p)
+    MX = XtX - lZtX.T @ C_X  # (p, p)
+    rhs = Xty - lZtX.T @ c1  # (p,)
+    beta_hat = la.solve(MX, rhs, assume_a="pos")
+    yPy = float(yty - lZty @ c1 - rhs @ beta_hat)
+    MX_inv = np.linalg.inv(MX)  # (p, p) small dense inverse
+
+    # Dense A11^{-1} for trace computations; O(q^3) once per gradient call.
+    lu = spla.splu(A11)
+    A11_inv = lu.solve(np.eye(q))  # (q, q)
+
+    # Shared quantities across factors
+    coo = ZtZ.tocoo()
+    ZtZ_csr = ZtZ.tocsr()
+    f = c1 - C_X @ beta_hat  # "BLUP residual" in RE space (q,)
+    lf = lambda_diag * f  # element-wise (q,)
+    Zt_resid = Zty - ZtX @ beta_hat  # Z'(y - X beta_hat) (q,)
+
+    grad = np.zeros(len(theta))
+    q_start = 0
+    for k, q_k in enumerate(_q_sizes):
+        q_end = q_start + q_k
+
+        # dA11/dtheta_k data in the COO sparsity pattern of ZtZ:
+        # dA11[i,j] = ZtZ[i,j] * (e_k[i]*lambda[j] + lambda[i]*e_k[j])
+        ek_row = (coo.row >= q_start) & (coo.row < q_end)
+        ek_col = (coo.col >= q_start) & (coo.col < q_end)
+        dA11_data = coo.data * (
+            ek_row.astype(float) * lambda_diag[coo.col]
+            + lambda_diag[coo.row] * ek_col.astype(float)
+        )
+
+        # Term 1: tr(A11^{-1} dA11_k)
+        # Both matrices symmetric → tr(A·B) = frobenius(A, B) = sum A[i,j]*B[i,j]
+        term1 = float(np.sum(A11_inv[coo.row, coo.col] * dA11_data))
+
+        # Term 2: tr(MX^{-1} dMX_k)
+        # dMX_k = -dB_k' C_X - C_X' dB_k + C_X' dA11_k C_X
+        # tr(MX^{-1} dMX_k) = -2 tr(MX^{-1} C_X' dB_k) + tr(MX^{-1} C_X' dA11_k C_X)
+        # where dB_k = e_k[:,None]*ZtX  →  C_X'dB_k = C_X[idx_k,:]' ZtX[idx_k,:]
+        C_XT_dBk = C_X[q_start:q_end, :].T @ ZtX[q_start:q_end, :]  # (p, p)
+        dA11_sp = sp.csc_matrix((dA11_data, (coo.row, coo.col)), shape=(q, q))
+        dA_CX = dA11_sp @ C_X  # (q, p)
+        C_XT_dA_CX = C_X.T @ dA_CX  # (p, p)
+        term2 = float(
+            -2.0 * np.trace(MX_inv @ C_XT_dBk) + np.trace(MX_inv @ C_XT_dA_CX)
+        )
+
+        # Term 3: (n-p)/yPy · d(yPy)/dtheta_k
+        # d(yPy)/dtheta_k = 2 f[idx_k] · (ZtZ[idx_k,:] lf  −  Zt_resid[idx_k])
+        ZtZ_k_lf = np.asarray(ZtZ_csr[q_start:q_end, :] @ lf).ravel()
+        d_yPy = float(2.0 * f[q_start:q_end] @ (ZtZ_k_lf - Zt_resid[q_start:q_end]))
+        term3 = float((n - p) / yPy * d_yPy)
+
+        grad[k] = term1 + term2 + term3
+        q_start = q_end
+
+    return grad
+
+
 # ---------------------------------------------------------------------------
 # L-BFGS-B optimiser
 # ---------------------------------------------------------------------------
@@ -444,6 +555,7 @@ def fit_reml(
     n_levels: list[int] | None = None,
     optimizer: str = "lbfgsb",
     tight: bool = True,
+    use_gradient: bool = False,
 ) -> REMLResult:
     """Fit a linear mixed model by profiled REML.
 
@@ -514,6 +626,11 @@ def fit_reml(
             theta, y, X, Z, q_sizes, _cache=cache, specs=specs, n_levels=n_levels
         )
 
+    def grad(theta: np.ndarray) -> np.ndarray:
+        return reml_gradient(
+            theta, y, X, Z, q_sizes, _cache=cache, specs=specs, n_levels=n_levels
+        )
+
     if optimizer == "bobyqa":
         import pybobyqa
 
@@ -549,8 +666,9 @@ def fit_reml(
         # maxiter=10 caps expensive outlier refits; maxls=5 limits line-search evals.
         # Together they give ~2× speedup vs default convergence on large n.
         lbfgsb_opts = None if tight else {"maxiter": 10, "maxls": 5}
+        jac = grad if use_gradient else None
         res = opt.minimize(
-            obj, theta0, method="L-BFGS-B", bounds=bounds, options=lbfgsb_opts
+            obj, theta0, method="L-BFGS-B", bounds=bounds, jac=jac, options=lbfgsb_opts
         )
         theta_hat = res.x
         converged = bool(res.success)
@@ -568,12 +686,14 @@ def fit_reml(
         A11 = _build_A11(ZtZ, Lambda)
         lZty = np.asarray(Lambda.T @ Zty).squeeze()
         lZtX = np.asarray(Lambda.T @ ZtX)
+        W_final: sp.csc_matrix = (Z @ Lambda).tocsc()
     else:
         _q_hat = n_levels if specs is not None else q_sizes
         lambda_diag = make_lambda_diag(theta_hat, _q_hat)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, lambda_diag)
         lZty = lambda_diag * Zty
         lZtX = lambda_diag[:, None] * ZtX
+        W_final = (Z @ sp.diags(lambda_diag, format="csc")).tocsc()
 
     c1 = _sparse_solve(A11, lZty)
     C_X = _sparse_solve(A11, lZtX)
@@ -610,6 +730,8 @@ def fit_reml(
         specs=specs,
         n_levels=n_levels,
         fe_cov=fe_cov,
+        _A11=A11,
+        _W=W_final,
     )
 
 

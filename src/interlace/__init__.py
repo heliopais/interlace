@@ -13,10 +13,12 @@ import scipy.stats as stats
 
 from interlace.allfit import AllFitResult, allFit
 from interlace.anova import anova
+from interlace.anova_type import Anova, anova_type2, anova_type3
 from interlace.augment import hlm_augment
 from interlace.convergence import isSingular
 from interlace.cross_val import CVResult as CVResult
 from interlace.cross_val import cross_val as cross_val
+from interlace.emmeans import EmmResult, contrast, emmeans, pairs
 from interlace.formula import (
     groups_to_random_effects,
     parse_formula,
@@ -29,6 +31,7 @@ from interlace.influence import (
     mdffits,
     n_influential,
     ols_dfbetas_qr,
+    ols_influence_measures,
     tau_gap,
 )
 from interlace.leverage import leverage
@@ -57,6 +60,13 @@ __all__ = [
     "allFit",
     "AllFitResult",
     "anova",
+    "Anova",
+    "anova_type2",
+    "anova_type3",
+    "emmeans",
+    "contrast",
+    "pairs",
+    "EmmResult",
     "isSingular",
     "CrossedLMEResult",
     # Residuals
@@ -70,6 +80,7 @@ __all__ = [
     "mdffits",
     "n_influential",
     "ols_dfbetas_qr",
+    "ols_influence_measures",
     "tau_gap",
     # Combined
     "hlm_augment",
@@ -380,6 +391,8 @@ def fit(
         _Z=Z,
         _n_levels=n_levels_list,
         _fit_kwargs=_fit_kwargs,
+        _A11=reml._A11,
+        _W=reml._W,
     )
 
     if isSingular(result):
