@@ -10,7 +10,7 @@ subtrees:
   entries:
   - file: installation
   - file: quickstart
-  - file: examples
+  - file: examples.ipynb
   - file: interpreting-results.ipynb
   - file: diagnostics.ipynb
 - caption: Guides

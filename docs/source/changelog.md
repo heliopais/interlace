@@ -25,7 +25,7 @@ result.is_singular          # True/False
 result.boundary_flags       # {'school_id': False, 'student_id': True}
 ```
 
-`fit()` now issues a `ConvergencWarning` automatically when a boundary fit is
+`fit()` now issues a `ConvergenceWarning` automatically when a boundary fit is
 detected. See the [Variance Inference Guide](variance-inference.md) for
 guidance on what to do when `is_singular` is `True`.
 
