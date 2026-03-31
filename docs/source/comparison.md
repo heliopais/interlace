@@ -1,53 +1,59 @@
 # Feature comparison
 
-This page compares `interlace` with `statsmodels.MixedLM` (Python) and `lme4::lmer()`
-(R) across the features that most often determine library choice.
+This page compares `interlace` with `statsmodels.MixedLM` (Python),
+`linearmodels.RandomEffects` (Python), and `lme4::lmer()` (R) across the features
+that most often determine library choice.
 
 ---
 
 ## At a glance
 
-| Feature | interlace | statsmodels MixedLM | lme4 (R) |
-|---------|:---------:|:-------------------:|:--------:|
-| **Random effect structures** | | | |
-| Single random intercept | ✓ | ✓ | ✓ |
-| Crossed random intercepts | ✓ | Workaround¹ | ✓ |
-| Nested random effects | ✓ *(v0.2.4+)* | ✓ | ✓ |
-| Random slopes | ✓ *(v0.2.1+)* | ✓ | ✓ |
-| Correlated random effects | ✓ *(v0.2.1+)* | ✓ | ✓ |
-| Generalised LMM (Poisson, binomial) | ✗ | ✗² | ✓ (`glmer`) |
-| **Estimation** | | | |
-| REML (default) | ✓ | ✓ | ✓ |
-| ML (for LRT / model comparison) | ✓ | ✓ | ✓ |
-| Profiled REML | ✓ | ✗ | ✓ |
-| **Optimizers** | | | |
-| Default optimizer | L-BFGS-B | L-BFGS-B | BOBYQA |
-| BOBYQA (gradient-free) | ✓ (optional extra) | ✗ | ✓ |
-| Sparse Cholesky | ✓ (optional extra) | ✗ | ✓ (always) |
-| **Formula syntax** | | | |
-| Wilkinson formula for fixed effects | ✓ | ✓ | ✓ |
-| Grouping via `groups=` argument | ✓ | ✓ | — |
-| lme4 `(1\|g)` notation | ✓ (`random=`) | ✗ | ✓ |
-| **Diagnostics** | | | |
-| Residuals (marginal + conditional) | ✓ | Marginal only | Via HLMdiag |
-| Leverage decomposition (H1/H2) | ✓ | ✗ | Via HLMdiag |
-| Cook's distance | ✓ | ✗ | Via HLMdiag |
-| MDFFITS | ✓ | ✗ | Via HLMdiag |
-| COVTRACE / COVRATIO | ✓ | ✗ | Via HLMdiag |
-| Relative variance change (RVC) | ✓ | ✗ | Via HLMdiag |
-| Augmented data frame | ✓ (`hlm_augment`) | ✗ | Via HLMdiag |
-| Cluster-bootstrap SE | ✓ | ✗ | Via `bootMer` |
-| **Output** | | | |
-| Fixed-effect coefficients | ✓ | ✓ | ✓ |
-| Variance components | ✓ | ✓ | ✓ |
-| BLUPs / conditional modes | ✓ | ✓ | ✓ |
-| AIC / BIC | ✓ | ✓ | ✓ |
-| **Numerical parity with lme4** | ✓³ | ✗ | — |
-| **Language** | Python | Python | R |
+| Feature | interlace | statsmodels MixedLM | linearmodels RE | lme4 (R) |
+|---------|:---------:|:-------------------:|:---------------:|:--------:|
+| **Random effect structures** | | | | |
+| Single random intercept | ✓ | ✓ | One-way entity⁴ | ✓ |
+| Crossed random intercepts | ✓ | Workaround¹ | ✗ | ✓ |
+| Nested random effects | ✓ *(v0.2.4+)* | ✓ | ✗ | ✓ |
+| Random slopes | ✓ *(v0.2.1+)* | ✓ | ✗ | ✓ |
+| Correlated random effects | ✓ *(v0.2.1+)* | ✓ | ✗ | ✓ |
+| Generalised LMM (Poisson, binomial) | ✗ | ✗² | ✗ | ✓ (`glmer`) |
+| **Estimation** | | | | |
+| REML (default) | ✓ | ✓ | ✗ (Swamy-Arora⁵) | ✓ |
+| ML (for LRT / model comparison) | ✓ | ✓ | ✗ | ✓ |
+| Profiled REML | ✓ | ✗ | ✗ | ✓ |
+| IV / 2SLS fixed-effects estimator | ✗ | ✗ | ✓ | ✗ |
+| Cluster-robust / HAC standard errors | ✗ | ✗ | ✓ (4 types) | ✗ |
+| **Optimizers** | | | | |
+| Default optimizer | L-BFGS-B | L-BFGS-B | Closed form | BOBYQA |
+| BOBYQA (gradient-free) | ✓ (optional extra) | ✗ | — | ✓ |
+| Sparse Cholesky | ✓ (optional extra) | ✗ | — | ✓ (always) |
+| **Formula syntax** | | | | |
+| Wilkinson formula for fixed effects | ✓ | ✓ | ✓ (formulaic) | ✓ |
+| Grouping via `groups=` argument | ✓ | ✓ | Multi-index DF | — |
+| lme4 `(1\|g)` notation | ✓ (`random=`) | ✗ | ✗ | ✓ |
+| **Diagnostics** | | | | |
+| Residuals (marginal + conditional) | ✓ | Marginal only | Residuals only | Via HLMdiag |
+| Leverage decomposition (H1/H2) | ✓ | ✗ | ✗ | Via HLMdiag |
+| Cook's distance | ✓ | ✗ | ✗ | Via HLMdiag |
+| MDFFITS | ✓ | ✗ | ✗ | Via HLMdiag |
+| COVTRACE / COVRATIO | ✓ | ✗ | ✗ | Via HLMdiag |
+| Relative variance change (RVC) | ✓ | ✗ | ✗ | Via HLMdiag |
+| Augmented data frame | ✓ (`hlm_augment`) | ✗ | ✗ | Via HLMdiag |
+| Cluster-bootstrap SE | ✓ | ✗ | ✗ | Via `bootMer` |
+| **Output** | | | | |
+| Fixed-effect coefficients | ✓ | ✓ | ✓ | ✓ |
+| Variance components | ✓ | ✓ | ✗ (θ only) | ✓ |
+| BLUPs / conditional modes | ✓ | ✓ | ✗ | ✓ |
+| Estimated marginal means (`emmeans`) | ✓ *(v0.2.8+)* | ✗ | ✗ | Via `emmeans` |
+| AIC / BIC | ✓ | ✓ | ✓ | ✓ |
+| **Numerical parity with lme4** | ✓³ | ✗ | ✗ | — |
+| **Language** | Python | Python | Python | R |
 
 ¹ See [statsmodels workaround](#crossed-random-effects-statsmodels-workaround) below.
 ² statsmodels has separate GLM support; mixed GLMs require a different approach.
 ³ Fixed effects within 1e-4 (absolute); variance components within 5% (relative) on standard benchmarks.
+⁴ One-way entity-level random intercept only, using the Swamy-Arora estimator. Requires a multi-index (entity, time) DataFrame.
+⁵ Uses a method-of-moments estimator, not ML or REML. Variance component is not directly comparable to lme4/interlace output.
 
 ---
 
@@ -83,6 +89,34 @@ path by default and a sparse path when `scikit-sparse` is installed
 fast enough; for models with thousands of group levels the sparse path can be
 substantially faster. See [FAQ: Solver choice](faq.md#solver-choice-cholmod-vs-default).
 
+### linearmodels — panel econometrics, not LMM
+
+[`linearmodels`](https://bashtage.github.io/linearmodels/) is a panel-data and
+instrumental-variables econometrics library, not a general-purpose linear mixed model
+package. The distinction matters:
+
+| Dimension | interlace | linearmodels |
+|---|---|---|
+| **Data structure** | Flat DataFrame with grouping columns | Multi-index (entity, time) DataFrame |
+| **Random effect** | Crossed/nested intercepts and slopes via REML | One-way entity intercept (Swamy-Arora) |
+| **Estimation** | Profiled REML or ML | Closed-form moments estimator |
+| **Primary use cases** | Psycholinguistics, social science, medicine | Macroeconomics, finance, policy evaluation |
+| **IV / 2SLS** | ✗ | ✓ (`IV2SLS`, `IVLIML`, `IVGMM`) |
+| **System estimators** | ✗ | ✓ (`SUR`, `IV3SLS`) |
+| **Clustered / HAC SEs** | ✗ | ✓ (4 covariance types) |
+
+Use `linearmodels.RandomEffects` when:
+- Your data has a two-dimensional panel structure (entities × time periods).
+- You need IV/2SLS or system estimators alongside the RE model.
+- You need cluster-robust or Driscoll-Kraay HAC standard errors.
+- The econometric one-way RE assumption (individual effect uncorrelated with regressors) is acceptable.
+
+Use `interlace` (or `lme4`) when:
+- Your data has **crossed** random effects (e.g. subjects × stimuli).
+- You need REML variance components that are numerically equivalent to lme4.
+- You need random slopes, nested designs, or profile-likelihood CIs on variance parameters.
+- You need a built-in diagnostics suite (Cook's D, leverage, MDFFITS, …).
+
 ### Diagnostics
 
 `lme4` has no built-in diagnostics — users rely on the R package
@@ -106,6 +140,9 @@ For generalised outcomes (Poisson, binomial), use `statsmodels` or `lme4`.
 | Need lme4 numerical parity from Python | **interlace** |
 | Need built-in diagnostics in Python | **interlace** |
 | Random slopes or nested designs in Python | **interlace** *(v0.2.1+ / v0.2.4+)* or statsmodels MixedLM |
+| One-way entity RE with panel (entity × time) data | **linearmodels** |
+| Need IV/2SLS, SUR, or IV3SLS alongside RE | **linearmodels** |
+| Need clustered or Driscoll-Kraay HAC SEs | **linearmodels** |
 | GLMM (Poisson, binomial) | lme4 (R) or statsmodels GLM |
 | Full lme4 feature set | lme4 (R) |
 
@@ -117,3 +154,4 @@ For generalised outcomes (Poisson, binomial), use `statsmodels` or `lme4`.
 - [For R / lme4 users](why-r.md) — formula syntax mapping and shared references
 - [FAQ](faq.md) — solver and optimizer guidance, convergence troubleshooting
 - [Diagnostics guide](diagnostics.ipynb) — using the built-in diagnostic suite
+- [linearmodels documentation](https://bashtage.github.io/linearmodels/) — panel RE, IV, SUR, and GMM estimators
