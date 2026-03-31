@@ -59,7 +59,7 @@ def _full_params(
         beta = model.fe_params
         p = len(np.asarray(beta))
         V = model.fe_cov
-        group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
+        group_cols = [model._primary_group_col] + model._secondary_group_cols
         theta_vals: list[float] = []
         theta_names_list: list[str] = []
         for col in group_cols:
@@ -99,15 +99,15 @@ def _refit(model: Any, data_i: Any) -> Any:
             random_strs = [spec_to_str(s) for s in specs]
             return interlace.fit(model.model.formula, data_i, random=random_strs)
         else:
-            group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
+            group_cols = [model._primary_group_col] + model._secondary_group_cols
             groups_arg = group_cols[0] if len(group_cols) == 1 else group_cols
             return interlace.fit(model.model.formula, data_i, groups=groups_arg)
     else:
         model_i = model.model.__class__.from_formula(
             model.model.formula,
             data=data_i,
-            groups=np.asarray(data_i[model._gpgap_group_col])
-            if hasattr(model, "_gpgap_group_col")
+            groups=np.asarray(data_i[model._primary_group_col])
+            if hasattr(model, "_primary_group_col")
             else model.model.groups[data_i.index],
         )
         return model_i.fit(reml=model.method == "REML")
@@ -122,7 +122,7 @@ def _reduced_params(
     if _is_crossed(model_i):
         beta_i = model_i.fe_params
         Vi = model_i.fe_cov
-        group_cols = [model_i._gpgap_group_col] + model_i._gpgap_vc_cols
+        group_cols = [model_i._primary_group_col] + model_i._secondary_group_cols
         theta_vals_i: list[float] = []
         for col in group_cols:
             vals, _ = _vc_to_scalars(model_i.variance_components[col], col)
@@ -142,7 +142,7 @@ def _refit_groups_arg(model: Any) -> Any:
     """Return the groups argument string/list for interlace.fit refits."""
     if not _is_crossed(model):
         return None
-    group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
+    group_cols = [model._primary_group_col] + model._secondary_group_cols
     return group_cols[0] if len(group_cols) == 1 else group_cols
 
 
@@ -331,7 +331,7 @@ def hlm_influence(
     n_rows = len(nw_data)
 
     groups = (
-        nw_data[model._gpgap_group_col].to_numpy()
+        nw_data[model._primary_group_col].to_numpy()
         if _is_crossed(model)
         else model.model.groups
     )
@@ -365,7 +365,7 @@ def hlm_influence(
         from interlace.sparse_z import build_joint_z_from_specs as _build_z
 
         _cc_specs = getattr(model, "_random_specs", [])
-        _cc_group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
+        _cc_group_cols = [model._primary_group_col] + model._secondary_group_cols
         _cc_n_levels = [model.ngroups[col] for col in _cc_group_cols]
         _cc = {
             "specs": _cc_specs,
@@ -467,7 +467,7 @@ def hlm_influence(
                             optimizer=optimizer,
                             tight=False,
                         )
-                    elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
+                    elif optimizer != "lbfgsb" and hasattr(model, "_primary_group_col"):
                         # statsmodels bobyqa path — re-route through interlace.
                         if level == 1:
                             nw_before = nw_data[:i]
@@ -490,7 +490,7 @@ def hlm_influence(
                         model_i = interlace.fit(
                             model.model.formula,
                             data_i,
-                            groups=model._gpgap_group_col,
+                            groups=model._primary_group_col,
                             optimizer=optimizer,
                         )
                         beta_i, Vi, theta_i = _reduced_params(model_i, p, theta_names)
@@ -871,7 +871,7 @@ def lmer_influence_measures(
 
     # R uses leverage.overall for single-RE and falls back to hat_fixef for
     # crossed multi-RE (HLMdiag can't compute overall leverage for crossed RE).
-    truly_crossed = _is_crossed(model) and len(getattr(model, "_gpgap_vc_cols", [])) > 0
+    truly_crossed = _is_crossed(model) and len(getattr(model, "_secondary_group_cols", [])) > 0
     hat_for_flag = hat_fixef if truly_crossed else hat_overall
 
     # --- DFBETAS: analytical from fixed-effects design matrix (same as R) ---

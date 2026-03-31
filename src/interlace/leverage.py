@@ -44,7 +44,7 @@ def _crossed_structures(
         from interlace.formula import groups_to_random_effects
 
         specs = groups_to_random_effects(
-            [model._gpgap_group_col] + model._gpgap_vc_cols
+            [model._primary_group_col] + model._secondary_group_cols
         )
 
     primary_col = specs[0].group
@@ -131,7 +131,7 @@ def leverage(model: Any, level: int = 1) -> Any:  # noqa: ARG001
     n = X.shape[0]
     scale = model.scale
 
-    truly_crossed = _is_crossed(model) and len(model._gpgap_vc_cols) > 0
+    truly_crossed = _is_crossed(model) and len(model._secondary_group_cols) > 0
 
     if truly_crossed:
         # For crossed RE (≥2 grouping factors), V is NOT block-diagonal by the

@@ -113,8 +113,8 @@ class CrossedLMEResult:
     nparams: int  # p (FE) + n_theta (RE variances) + 1 (sigma²)
 
     # caller-specified group column names (set at fit time)
-    _gpgap_group_col: str
-    _gpgap_vc_cols: list[str] = field(default_factory=list)
+    _primary_group_col: str
+    _secondary_group_cols: list[str] = field(default_factory=list)
 
     # Random effect specs — stored so diagnostics can reconstruct random= for refits
     _random_specs: list[Any] = field(default_factory=list)
