@@ -10,7 +10,7 @@ Pure-Python profiled REML estimation for linear mixed models with **crossed rand
 
 Designed as a drop-in replacement for `statsmodels.MixedLM` in diagnostics pipelines that require crossed grouping factors (e.g. `(1|worker) + (1|company)`), which statsmodels does not support.
 
-**Scope:** interlace fits models with random intercepts only — it does not support random slopes, generalised outcomes (GLMM), or nested random effects with `/` syntax. For those cases, use R's `lme4` directly or a Python GLMM library.
+**Scope:** interlace fits linear mixed models with crossed random intercepts and random slopes. It does not support generalised outcomes (GLMM) or nested random effects with `/` syntax. For those cases, use R's `lme4` directly or a Python GLMM library.
 
 ## Installation
 
