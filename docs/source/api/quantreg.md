@@ -70,9 +70,16 @@ or QR-based DFBETAS on their own quantile regression fits.
 .. autofunction:: interlace.ols_dfbetas_qr
 ```
 
-These functions replicate the behaviour of R's `quantreg::summary.rq(se="ker")`
-and the DFBETAS diagnostic from `car::dfbetas()`. They are used internally by
-`hlm_influence()` and `lmer_influence_measures()`.
+`quantreg_ker_se` replicates R's `quantreg::summary.rq(se="ker")` using the
+Hendricks-Koenker Gaussian kernel sandwich estimator:
+
+1. Compute data-scale bandwidth `h_data = (Φ⁻¹(τ+h) − Φ⁻¹(τ−h)) × min(σ̂, IQR/1.34)`
+   where `h` is the Hall-Sheather or Bofinger quantile bandwidth.
+2. Estimate per-observation density `fᵢ = φ(rᵢ / h_data) / h_data`.
+3. Form sandwich covariance `Cov(β̂) = τ(1−τ) × (X'diag(f)X)⁻¹ X'X (X'diag(f)X)⁻¹`.
+
+`ols_dfbetas_qr` replicates the DFBETAS diagnostic from `car::dfbetas()`.
+Both are used internally by `hlm_influence()` and `lmer_influence_measures()`.
 
 ## See also
 

@@ -31,6 +31,18 @@ lev_high = lev[lev["overall"] > 2 * p / n]
 print(f"{len(lev_high)} high-leverage observations")
 ```
 
+## Structure helpers
+
+These functions extract the model structures needed to dispatch leverage
+computation to the correct code path. They are part of the stable public API
+and are used by downstream consumers (e.g. `gpgap`) to inspect model layout.
+
+```{eval-rst}
+.. autofunction:: interlace.crossed_structures
+
+.. autofunction:: interlace.statsmodels_structures
+```
+
 ## See also
 
 - {doc}`influence` — Cook's distance and MDFFITS (impact on estimates, not just fit)

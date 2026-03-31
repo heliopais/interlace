@@ -97,13 +97,14 @@ lev = leverage(result)  # array of hat-matrix diagonal values
 ### Influence diagnostics
 
 ```python
-from interlace import hlm_influence, cooks_distance, mdffits, n_influential, tau_gap
+from interlace import hlm_influence, cooks_distance, mdffits, n_influential
 
 infl = hlm_influence(result, level=1)   # Cook's D, MDFFITS, COVTRACE, COVRATIO, RVC per obs
 
 # Scalar summaries
 n = n_influential(result)   # count of high-influence observations
-gap = tau_gap(result)        # gap statistic between influential and non-influential groups
+
+# Note: tau_gap() moved to gpgap.diagnostics.tau_gap() in v0.2.9
 ```
 
 ### Combined augment

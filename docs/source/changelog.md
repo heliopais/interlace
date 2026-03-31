@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.2.9 — upcoming
+
+### Breaking changes
+
+**`tau_gap()` removed** — `tau_gap()` is a GPG-domain metric (`|Δτ|` for
+random-effect standard deviations) and does not belong in the generic interlace
+LMM library. It has been removed from `interlace.influence` and
+`interlace.__init__`. Use `gpgap.diagnostics.tau_gap()` instead.
+
+**`_gpgap_group_col` / `_gpgap_vc_cols` renamed** — The internal `LMEResult`
+attributes `_gpgap_group_col` and `_gpgap_vc_cols` have been renamed to
+`_primary_group_col` and `_secondary_group_cols` to remove domain-specific
+naming from the generic library. Update any downstream code that accessed these
+attributes directly.
+
+### New public API
+
+**`crossed_structures()` and `statsmodels_structures()`** — These helper
+functions were promoted from private to public API. They extract the model
+structures needed to dispatch leverage computation to the correct code path and
+are part of the stable `interlace` namespace.
+
+### `OLSResult` — new properties
+
+`OLSResult` gains two properties that match the `statsmodels` OLS API:
+
+- `df_resid` — residual degrees of freedom: `n − p`
+- `mse_resid` — mean squared error of residuals: `RSS / df_resid`
+
+### `quantreg_ker_se()` — corrected Gaussian kernel estimator
+
+`quantreg_ker_se()` now correctly implements the Hendricks-Koenker Gaussian
+kernel sandwich estimator, matching R's `summary.rq(se="ker")` within 2% on
+test data. The previous implementation used a simpler sparsity estimator that
+did not match R. The bandwidth computation, density estimation, and sandwich
+covariance assembly have all been corrected.
+
+---
+
 ## v0.2.8 — upcoming
 
 ### `emmeans()` — estimated marginal means

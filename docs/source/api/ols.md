@@ -21,6 +21,8 @@ Accepts any narwhals-compatible DataFrame (pandas, polars, …).
 | `model.exog_names` | `list[str]` | Column names from the formula |
 | `model.formula` | `str` | Original formula string |
 | `model.data.frame` | native frame | Original data as passed by the caller |
+| `df_resid` | `float` | Residual degrees of freedom: `n − p`, matching statsmodels |
+| `mse_resid` | `float` | Mean squared error of residuals: `RSS / df_resid`, matching statsmodels |
 
 ## OLSResult methods
 

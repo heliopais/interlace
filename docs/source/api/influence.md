@@ -27,8 +27,11 @@ All functions accept both `CrossedLMEResult` and `statsmodels.MixedLMResults`.
 .. autofunction:: interlace.mdffits
 
 .. autofunction:: interlace.n_influential
+```
 
-.. autofunction:: interlace.tau_gap
+```{note}
+`tau_gap()` was removed from interlace in v0.2.9. It is a GPG-domain metric
+and has moved to `gpgap.diagnostics.tau_gap()`.
 ```
 
 ## Example
