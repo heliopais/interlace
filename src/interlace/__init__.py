@@ -33,7 +33,7 @@ from interlace.influence import (
     ols_dfbetas_qr,
     ols_influence_measures,
 )
-from interlace.leverage import leverage
+from interlace.leverage import crossed_structures, leverage, statsmodels_structures
 from interlace.ols import OLSResult, ols
 from interlace.plotting import dotplot_diag, plot_influence, plot_resid
 from interlace.profiled_reml import (
@@ -73,6 +73,8 @@ __all__ = [
     "hlm_resid",
     # Leverage
     "leverage",
+    "crossed_structures",
+    "statsmodels_structures",
     # Influence diagnostics
     "hlm_influence",
     "lmer_influence_measures",

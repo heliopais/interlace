@@ -26,7 +26,7 @@ def _is_crossed(model: Any) -> bool:
     return isinstance(model, CrossedLMEResult)
 
 
-def _crossed_structures(
+def crossed_structures(
     model: CrossedLMEResult,
 ) -> tuple[np.ndarray, list[Any], list[np.ndarray], np.ndarray]:
     """Extract (groups, group_labels, exog_re_li, D) from a CrossedLMEResult.
@@ -99,7 +99,7 @@ def _crossed_structures(
     return groups, group_labels, exog_re_li, D
 
 
-def _statsmodels_structures(model: Any) -> tuple[Any, Any, Any, Any, Any]:
+def statsmodels_structures(model: Any) -> tuple[Any, Any, Any, Any, Any]:
     """Extract leverage structures from a statsmodels MixedLMResults object."""
     cov_fe = model.cov_params().iloc[: model.k_fe, : model.k_fe].values
     D = model.cov_re.values
@@ -151,9 +151,9 @@ def leverage(model: Any, level: int = 1) -> Any:  # noqa: ARG001
 
     if _is_crossed(model):
         cov_fe = model.fe_cov
-        groups, group_labels, exog_re_li, D = _crossed_structures(model)
+        groups, group_labels, exog_re_li, D = crossed_structures(model)
     else:
-        groups, group_labels, exog_re_li, D, cov_fe = _statsmodels_structures(model)
+        groups, group_labels, exog_re_li, D, cov_fe = statsmodels_structures(model)
 
     h1 = np.zeros(n)
     h2 = np.zeros(n)
