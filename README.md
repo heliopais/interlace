@@ -10,7 +10,7 @@ Pure-Python profiled REML estimation for linear mixed models with **crossed rand
 
 Designed as a drop-in replacement for `statsmodels.MixedLM` in diagnostics pipelines that require crossed grouping factors (e.g. `(1|worker) + (1|company)`), which statsmodels does not support.
 
-**Scope:** interlace fits models with random intercepts only — it does not support random slopes, generalised outcomes (GLMM), or nested random effects with `/` syntax. For those cases, use R's `lme4` directly or a Python GLMM library.
+**Scope:** interlace fits linear mixed models with crossed random intercepts and random slopes. It does not support generalised outcomes (GLMM) or nested random effects with `/` syntax. For those cases, use R's `lme4` directly or a Python GLMM library.
 
 ## Installation
 
@@ -97,13 +97,14 @@ lev = leverage(result)  # array of hat-matrix diagonal values
 ### Influence diagnostics
 
 ```python
-from interlace import hlm_influence, cooks_distance, mdffits, n_influential, tau_gap
+from interlace import hlm_influence, cooks_distance, mdffits, n_influential
 
 infl = hlm_influence(result, level=1)   # Cook's D, MDFFITS, COVTRACE, COVRATIO, RVC per obs
 
 # Scalar summaries
 n = n_influential(result)   # count of high-influence observations
-gap = tau_gap(result)        # gap statistic between influential and non-influential groups
+
+# Note: tau_gap() moved to gpgap.diagnostics.tau_gap() in v0.2.9
 ```
 
 ### Combined augment

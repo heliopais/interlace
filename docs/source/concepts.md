@@ -149,8 +149,9 @@ The same pattern appears in many applied settings:
 - **E-commerce:** customers purchasing across product categories, where a transaction
   reflects both customer propensity and category-level demand
 
-`interlace` targets crossed designs. For nested designs, `statsmodels.MixedLM` is the
-right tool. See [For Python users](why-python.md) for a side-by-side comparison.
+`interlace` targets crossed designs with random intercepts and random slopes. For nested
+designs or generalised outcomes (GLMM), `statsmodels.MixedLM` or R's `lme4` are the
+right tools. See [For Python users](why-python.md) for a side-by-side comparison.
 
 ---
 
