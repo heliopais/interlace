@@ -1,19 +1,17 @@
 # Changelog
 
-## v0.2.9 — upcoming
+## v0.2.8 — 2026-03-31
 
 ### Breaking changes
 
-**`tau_gap()` removed** — `tau_gap()` is a GPG-domain metric (`|Δτ|` for
-random-effect standard deviations) and does not belong in the generic interlace
-LMM library. It has been removed from `interlace.influence` and
-`interlace.__init__`. Use `gpgap.diagnostics.tau_gap()` instead.
+**`tau_gap()` removed** — `tau_gap()` is a domain-specific metric and has been
+removed from `interlace.influence` and `interlace.__init__`. If you relied on
+it, please use the equivalent function from the appropriate downstream package.
 
-**`_gpgap_group_col` / `_gpgap_vc_cols` renamed** — The internal `LMEResult`
-attributes `_gpgap_group_col` and `_gpgap_vc_cols` have been renamed to
-`_primary_group_col` and `_secondary_group_cols` to remove domain-specific
-naming from the generic library. Update any downstream code that accessed these
-attributes directly.
+**Internal attributes renamed** — `_primary_group_col` and
+`_secondary_group_cols` are now the canonical attribute names on `LMEResult`
+for the primary and secondary grouping factors. Update any downstream code that
+accessed the previous internal names directly.
 
 ### New public API
 
@@ -36,10 +34,6 @@ kernel sandwich estimator, matching R's `summary.rq(se="ker")` within 2% on
 test data. The previous implementation used a simpler sparsity estimator that
 did not match R. The bandwidth computation, density estimation, and sandwich
 covariance assembly have all been corrected.
-
----
-
-## v0.2.8 — upcoming
 
 ### `emmeans()` — estimated marginal means
 
