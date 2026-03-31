@@ -777,7 +777,7 @@ def lmer_influence_measures(
     Matches R's HLMdiag convention.
     This combines case-deletion Cook's D / mdffits (via :func:`hlm_influence`)
     with analytical leverage and DFBETAS — exactly mirroring R's
-    ``gpgap::compute_influence_lmer`` which calls ``HLMdiag::hlm_influence``.
+    ``HLMdiag::hlm_influence``.
 
     Parameters
     ----------

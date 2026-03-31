@@ -1,7 +1,7 @@
 """CrossedLMEResult and ModelInfo dataclasses.
 
 CrossedLMEResult is a drop-in replacement for statsmodels MixedLMResults,
-exposing all attributes accessed by the gpgap diagnostics pipeline.
+exposing the standard LMM diagnostics interface.
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ class CrossedLMEResult:
     """Result of a profiled REML fit for crossed random intercepts.
 
     Attribute names and structure mirror statsmodels MixedLMResults so that
-    this object is a drop-in replacement for the gpgap diagnostics pipeline.
+    this object is a drop-in replacement.
     """
 
     # Fixed effects
@@ -112,7 +112,7 @@ class CrossedLMEResult:
     bic: float
     nparams: int  # p (FE) + n_theta (RE variances) + 1 (sigma²)
 
-    # gpgap compatibility
+    # caller-specified group column names (set at fit time)
     _gpgap_group_col: str
     _gpgap_vc_cols: list[str] = field(default_factory=list)
 
@@ -264,7 +264,7 @@ class CrossedLMEResult:
             ``"group"`` (default) resamples grouping-factor levels with
             replacement, then includes all observations from the sampled
             groups — matching R's ``boot`` package cluster bootstrap used in
-            the ``gpgap`` reference implementation.  ``"observation"``
+            the R ``boot`` cluster bootstrap convention.  ``"observation"``
             resamples individual observations; this underestimates the SE
             when group variance is substantial.
         seed:

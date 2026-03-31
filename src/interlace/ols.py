@@ -38,8 +38,8 @@ class _OLSModelInfo:
 class OLSResult:
     """Result of an OLS fit via formulaic + numpy.
 
-    Attributes match the statsmodels OLS interface used in gpgap so that this
-    is a drop-in replacement.
+    Attributes match the statsmodels OLS interface so that this is a
+    drop-in replacement.
     """
 
     def __init__(
@@ -128,7 +128,7 @@ def ols(formula: str, data: Any) -> OLSResult:
     Returns
     -------
     OLSResult
-        Drop-in replacement for statsmodels OLS results used in gpgap.
+        Drop-in replacement for statsmodels OLS results.
     """
     nw_data = nw.from_native(data, eager_only=True)
 
