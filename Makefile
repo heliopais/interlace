@@ -2,6 +2,7 @@
 
 install:
 	uv sync --group dev
+	git config core.hooksPath .githooks
 
 test:
 	uv run pytest
