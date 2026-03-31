@@ -223,18 +223,18 @@ class TestCrossedRE:
 
 
 class TestStatsmodelsCompat:
-    def test_gpgap_group_col(self, simple_df: pd.DataFrame) -> None:
+    def test_primary_group_col(self, simple_df: pd.DataFrame) -> None:
         result = fit("y ~ x1", simple_df, groups="group")
-        assert result._gpgap_group_col == "group"
+        assert result._primary_group_col == "group"
 
-    def test_gpgap_vc_cols_single(self, simple_df: pd.DataFrame) -> None:
+    def test_secondary_group_cols_single(self, simple_df: pd.DataFrame) -> None:
         result = fit("y ~ x1", simple_df, groups="group")
-        assert result._gpgap_vc_cols == []
+        assert result._secondary_group_cols == []
 
-    def test_gpgap_vc_cols_crossed(self, crossed_df: pd.DataFrame) -> None:
+    def test_secondary_group_cols_crossed(self, crossed_df: pd.DataFrame) -> None:
         result = fit("y ~ x1", crossed_df, groups=["firm", "dept"])
-        assert result._gpgap_group_col == "firm"
-        assert result._gpgap_vc_cols == ["dept"]
+        assert result._primary_group_col == "firm"
+        assert result._secondary_group_cols == ["dept"]
 
     def test_model_groups_attr(self, simple_df: pd.DataFrame) -> None:
         result = fit("y ~ x1", simple_df, groups="group")
