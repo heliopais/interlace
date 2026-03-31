@@ -1,7 +1,7 @@
 # ols
 
 Ordinary least squares fitting with formulaic design matrices and HC3 robust standard errors.
-Statsmodels-free drop-in replacement for `statsmodels.OLS` used in the gpgap pipeline.
+Statsmodels-free drop-in replacement for `statsmodels.OLS`.
 Accepts any narwhals-compatible DataFrame (pandas, polars, …).
 
 ```{eval-rst}
@@ -50,12 +50,12 @@ Returns `np.ndarray` of shape `(n_new,)`.
 ```python
 import interlace
 
-result = interlace.ols("salary ~ experience + education", data=df)
+result = interlace.ols("score ~ age + education", data=df)
 
 print(result.params)
-# Intercept      25000.0
-# experience      1800.5
-# education       3200.1
+# Intercept    50.0
+# age            1.5
+# education      3.2
 # dtype: float64
 ```
 
@@ -72,7 +72,7 @@ print(pd.Series(se, index=result.params.index))
 ```python
 import pandas as pd
 
-new_df = pd.DataFrame({"experience": [5, 10], "education": [16, 18]})
+new_df = pd.DataFrame({"age": [30, 40], "education": [16, 18]})
 preds = result.predict(new_df)
 ```
 
@@ -82,7 +82,7 @@ preds = result.predict(new_df)
 import polars as pl
 
 df_pl = pl.from_pandas(df)
-result = interlace.ols("salary ~ experience + education", data=df_pl)
+result = interlace.ols("score ~ age + education", data=df_pl)
 ```
 
 ## See also

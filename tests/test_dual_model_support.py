@@ -70,7 +70,6 @@ def test_n_influential_both_types(model_fixture, sm, il):
     assert isinstance(n_influential(model), int)
 
 
-
 @pytest.mark.parametrize("model_fixture", ["sm", "il"])
 def test_hlm_augment_both_types(model_fixture, sm, il):
     model = sm if model_fixture == "sm" else il

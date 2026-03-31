@@ -138,9 +138,9 @@ def test_mdffits_wrapper(models, data):
 
 @pytest.fixture(scope="module")
 def sm_with_group_col(data):
-    """MixedLMResults with _gpgap_group_col set (as gpgap pipeline does)."""
+    """MixedLMResults with _primary_group_col set."""
     sm = MixedLM.from_formula("y ~ x", groups="group", data=data).fit(reml=True)
-    sm._gpgap_group_col = "group"
+    sm._primary_group_col = "group"
     return sm
 
 

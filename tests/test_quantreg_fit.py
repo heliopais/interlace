@@ -1,6 +1,6 @@
 """Tests for interlace.quantreg(): LP-based quantile regression.
 
-Acceptance criteria (gpg-package-ig1):
+Acceptance criteria:
   - params coefficients match statsmodels QuantReg to 8 sig figs
   - ker_se() delegates to quantreg_ker_se() and returns same values
   - Works with Polars DataFrames natively

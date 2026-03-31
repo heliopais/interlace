@@ -871,7 +871,9 @@ def lmer_influence_measures(
 
     # R uses leverage.overall for single-RE and falls back to hat_fixef for
     # crossed multi-RE (HLMdiag can't compute overall leverage for crossed RE).
-    truly_crossed = _is_crossed(model) and len(getattr(model, "_secondary_group_cols", [])) > 0
+    truly_crossed = (
+        _is_crossed(model) and len(getattr(model, "_secondary_group_cols", [])) > 0
+    )
     hat_for_flag = hat_fixef if truly_crossed else hat_overall
 
     # --- DFBETAS: analytical from fixed-effects design matrix (same as R) ---

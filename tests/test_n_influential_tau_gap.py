@@ -1,7 +1,5 @@
 """Tests for n_influential metric.
 
-Note: tau_gap() has been moved to gpgap.diagnostics (GPG domain package).
-
 Acceptance criteria:
   - n_influential returns non-negative int
   - Default threshold is 4/n
@@ -84,5 +82,3 @@ def test_n_influential_decreases_with_higher_threshold(models):
         low = n_influential(model, threshold=0.01)
         high = n_influential(model, threshold=1.0)
         assert low >= high
-
-

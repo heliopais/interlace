@@ -37,12 +37,12 @@ Returns `np.ndarray` of shape `(n_new,)`.
 import interlace
 
 # Median regression (tau=0.5)
-result = interlace.quantreg("salary ~ experience + education", data=df)
+result = interlace.quantreg("score ~ age + education", data=df)
 print(result.params)
 print(result.tau)   # 0.5
 
 # 90th percentile regression
-result_90 = interlace.quantreg("salary ~ experience + education", data=df, tau=0.9)
+result_90 = interlace.quantreg("score ~ age + education", data=df, tau=0.9)
 
 # Kernel standard errors
 se = result.ker_se()           # Hall-Sheather bandwidth
@@ -50,7 +50,7 @@ se_bof = result.ker_se(hs=False)  # Bofinger bandwidth
 
 # Prediction
 import pandas as pd
-new_df = pd.DataFrame({"experience": [5, 10], "education": [16, 18]})
+new_df = pd.DataFrame({"age": [30, 40], "education": [16, 18]})
 preds = result.predict(new_df)
 ```
 

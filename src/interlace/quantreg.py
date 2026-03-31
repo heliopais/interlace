@@ -122,9 +122,12 @@ def quantreg_ker_se(
     # Step 2: convert quantile bandwidth to data-scale bandwidth
     # h_data = (Φ^{-1}(τ+h_q) - Φ^{-1}(τ-h_q)) * min(σ_hat, IQR/1.34)
     std_scale = float(np.std(residuals, ddof=1))
-    iqr_scale = float((np.quantile(residuals, 0.75) - np.quantile(residuals, 0.25)) / 1.34)
+    iqr_scale = float(
+        (np.quantile(residuals, 0.75) - np.quantile(residuals, 0.25)) / 1.34
+    )
     h_data = float(
-        (stats.norm.ppf(tau + h_q) - stats.norm.ppf(tau - h_q)) * min(std_scale, iqr_scale)
+        (stats.norm.ppf(tau + h_q) - stats.norm.ppf(tau - h_q))
+        * min(std_scale, iqr_scale)
     )
 
     # Step 3: Gaussian kernel density at each residual: f_i = φ(u_i/h) / h

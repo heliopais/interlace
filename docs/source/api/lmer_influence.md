@@ -1,6 +1,6 @@
 # lmer_influence_measures
 
-Combined influence measures matching R's `gpgap::compute_influence_lmer` / `HLMdiag::hlm_influence`.
+Combined influence measures matching R's `HLMdiag::hlm_influence`.
 Returns Cook's D, leverage, DFBETAS, and MDFFITS for every observation.
 
 ```{eval-rst}

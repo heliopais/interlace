@@ -148,12 +148,12 @@ Both accept any narwhals-compatible DataFrame (pandas, polars, …).
 
 ```python
 # OLS with HC3 robust standard errors
-ols_result = interlace.ols("salary ~ experience + education", data=df)
+ols_result = interlace.ols("score ~ age + education", data=df)
 print(ols_result.params)
 se_hc3 = ols_result.hc3_bse()        # HC3 SEs, matches statsmodels to 6 sig figs
 
 # Quantile regression via HiGHS LP solver
-qr = interlace.quantreg("salary ~ experience + education", data=df, tau=0.9)
+qr = interlace.quantreg("score ~ age + education", data=df, tau=0.9)
 print(qr.params)
 se_ker = qr.ker_se()                  # Hall-Sheather kernel SEs
 ```
@@ -598,7 +598,7 @@ cd   = cooks_distance(model, optimizer="bobyqa")
 **Single-RE statsmodels routing**
 
 When `optimizer="bobyqa"` is passed to any influence function and the
-model is a statsmodels `MixedLMResults` with `_gpgap_group_col` set,
+model is a statsmodels `MixedLMResults` with `_primary_group_col` set,
 case-deletion refits are routed through interlace's own REML fitter
 (instead of statsmodels). This ensures BOBYQA is used end-to-end rather
 than only for crossed-RE models.

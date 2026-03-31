@@ -1,7 +1,5 @@
 """Acceptance tests: n_influential parity.
 
-Note: tau_gap() has been moved to gpgap.diagnostics (GPG domain package).
-
 We use statsmodels MixedLM as the R-validated reference (parity with R lme4
 is already established in test_parity_single_re.py).  Criteria:
 
@@ -81,5 +79,3 @@ def test_n_influential_custom_threshold_parity(models_single_re, single_re_data)
                 f"threshold={threshold}: n_influential rel_diff={rel_diff:.2%} "
                 f"(il={n_il}, sm={n_sm})"
             )
-
-

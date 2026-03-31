@@ -1,6 +1,6 @@
 """Tests for interlace.ols(): formulaic-based OLS with HC3 robust SE.
 
-Acceptance criteria (gpg-package-hs7):
+Acceptance criteria:
   - params coefficients match numpy lstsq
   - hc3_bse() matches statsmodels get_robustcov_results('HC3').bse to 6 sig figs
   - predict(new_data) correctly evaluates formula on out-of-sample data
