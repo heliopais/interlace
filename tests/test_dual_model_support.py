@@ -11,7 +11,7 @@ from statsmodels.regression.mixed_linear_model import MixedLM
 
 import interlace
 from interlace.augment import hlm_augment
-from interlace.influence import hlm_influence, n_influential, tau_gap
+from interlace.influence import hlm_influence, n_influential
 from interlace.leverage import leverage
 from interlace.plotting import dotplot_diag, plot_influence, plot_resid
 from interlace.residuals import hlm_resid
@@ -69,12 +69,6 @@ def test_n_influential_both_types(model_fixture, sm, il):
     model = sm if model_fixture == "sm" else il
     assert isinstance(n_influential(model), int)
 
-
-@pytest.mark.parametrize("model_fixture", ["sm", "il"])
-def test_tau_gap_both_types(model_fixture, sm, il):
-    model = sm if model_fixture == "sm" else il
-    result = tau_gap(model)
-    assert isinstance(result, dict)
 
 
 @pytest.mark.parametrize("model_fixture", ["sm", "il"])

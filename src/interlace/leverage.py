@@ -26,7 +26,7 @@ def _is_crossed(model: Any) -> bool:
     return isinstance(model, CrossedLMEResult)
 
 
-def _crossed_structures(
+def crossed_structures(
     model: CrossedLMEResult,
 ) -> tuple[np.ndarray, list[Any], list[np.ndarray], np.ndarray]:
     """Extract (groups, group_labels, exog_re_li, D) from a CrossedLMEResult.
@@ -44,7 +44,7 @@ def _crossed_structures(
         from interlace.formula import groups_to_random_effects
 
         specs = groups_to_random_effects(
-            [model._gpgap_group_col] + model._gpgap_vc_cols
+            [model._primary_group_col] + model._secondary_group_cols
         )
 
     primary_col = specs[0].group
@@ -99,7 +99,7 @@ def _crossed_structures(
     return groups, group_labels, exog_re_li, D
 
 
-def _statsmodels_structures(model: Any) -> tuple[Any, Any, Any, Any, Any]:
+def statsmodels_structures(model: Any) -> tuple[Any, Any, Any, Any, Any]:
     """Extract leverage structures from a statsmodels MixedLMResults object."""
     cov_fe = model.cov_params().iloc[: model.k_fe, : model.k_fe].values
     D = model.cov_re.values
@@ -131,7 +131,7 @@ def leverage(model: Any, level: int = 1) -> Any:  # noqa: ARG001
     n = X.shape[0]
     scale = model.scale
 
-    truly_crossed = _is_crossed(model) and len(model._gpgap_vc_cols) > 0
+    truly_crossed = _is_crossed(model) and len(model._secondary_group_cols) > 0
 
     if truly_crossed:
         # For crossed RE (≥2 grouping factors), V is NOT block-diagonal by the
@@ -151,9 +151,9 @@ def leverage(model: Any, level: int = 1) -> Any:  # noqa: ARG001
 
     if _is_crossed(model):
         cov_fe = model.fe_cov
-        groups, group_labels, exog_re_li, D = _crossed_structures(model)
+        groups, group_labels, exog_re_li, D = crossed_structures(model)
     else:
-        groups, group_labels, exog_re_li, D, cov_fe = _statsmodels_structures(model)
+        groups, group_labels, exog_re_li, D, cov_fe = statsmodels_structures(model)
 
     h1 = np.zeros(n)
     h2 = np.zeros(n)

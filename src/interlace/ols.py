@@ -38,8 +38,8 @@ class _OLSModelInfo:
 class OLSResult:
     """Result of an OLS fit via formulaic + numpy.
 
-    Attributes match the statsmodels OLS interface used in gpgap so that this
-    is a drop-in replacement.
+    Attributes match the statsmodels OLS interface so that this is a
+    drop-in replacement.
     """
 
     def __init__(
@@ -55,6 +55,21 @@ class OLSResult:
         self.fittedvalues = fittedvalues
         self.normalized_cov_params = normalized_cov_params
         self.model = model
+
+    @property
+    def df_resid(self) -> float:
+        """Residual degrees of freedom: n - p, matching statsmodels OLS df_resid."""
+        return float(len(self.resid) - len(self.params))
+
+    @property
+    def mse_resid(self) -> float:
+        """Mean squared error of residuals: RSS / (n - p), matching statsmodels."""
+        return float(np.sum(self.resid**2) / self.df_resid)
+
+    @property
+    def scale(self) -> float:
+        """Residual variance: RSS / (n - p), matching statsmodels OLS scale."""
+        return self.mse_resid
 
     def hc3_bse(self) -> np.ndarray:
         """HC3 heteroskedasticity-consistent standard errors.
@@ -113,7 +128,7 @@ def ols(formula: str, data: Any) -> OLSResult:
     Returns
     -------
     OLSResult
-        Drop-in replacement for statsmodels OLS results used in gpgap.
+        Drop-in replacement for statsmodels OLS results.
     """
     nw_data = nw.from_native(data, eager_only=True)
 

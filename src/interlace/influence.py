@@ -59,7 +59,7 @@ def _full_params(
         beta = model.fe_params
         p = len(np.asarray(beta))
         V = model.fe_cov
-        group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
+        group_cols = [model._primary_group_col] + model._secondary_group_cols
         theta_vals: list[float] = []
         theta_names_list: list[str] = []
         for col in group_cols:
@@ -99,15 +99,15 @@ def _refit(model: Any, data_i: Any) -> Any:
             random_strs = [spec_to_str(s) for s in specs]
             return interlace.fit(model.model.formula, data_i, random=random_strs)
         else:
-            group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
+            group_cols = [model._primary_group_col] + model._secondary_group_cols
             groups_arg = group_cols[0] if len(group_cols) == 1 else group_cols
             return interlace.fit(model.model.formula, data_i, groups=groups_arg)
     else:
         model_i = model.model.__class__.from_formula(
             model.model.formula,
             data=data_i,
-            groups=np.asarray(data_i[model._gpgap_group_col])
-            if hasattr(model, "_gpgap_group_col")
+            groups=np.asarray(data_i[model._primary_group_col])
+            if hasattr(model, "_primary_group_col")
             else model.model.groups[data_i.index],
         )
         return model_i.fit(reml=model.method == "REML")
@@ -122,7 +122,7 @@ def _reduced_params(
     if _is_crossed(model_i):
         beta_i = model_i.fe_params
         Vi = model_i.fe_cov
-        group_cols = [model_i._gpgap_group_col] + model_i._gpgap_vc_cols
+        group_cols = [model_i._primary_group_col] + model_i._secondary_group_cols
         theta_vals_i: list[float] = []
         for col in group_cols:
             vals, _ = _vc_to_scalars(model_i.variance_components[col], col)
@@ -142,7 +142,7 @@ def _refit_groups_arg(model: Any) -> Any:
     """Return the groups argument string/list for interlace.fit refits."""
     if not _is_crossed(model):
         return None
-    group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
+    group_cols = [model._primary_group_col] + model._secondary_group_cols
     return group_cols[0] if len(group_cols) == 1 else group_cols
 
 
@@ -331,7 +331,7 @@ def hlm_influence(
     n_rows = len(nw_data)
 
     groups = (
-        nw_data[model._gpgap_group_col].to_numpy()
+        nw_data[model._primary_group_col].to_numpy()
         if _is_crossed(model)
         else model.model.groups
     )
@@ -365,7 +365,7 @@ def hlm_influence(
         from interlace.sparse_z import build_joint_z_from_specs as _build_z
 
         _cc_specs = getattr(model, "_random_specs", [])
-        _cc_group_cols = [model._gpgap_group_col] + model._gpgap_vc_cols
+        _cc_group_cols = [model._primary_group_col] + model._secondary_group_cols
         _cc_n_levels = [model.ngroups[col] for col in _cc_group_cols]
         _cc = {
             "specs": _cc_specs,
@@ -467,7 +467,7 @@ def hlm_influence(
                             optimizer=optimizer,
                             tight=False,
                         )
-                    elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
+                    elif optimizer != "lbfgsb" and hasattr(model, "_primary_group_col"):
                         # statsmodels bobyqa path — re-route through interlace.
                         if level == 1:
                             nw_before = nw_data[:i]
@@ -490,7 +490,7 @@ def hlm_influence(
                         model_i = interlace.fit(
                             model.model.formula,
                             data_i,
-                            groups=model._gpgap_group_col,
+                            groups=model._primary_group_col,
                             optimizer=optimizer,
                         )
                         beta_i, Vi, theta_i = _reduced_params(model_i, p, theta_names)
@@ -582,7 +582,7 @@ def mdffits(model: Any, optimizer: str = "lbfgsb") -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# n_influential and tau_gap
+# n_influential
 # ---------------------------------------------------------------------------
 
 
@@ -610,104 +610,6 @@ def n_influential(
         threshold = 4.0 / n
     cd = cooks_distance(model, optimizer=optimizer)
     return int(np.sum(cd > threshold))
-
-
-def tau_gap(
-    model: Any, threshold: float | None = None, optimizer: str = "lbfgsb"
-) -> dict[str, float]:
-    """Absolute difference in random-effects std devs after removing influential obs.
-
-    Refits the model excluding all observations where Cook's D > *threshold*,
-    then returns ``|τ_full − τ_reduced|`` for each variance component, where
-    ``τ = sqrt(variance_component)``.
-
-    Parameters
-    ----------
-    model:
-        A ``CrossedLMEResult`` or statsmodels ``MixedLMResults`` object.
-    threshold:
-        Cook's D cut-off.  Defaults to ``4 / n``.
-    optimizer:
-        Optimizer used for the reduced-data refit and for Cook's D
-        computation.  See :func:`hlm_influence` for details.
-
-    Returns
-    -------
-    dict[str, float]
-        Keys match the random-effects factor names; values are ``|Δτ|``.
-    """
-    n = model.nobs if hasattr(model, "nobs") else model.model.nobs
-    if threshold is None:
-        threshold = 4.0 / n
-
-    cd = cooks_distance(model, optimizer=optimizer)
-    influential_mask = cd > threshold
-
-    native_frame = model.model.data.frame
-    _pandas_frame = getattr(model.model.data, "_pandas_frame", None)
-    data_src = _pandas_frame if _pandas_frame is not None else native_frame
-    data_reduced = _filter_rows(data_src, ~influential_mask)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        if _is_crossed(model):
-            import interlace
-
-            groups_arg = _refit_groups_arg(model)
-            model_reduced = interlace.fit(
-                model.model.formula,
-                data_reduced,
-                groups=groups_arg,
-                optimizer=optimizer,
-            )
-            vc_full = model.variance_components
-            vc_reduced = model_reduced.variance_components
-        elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
-            import interlace
-
-            model_reduced = interlace.fit(
-                model.model.formula,
-                data_reduced,
-                groups=model._gpgap_group_col,
-                optimizer=optimizer,
-            )
-            full_names = list(model.cov_re.index)
-            vc_full = {
-                name: float(model.cov_re.iloc[i, i])
-                for i, name in enumerate(full_names)
-            }
-            vc_reduced = model_reduced.variance_components
-        else:
-            # statsmodels path
-            groups_reduced_arr = model.model.groups[~influential_mask]
-            model_i_obj = model.model.__class__.from_formula(
-                model.model.formula, data=data_reduced, groups=groups_reduced_arr
-            )
-            model_reduced = model_i_obj.fit(reml=model.method == "REML")
-            full_names = list(model.cov_re.index)
-            vc_full = {
-                name: float(model.cov_re.iloc[i, i])
-                for i, name in enumerate(full_names)
-            }
-            vc_reduced = {
-                full_names[i]: float(model_reduced.cov_re.iloc[i, i])
-                for i in range(len(full_names))
-            }
-
-    gaps = {}
-    for factor in vc_full:
-        vc_f = vc_full[factor]
-        vc_r = vc_reduced.get(factor, 0.0)
-        # variance_components values may be floats or numpy arrays (covariance matrix)
-        tau_f = np.sqrt(
-            max(float(vc_f) if np.ndim(vc_f) == 0 else float(np.trace(vc_f)), 0.0)
-        )  # noqa: E501
-        tau_r = np.sqrt(
-            max(float(vc_r) if np.ndim(vc_r) == 0 else float(np.trace(vc_r)), 0.0)
-        )  # noqa: E501
-        gaps[factor] = float(abs(tau_f - tau_r))
-
-    return gaps
 
 
 # ---------------------------------------------------------------------------
@@ -875,7 +777,7 @@ def lmer_influence_measures(
     Matches R's HLMdiag convention.
     This combines case-deletion Cook's D / mdffits (via :func:`hlm_influence`)
     with analytical leverage and DFBETAS — exactly mirroring R's
-    ``gpgap::compute_influence_lmer`` which calls ``HLMdiag::hlm_influence``.
+    ``HLMdiag::hlm_influence``.
 
     Parameters
     ----------
@@ -969,7 +871,7 @@ def lmer_influence_measures(
 
     # R uses leverage.overall for single-RE and falls back to hat_fixef for
     # crossed multi-RE (HLMdiag can't compute overall leverage for crossed RE).
-    truly_crossed = _is_crossed(model) and len(getattr(model, "_gpgap_vc_cols", [])) > 0
+    truly_crossed = _is_crossed(model) and len(getattr(model, "_secondary_group_cols", [])) > 0
     hat_for_flag = hat_fixef if truly_crossed else hat_overall
 
     # --- DFBETAS: analytical from fixed-effects design matrix (same as R) ---

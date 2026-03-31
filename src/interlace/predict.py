@@ -72,7 +72,7 @@ def predict(
         return np.asarray(pred)
 
     # Add BLUP contribution for each grouping factor
-    group_cols = [result._gpgap_group_col] + list(result._gpgap_vc_cols)
+    group_cols = [result._primary_group_col] + list(result._secondary_group_cols)
     for col in group_cols:
         if col not in nw_new.columns:
             continue

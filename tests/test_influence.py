@@ -468,3 +468,43 @@ class TestOlsDfbetasQr:
         threshold = 2 / np.sqrt(n)
         frac_large = np.mean(np.abs(result) > threshold)
         assert frac_large < 0.2, f"Too many large DFBETAS: {frac_large:.2%}"
+
+
+# ---------------------------------------------------------------------------
+# Parallel path: n_jobs != 1
+# ---------------------------------------------------------------------------
+
+
+class TestParallelInfluence:
+    """hlm_influence with n_jobs > 1 must match sequential results exactly."""
+
+    @pytest.fixture(scope="class")
+    def seq_result(self, models):
+        _, il = models
+        return hlm_influence(il, level=1, n_jobs=1)
+
+    def test_n_jobs_2_matches_sequential_cooksd(self, models, seq_result):
+        _, il = models
+        par = hlm_influence(il, level=1, n_jobs=2)
+        np.testing.assert_allclose(
+            par["cooksd"].values,
+            seq_result["cooksd"].values,
+            rtol=1e-6,
+            err_msg="parallel cooksd differs from sequential",
+        )
+
+    def test_n_jobs_minus1_length(self, models, data):
+        _, il = models
+        par = hlm_influence(il, level=1, n_jobs=-1)
+        assert len(par) == len(data)
+        assert (par["cooksd"].fillna(0) >= -1e-10).all()
+
+    def test_n_jobs_2_matches_sequential_mdffits(self, models, seq_result):
+        _, il = models
+        par = hlm_influence(il, level=1, n_jobs=2)
+        np.testing.assert_allclose(
+            par["mdffits"].values,
+            seq_result["mdffits"].values,
+            rtol=1e-6,
+            err_msg="parallel mdffits differs from sequential",
+        )

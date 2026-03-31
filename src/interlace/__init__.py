@@ -32,9 +32,8 @@ from interlace.influence import (
     n_influential,
     ols_dfbetas_qr,
     ols_influence_measures,
-    tau_gap,
 )
-from interlace.leverage import leverage
+from interlace.leverage import crossed_structures, leverage, statsmodels_structures
 from interlace.ols import OLSResult, ols
 from interlace.plotting import dotplot_diag, plot_influence, plot_resid
 from interlace.profiled_reml import (
@@ -74,6 +73,8 @@ __all__ = [
     "hlm_resid",
     # Leverage
     "leverage",
+    "crossed_structures",
+    "statsmodels_structures",
     # Influence diagnostics
     "hlm_influence",
     "lmer_influence_measures",
@@ -82,7 +83,6 @@ __all__ = [
     "n_influential",
     "ols_dfbetas_qr",
     "ols_influence_measures",
-    "tau_gap",
     # Combined
     "hlm_augment",
     # OLS
@@ -270,7 +270,7 @@ def fit(
         aic=reml.aic,
         bic=reml.bic,
         nparams=reml.nparams,
-        _gpgap_group_col=group_cols[0],
+        _primary_group_col=group_cols[0],
         _random_specs=list(specs),
         _Z=Z,
         _n_levels=n_levels_list,
@@ -391,8 +391,8 @@ def fit(
         aic=reml.aic,
         bic=reml.bic,
         nparams=reml.nparams,
-        _gpgap_group_col=group_cols[0],
-        _gpgap_vc_cols=group_cols[1:],
+        _primary_group_col=group_cols[0],
+        _secondary_group_cols=group_cols[1:],
         _random_specs=list(specs),
         _Z=Z,
         _n_levels=n_levels_list,

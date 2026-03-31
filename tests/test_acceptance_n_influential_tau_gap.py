@@ -1,11 +1,12 @@
-"""Acceptance tests: n_influential and tau_gap parity.
+"""Acceptance tests: n_influential parity.
+
+Note: tau_gap() has been moved to gpgap.diagnostics (GPG domain package).
 
 We use statsmodels MixedLM as the R-validated reference (parity with R lme4
 is already established in test_parity_single_re.py).  Criteria:
 
   - n_influential: CrossedLMEResult count within 5% of statsmodels count
     (or both zero, which passes trivially)
-  - tau_gap: abs(tau_gap_il[factor] - tau_gap_sm[factor]) < 0.001 per factor
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import pytest
 from statsmodels.regression.mixed_linear_model import MixedLM
 
 import interlace
-from interlace.influence import n_influential, tau_gap
+from interlace.influence import n_influential
 
 
 @pytest.fixture(scope="module")
@@ -82,40 +83,3 @@ def test_n_influential_custom_threshold_parity(models_single_re, single_re_data)
             )
 
 
-# ---------------------------------------------------------------------------
-# tau_gap acceptance
-# ---------------------------------------------------------------------------
-
-
-def test_tau_gap_abs_diff_lt_0001(models_single_re):
-    sm, il = models_single_re
-    tg_sm = tau_gap(sm)
-    tg_il = tau_gap(il)
-
-    # Both should have "group" factor
-    assert "group" in tg_il, f"tau_gap missing 'group' key: {list(tg_il)}"
-
-    # statsmodels uses the primary group key from cov_re.index
-    sm_key = list(tg_sm)[0]
-    gap_sm = tg_sm[sm_key]
-    gap_il = tg_il["group"]
-
-    abs_diff = abs(gap_il - gap_sm)
-    assert abs_diff < 0.001, (
-        f"tau_gap abs_diff={abs_diff:.6f} ≥ 0.001 (il={gap_il:.6f}, sm={gap_sm:.6f})"
-    )
-
-
-def test_tau_gap_custom_threshold_abs_diff_lt_0001(models_single_re, single_re_data):
-    sm, il = models_single_re
-    n = len(single_re_data)
-    threshold = 4.0 / n
-
-    tg_sm = tau_gap(sm, threshold=threshold)
-    tg_il = tau_gap(il, threshold=threshold)
-
-    sm_key = list(tg_sm)[0]
-    abs_diff = abs(tg_il["group"] - tg_sm[sm_key])
-    assert abs_diff < 0.001, (
-        f"tau_gap (threshold={threshold:.4f}) abs_diff={abs_diff:.6f} ≥ 0.001"
-    )
