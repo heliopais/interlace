@@ -1,12 +1,12 @@
-"""Tests for n_influential and tau_gap metrics.
+"""Tests for n_influential metric.
+
+Note: tau_gap() has been moved to gpgap.diagnostics (GPG domain package).
 
 Acceptance criteria:
   - n_influential returns non-negative int
   - Default threshold is 4/n
   - Custom threshold changes the count as expected
   - Works with both CrossedLMEResult and statsmodels MixedLMResults
-  - tau_gap returns dict keyed by factor name with non-negative floats
-  - tau_gap is 0 when no influential observations exist (very loose threshold)
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import pytest
 from statsmodels.regression.mixed_linear_model import MixedLM
 
 import interlace
-from interlace.influence import n_influential, tau_gap
+from interlace.influence import n_influential
 
 
 @pytest.fixture(scope="module")
@@ -86,43 +86,3 @@ def test_n_influential_decreases_with_higher_threshold(models):
         assert low >= high
 
 
-# --- tau_gap ---
-
-
-def test_tau_gap_returns_dict(models):
-    sm, il = models
-    for model in (sm, il):
-        result = tau_gap(model)
-        assert isinstance(result, dict)
-
-
-def test_tau_gap_nonnegative_values(models):
-    sm, il = models
-    for model in (sm, il):
-        result = tau_gap(model)
-        for factor, gap in result.items():
-            assert gap >= 0.0, f"tau_gap[{factor}] = {gap} < 0"
-
-
-def test_tau_gap_keyed_by_factor_name(models):
-    _, il = models
-    result = tau_gap(il)
-    assert "group" in result
-
-
-def test_tau_gap_zero_when_no_influential(models):
-    """With a very large threshold no obs are removed so tau_gap should be ~0."""
-    _, il = models
-    result = tau_gap(il, threshold=1e9)
-    for factor, gap in result.items():
-        # model refit on same data: gap should be ~0 (within numerical tolerance)
-        assert gap < 1e-6, f"tau_gap[{factor}] = {gap} with no removal"
-
-
-def test_tau_gap_uses_default_threshold_4_over_n(models, data):
-    _, il = models
-    n = len(data)
-    r1 = tau_gap(il)
-    r2 = tau_gap(il, threshold=4.0 / n)
-    for factor in r1:
-        assert abs(r1[factor] - r2[factor]) < 1e-12

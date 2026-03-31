@@ -582,7 +582,7 @@ def mdffits(model: Any, optimizer: str = "lbfgsb") -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# n_influential and tau_gap
+# n_influential
 # ---------------------------------------------------------------------------
 
 
@@ -610,104 +610,6 @@ def n_influential(
         threshold = 4.0 / n
     cd = cooks_distance(model, optimizer=optimizer)
     return int(np.sum(cd > threshold))
-
-
-def tau_gap(
-    model: Any, threshold: float | None = None, optimizer: str = "lbfgsb"
-) -> dict[str, float]:
-    """Absolute difference in random-effects std devs after removing influential obs.
-
-    Refits the model excluding all observations where Cook's D > *threshold*,
-    then returns ``|τ_full − τ_reduced|`` for each variance component, where
-    ``τ = sqrt(variance_component)``.
-
-    Parameters
-    ----------
-    model:
-        A ``CrossedLMEResult`` or statsmodels ``MixedLMResults`` object.
-    threshold:
-        Cook's D cut-off.  Defaults to ``4 / n``.
-    optimizer:
-        Optimizer used for the reduced-data refit and for Cook's D
-        computation.  See :func:`hlm_influence` for details.
-
-    Returns
-    -------
-    dict[str, float]
-        Keys match the random-effects factor names; values are ``|Δτ|``.
-    """
-    n = model.nobs if hasattr(model, "nobs") else model.model.nobs
-    if threshold is None:
-        threshold = 4.0 / n
-
-    cd = cooks_distance(model, optimizer=optimizer)
-    influential_mask = cd > threshold
-
-    native_frame = model.model.data.frame
-    _pandas_frame = getattr(model.model.data, "_pandas_frame", None)
-    data_src = _pandas_frame if _pandas_frame is not None else native_frame
-    data_reduced = _filter_rows(data_src, ~influential_mask)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        if _is_crossed(model):
-            import interlace
-
-            groups_arg = _refit_groups_arg(model)
-            model_reduced = interlace.fit(
-                model.model.formula,
-                data_reduced,
-                groups=groups_arg,
-                optimizer=optimizer,
-            )
-            vc_full = model.variance_components
-            vc_reduced = model_reduced.variance_components
-        elif optimizer != "lbfgsb" and hasattr(model, "_gpgap_group_col"):
-            import interlace
-
-            model_reduced = interlace.fit(
-                model.model.formula,
-                data_reduced,
-                groups=model._gpgap_group_col,
-                optimizer=optimizer,
-            )
-            full_names = list(model.cov_re.index)
-            vc_full = {
-                name: float(model.cov_re.iloc[i, i])
-                for i, name in enumerate(full_names)
-            }
-            vc_reduced = model_reduced.variance_components
-        else:
-            # statsmodels path
-            groups_reduced_arr = model.model.groups[~influential_mask]
-            model_i_obj = model.model.__class__.from_formula(
-                model.model.formula, data=data_reduced, groups=groups_reduced_arr
-            )
-            model_reduced = model_i_obj.fit(reml=model.method == "REML")
-            full_names = list(model.cov_re.index)
-            vc_full = {
-                name: float(model.cov_re.iloc[i, i])
-                for i, name in enumerate(full_names)
-            }
-            vc_reduced = {
-                full_names[i]: float(model_reduced.cov_re.iloc[i, i])
-                for i in range(len(full_names))
-            }
-
-    gaps = {}
-    for factor in vc_full:
-        vc_f = vc_full[factor]
-        vc_r = vc_reduced.get(factor, 0.0)
-        # variance_components values may be floats or numpy arrays (covariance matrix)
-        tau_f = np.sqrt(
-            max(float(vc_f) if np.ndim(vc_f) == 0 else float(np.trace(vc_f)), 0.0)
-        )  # noqa: E501
-        tau_r = np.sqrt(
-            max(float(vc_r) if np.ndim(vc_r) == 0 else float(np.trace(vc_r)), 0.0)
-        )  # noqa: E501
-        gaps[factor] = float(abs(tau_f - tau_r))
-
-    return gaps
 
 
 # ---------------------------------------------------------------------------

@@ -32,7 +32,6 @@ from interlace.influence import (
     n_influential,
     ols_dfbetas_qr,
     ols_influence_measures,
-    tau_gap,
 )
 from interlace.leverage import leverage
 from interlace.ols import OLSResult, ols
@@ -82,7 +81,6 @@ __all__ = [
     "n_influential",
     "ols_dfbetas_qr",
     "ols_influence_measures",
-    "tau_gap",
     # Combined
     "hlm_augment",
     # OLS
