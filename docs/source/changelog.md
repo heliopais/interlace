@@ -1,5 +1,55 @@
 # Changelog
 
+## v0.2.9 — 2026-04-03
+
+### `glmer()` — generalised linear mixed models via Laplace approximation
+
+interlace now supports **generalised linear mixed models** (GLMMs) through the
+new `glmer()` function, targeting parity with R's `lme4::glmer()`.
+
+```python
+import interlace
+
+# Binomial GLMM (proportion response with trial weights)
+result = interlace.glmer(
+    "incidence / size ~ period",
+    data=df,
+    family="binomial",
+    groups="herd",
+    weights=df["size"].values,
+)
+
+# Poisson GLMM (count response)
+result = interlace.glmer(
+    "count ~ x1 + x2",
+    data=df,
+    family="poisson",
+    groups=["site", "year"],
+)
+```
+
+**Supported families:** `"binomial"` (logit link), `"poisson"` (log link),
+`"gaussian"` (identity link), or any custom object implementing the
+`GLMMFamily` protocol.
+
+**Estimation:** Laplace approximation of the marginal log-likelihood with
+penalised iteratively reweighted least squares (PIRLS) for the inner loop
+and L-BFGS-B or BOBYQA for the outer optimisation over variance parameters.
+
+**Result object:** `GLMMResult` exposes `fe_params`, `fe_bse`,
+`random_effects`, `variance_components`, `aic`, `bic`, `llf`, `converged`,
+`fittedvalues`, and a `predict()` method with `type="response"` /
+`type="link"` and `include_re` options.
+
+**Validation:** fixed effects match R's `glmer()` within 1e-3 (absolute);
+variance components within 5% (relative) on the CBPP and Poisson benchmark
+datasets.
+
+See the [GLMM quickstart](glmm-quickstart.md) and the
+[glmer API reference](api/glmer.md) for full details.
+
+---
+
 ## v0.2.8 — 2026-03-31
 
 ### Breaking changes

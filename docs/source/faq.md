@@ -206,6 +206,58 @@ On Linux, parallel workers use `fork` (fast). On macOS/Windows they use
 
 ---
 
+## Can I fit a Poisson or binomial mixed model (GLMM)?
+
+Yes. Use `interlace.glmer()` with `family="binomial"` or `family="poisson"`:
+
+```python
+import interlace
+
+# Binomial GLMM (proportion response)
+result = interlace.glmer(
+    "incidence / size ~ period",
+    data=df,
+    family="binomial",
+    groups="herd",
+    weights=df["size"].values,
+)
+
+# Poisson GLMM (count response)
+result = interlace.glmer(
+    "count ~ x1 + x2",
+    data=df,
+    family="poisson",
+    groups=["site", "year"],
+)
+```
+
+`glmer()` uses Laplace approximation with PIRLS (penalised iteratively
+reweighted least squares), matching R's `lme4::glmer()`. See the
+[GLMM quickstart](glmm-quickstart.md) for a full walkthrough and the
+[glmer API reference](api/glmer.md) for all parameters.
+
+---
+
+## My response is binary (0/1). Which function should I use?
+
+Use `interlace.glmer()` with `family="binomial"`. Do not use `interlace.fit()`
+for binary outcomes — `fit()` assumes a continuous, normally distributed
+response.
+
+```python
+result = interlace.glmer(
+    "outcome ~ treatment + age",
+    data=df,
+    family="binomial",
+    groups="subject",
+)
+```
+
+Fixed-effect coefficients are on the log-odds scale. Use
+`result.predict(type="response")` for predicted probabilities.
+
+---
+
 ## Solver choice: CHOLMOD vs default
 
 `interlace` uses a dense Cholesky factorisation of the random-effect covariance blocks by default. For large models this can be slow.

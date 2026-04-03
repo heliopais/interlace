@@ -149,9 +149,11 @@ The same pattern appears in many applied settings:
 - **E-commerce:** customers purchasing across product categories, where a transaction
   reflects both customer propensity and category-level demand
 
-`interlace` targets crossed designs with random intercepts and random slopes. For nested
-designs or generalised outcomes (GLMM), `statsmodels.MixedLM` or R's `lme4` are the
-right tools. See [For Python users](why-python.md) for a side-by-side comparison.
+`interlace` targets crossed designs with random intercepts and random slopes, and also
+supports **generalised linear mixed models** (GLMMs) for non-normal outcomes via
+`interlace.glmer()` — see the [GLMM quickstart](glmm-quickstart.md). For nested
+designs, both `interlace` and `statsmodels.MixedLM` work well. See
+[For Python users](why-python.md) for a side-by-side comparison.
 
 ---
 
@@ -256,6 +258,10 @@ random slopes.
 | **COVTRACE** | Influence on the trace of the fixed-effect precision matrix; positive values mean deletion improves precision |
 | **COVRATIO** | Ratio of fixed-effect covariance determinants with vs without an observation; values near 1 indicate little influence on precision |
 | **RVC** | Relative variance change: how much a variance component changes (proportionally) when one observation is deleted |
+| **GLMM** | Generalised linear mixed model: extends LMM to non-normal outcomes (Poisson, binomial) via link functions; fitted with `interlace.glmer()` |
+| **Link function** | A monotone function that maps the expected response to the linear predictor (e.g. logit for binomial, log for Poisson) |
+| **Laplace approximation** | A method for approximating the marginal likelihood in GLMMs by a second-order Taylor expansion around the conditional modes |
+| **PIRLS** | Penalised iteratively reweighted least squares: the inner algorithm used to solve for random effects and fixed effects in a GLMM |
 | **Sparse Cholesky** | Matrix factorisation used internally for efficient REML computation on large, sparse random-effect structures |
 
 ---

@@ -16,7 +16,7 @@ that most often determine library choice.
 | Nested random effects | ✓ *(v0.2.4+)* | ✓ | ✗ | ✓ |
 | Random slopes | ✓ *(v0.2.1+)* | ✓ | ✗ | ✓ |
 | Correlated random effects | ✓ *(v0.2.1+)* | ✓ | ✗ | ✓ |
-| Generalised LMM (Poisson, binomial) | ✗ | ✗² | ✗ | ✓ (`glmer`) |
+| Generalised LMM (Poisson, binomial) | ✓ (`glmer`) | ✗² | ✗ | ✓ (`glmer`) |
 | **Estimation** | | | | |
 | REML (default) | ✓ | ✓ | ✗ (Swamy-Arora⁵) | ✓ |
 | ML (for LRT / model comparison) | ✓ | ✓ | ✗ | ✓ |
@@ -128,7 +128,7 @@ See [For R / lme4 users](why-r.md#diagnostics) for the function-by-function mapp
 
 `interlace` supports random slopes (v0.2.1+) and nested random effects (v0.2.4+)
 via the `random=` parameter using lme4-style `(term | group)` notation.
-For generalised outcomes (Poisson, binomial), use `statsmodels` or `lme4`.
+For generalised outcomes (Poisson, binomial), use `interlace.glmer()` or R's `lme4::glmer()`.
 
 ---
 
@@ -143,7 +143,7 @@ For generalised outcomes (Poisson, binomial), use `statsmodels` or `lme4`.
 | One-way entity RE with panel (entity × time) data | **linearmodels** |
 | Need IV/2SLS, SUR, or IV3SLS alongside RE | **linearmodels** |
 | Need clustered or Driscoll-Kraay HAC SEs | **linearmodels** |
-| GLMM (Poisson, binomial) | lme4 (R) or statsmodels GLM |
+| GLMM (Poisson, binomial) in Python | **interlace** (`glmer()`) |
 | Full lme4 feature set | lme4 (R) |
 
 ---

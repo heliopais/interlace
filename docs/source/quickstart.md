@@ -175,11 +175,18 @@ se = result.bootstrap_se(statistic="median", n_bootstrap=1000, seed=42)
 print(f"Median SE (cluster bootstrap): {se:.4f}")
 ```
 
+## Non-normal outcomes (GLMM)
+
+For binary, proportion, or count outcomes, use `interlace.glmer()` instead of
+`fit()`. See the {doc}`glmm-quickstart` for a full walkthrough.
+
 ## Next steps
 
+- See {doc}`glmm-quickstart` for binomial and Poisson GLMMs
 - See {doc}`examples` for a full walkthrough of diagnostics and plots
 - See {doc}`random-slopes` for a detailed guide on random slopes syntax and interpretation
 - See {doc}`model-comparison` for comparing models with likelihood ratio tests
 - See the {doc}`api/fit` reference for all `fit()` parameters
+- See {doc}`api/glmer` for the `glmer()` API reference
 - See {doc}`api/result` for the complete list of `CrossedLMEResult` attributes
 - See {doc}`installation` for optional extras (CHOLMOD, BOBYQA)
