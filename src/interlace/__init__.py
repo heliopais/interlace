@@ -24,6 +24,9 @@ from interlace.formula import (
     parse_formula,
     parse_random_effects,
 )
+from interlace.glmm_family import GLMMFamily
+from interlace.glmm_laplace import GLMMResult
+from interlace.glmm_laplace import fit_glmm as glmer
 from interlace.influence import (
     cooks_distance,
     hlm_influence,
@@ -102,6 +105,10 @@ __all__ = [
     "plot_resid",
     "plot_influence",
     "dotplot_diag",
+    # GLMM
+    "glmer",
+    "GLMMResult",
+    "GLMMFamily",
 ]
 
 
