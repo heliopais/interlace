@@ -15,7 +15,7 @@ least squares (PIRLS) — targeting parity with R's
 |-----------|------|-------------|
 | `formula` | `str` | Fixed-effects formula in Wilkinson notation (e.g. `"y ~ x + z"`) |
 | `data` | `DataFrame` | Input data (pandas, polars, or any narwhals-compatible frame) |
-| `family` | `str \| GLMMFamily` | Response distribution: `"binomial"`, `"poisson"`, or `"gaussian"` |
+| `family` | `str \| GLMMFamily` | Response distribution: `"binomial"`, `"poisson"`, `"gaussian"`, or `"negativebinomial"` |
 | `groups` | `str \| list[str]` | Column name(s) for random intercepts (shorthand) |
 | `random` | `list[str]` | lme4-style random-effect specs, e.g. `["(1 \| herd)"]` |
 | `weights` | `ndarray` | Prior weights; for binomial proportion responses, pass trial counts |
@@ -30,6 +30,7 @@ least squares (PIRLS) — targeting parity with R's
 | `"binomial"` | logit | Binary outcomes, proportions (pass trial counts via `weights`) |
 | `"poisson"` | log | Count data (events, errors, frequencies) |
 | `"gaussian"` | identity | Continuous outcomes (equivalent to `fit()` with identity link) |
+| `"negativebinomial"` | log | Overdispersed count data (variance = mu + mu²/theta) |
 
 Custom families can be passed as any object implementing the `GLMMFamily`
 protocol (see below).
@@ -71,6 +72,38 @@ result = interlace.glmer(
 
 print(result.fe_params)       # fixed-effect log-rates
 print(result.random_effects["site"])
+```
+
+### Negative Binomial GLMM (overdispersed counts)
+
+For count data with overdispersion (variance > mean), use the negative binomial
+family. Pass a `NegativeBinomial2Family` instance with the shape parameter
+`theta`:
+
+```python
+from interlace import NegativeBinomial2Family
+
+result = interlace.glmer(
+    formula="count ~ x1 + x2",
+    data=df,
+    family=NegativeBinomial2Family(theta=2.0),
+    groups="site",
+)
+
+print(result.fe_params)       # fixed-effect log-rates
+print(result.variance_components)
+```
+
+You can also use the string shorthand `"negativebinomial"` which defaults to
+`theta=1.0`:
+
+```python
+result = interlace.glmer(
+    formula="count ~ x1 + x2",
+    data=df,
+    family="negativebinomial",
+    groups="site",
+)
 ```
 
 ### Using `random=` for lme4-style syntax

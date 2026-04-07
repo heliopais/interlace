@@ -12,6 +12,7 @@ Use `glmer()` instead of `fit()` when your outcome is:
 
 - **Binary** (0/1, success/failure) or a **proportion** (successes / trials) — use `family="binomial"`
 - **Count data** (events, errors, frequencies) — use `family="poisson"`
+- **Overdispersed counts** (variance > mean) — use `family=NegativeBinomial2Family(theta=...)`
 
 For continuous, approximately normal outcomes, use `interlace.fit()`.
 
@@ -97,6 +98,37 @@ print(result.random_effects["year"])
 
 ---
 
+## Negative Binomial GLMM: overdispersed counts
+
+When count data has more variance than a Poisson model predicts
+(overdispersion), use the negative binomial family. The shape parameter `theta`
+controls overdispersion — smaller values mean more overdispersion.
+
+```python
+from interlace import NegativeBinomial2Family
+
+result = interlace.glmer(
+    formula="count ~ x1 + x2",
+    data=df,
+    family=NegativeBinomial2Family(theta=2.0),
+    groups="site",
+)
+
+# Fixed effects (log-rate scale)
+print(result.fe_params)
+
+# Compare with Poisson to assess overdispersion
+result_pois = interlace.glmer(
+    formula="count ~ x1 + x2",
+    data=df,
+    family="poisson",
+    groups="site",
+)
+print(f"NB AIC: {result.aic:.1f}  Poisson AIC: {result_pois.aic:.1f}")
+```
+
+---
+
 ## Using `random=` for lme4-style syntax
 
 Like `fit()`, `glmer()` supports both the `groups` shorthand and the full
@@ -158,6 +190,7 @@ lme4's restriction.
 |-----------|----------|
 | `interlace.glmer(formula, data, family="binomial", groups="herd", weights=w)` | `glmer(cbind(incidence, size - incidence) ~ period + (1\|herd), data, family=binomial)` |
 | `interlace.glmer(formula, data, family="poisson", groups="site")` | `glmer(count ~ x + (1\|site), data, family=poisson)` |
+| `interlace.glmer(..., family=NegativeBinomial2Family(theta=2.0), ...)` | `glmer.nb(count ~ x + (1\|site), data)` |
 | `interlace.glmer(..., nAGQ=25)` | `glmer(..., nAGQ=25)` |
 | `result.fe_params` | `fixef(fit)` |
 | `result.variance_components` | `as.data.frame(VarCorr(fit))` |

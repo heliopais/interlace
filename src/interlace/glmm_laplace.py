@@ -35,7 +35,12 @@ from interlace.formula import (
     parse_formula,
     parse_random_effects,
 )
-from interlace.glmm_family import GaussianFamily, GLMMFamily, resolve_family
+from interlace.glmm_family import (
+    GaussianFamily,
+    GLMMFamily,
+    NegativeBinomial2Family,
+    resolve_family,
+)
 from interlace.profiled_reml import (
     _build_theta_bounds,
     make_lambda,
@@ -210,7 +215,7 @@ def _clamp_mu(mu: np.ndarray, family: GLMMFamily) -> np.ndarray:
     """Clamp mu to valid range for the family."""
     if family.name == "binomial":
         return np.asarray(np.clip(mu, _MU_EPS, 1.0 - _MU_EPS))
-    if family.name == "poisson":
+    if family.name in ("poisson", "negativebinomial"):
         return np.asarray(np.maximum(mu, _MU_EPS))
     return mu
 
@@ -247,6 +252,24 @@ def _conditional_loglik(
         mu_safe = np.maximum(mu, _MU_EPS)
         ll = y * np.log(mu_safe) - mu_safe - gammaln(y + 1)
         return float(np.sum(weights * ll))
+    elif family.name == "negativebinomial":
+        assert isinstance(family, NegativeBinomial2Family)
+        theta = family.theta
+        mu_safe = np.maximum(mu, _MU_EPS)
+        # NB2 log-likelihood:
+        # ll_i = lgamma(y+theta) - lgamma(theta) - lgamma(y+1)
+        #        + theta*log(theta) - theta*log(mu+theta)
+        #        + y*log(mu) - y*log(mu+theta)
+        ll = (
+            gammaln(y + theta)
+            - gammaln(theta)
+            - gammaln(y + 1)
+            + theta * np.log(theta)
+            - theta * np.log(mu_safe + theta)
+            + y * np.log(mu_safe)
+            - y * np.log(mu_safe + theta)
+        )
+        return float(np.sum(weights * ll))
     elif family.name == "gaussian":
         # -0.5 * sum(wt * (y - mu)^2) + const
         # The constant is -0.5 * n * log(2*pi) for unit weights
@@ -274,7 +297,7 @@ def _glm_start(
     # Initialize mu from y, with safety clamps
     if family.name == "binomial":
         mu = np.clip(y, 0.01, 0.99)
-    elif family.name == "poisson":
+    elif family.name in ("poisson", "negativebinomial"):
         mu = np.maximum(y, 0.1)
     else:
         mu = y.copy()

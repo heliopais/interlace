@@ -144,14 +144,75 @@ class GaussianFamily:
         return wt * (y - mu) ** 2
 
 
+class NegativeBinomial2Family:
+    """Negative Binomial (NB2) family with log link.
+
+    The NB2 parameterisation uses variance function V(mu) = mu + mu^2 / theta,
+    where *theta* (also called *size* or *k*) is the shape parameter controlling
+    overdispersion.  As theta → ∞ the distribution converges to Poisson.
+
+    Parameters
+    ----------
+    theta:
+        Shape (overdispersion) parameter.  Must be positive.
+        Default is 1.0.
+    """
+
+    name: str = "negativebinomial"
+
+    def __init__(self, theta: float = 1.0) -> None:
+        if theta <= 0:
+            raise ValueError("theta must be positive")
+        self.theta = theta
+
+    def link(self, mu: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Log link."""
+        return np.log(mu)
+
+    def linkinv(self, eta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """exp(eta), clamped to avoid overflow."""
+        return np.exp(np.clip(eta, -_EXP_MAX, _EXP_MAX))
+
+    def mu_eta(self, eta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """d(exp(eta))/d(eta) = exp(eta)."""
+        return self.linkinv(eta)
+
+    def variance(self, mu: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Var(Y) = mu + mu^2 / theta."""
+        return mu + mu**2 / self.theta
+
+    def dev_resids(
+        self,
+        y: NDArray[np.float64],
+        mu: NDArray[np.float64],
+        wt: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        """NB2 unit deviance residuals.
+
+        d_i = 2 * wt * [y*log(y/mu) - (y + theta)*log((y + theta)/(mu + theta))]
+
+        Uses the 0*log(0) = 0 convention.
+        """
+        theta = self.theta
+        d = np.zeros_like(y, dtype=np.float64)
+        pos = y > 0
+        d[pos] += y[pos] * np.log(y[pos] / mu[pos])
+        d -= (y + theta) * np.log((y + theta) / (mu + theta))
+        return 2.0 * wt * d
+
+
 # ---------------------------------------------------------------------------
 # Resolver: string | GLMMFamily → GLMMFamily
 # ---------------------------------------------------------------------------
 
-_FAMILIES: dict[str, type[BinomialFamily | PoissonFamily | GaussianFamily]] = {
+_FAMILIES: dict[
+    str,
+    type[BinomialFamily | PoissonFamily | GaussianFamily | NegativeBinomial2Family],
+] = {
     "binomial": BinomialFamily,
     "poisson": PoissonFamily,
     "gaussian": GaussianFamily,
+    "negativebinomial": NegativeBinomial2Family,
 }
 
 

@@ -10,6 +10,7 @@ from interlace.glmm_family import (
     BinomialFamily,
     GaussianFamily,
     GLMMFamily,
+    NegativeBinomial2Family,
     PoissonFamily,
 )
 
@@ -44,12 +45,18 @@ def counts():
 class TestProtocolConformance:
     """Every concrete family must satisfy the GLMMFamily protocol."""
 
-    @pytest.mark.parametrize("cls", [BinomialFamily, PoissonFamily, GaussianFamily])
+    @pytest.mark.parametrize(
+        "cls",
+        [BinomialFamily, PoissonFamily, GaussianFamily, NegativeBinomial2Family],
+    )
     def test_is_runtime_checkable(self, cls):
         family = cls()
         assert isinstance(family, GLMMFamily)
 
-    @pytest.mark.parametrize("cls", [BinomialFamily, PoissonFamily, GaussianFamily])
+    @pytest.mark.parametrize(
+        "cls",
+        [BinomialFamily, PoissonFamily, GaussianFamily, NegativeBinomial2Family],
+    )
     def test_has_required_attributes(self, cls):
         family = cls()
         for attr in ("link", "linkinv", "mu_eta", "variance", "dev_resids", "name"):
@@ -241,6 +248,115 @@ class TestGaussianFamily:
 
 
 # ---------------------------------------------------------------------------
+# Negative Binomial 2 (log link)
+# ---------------------------------------------------------------------------
+
+
+class TestNegativeBinomial2Family:
+    def test_name(self):
+        fam = NegativeBinomial2Family(theta=1.0)
+        assert fam.name == "negativebinomial"
+
+    def test_default_theta(self):
+        fam = NegativeBinomial2Family()
+        assert fam.theta == 1.0
+
+    def test_custom_theta(self):
+        fam = NegativeBinomial2Family(theta=2.5)
+        assert fam.theta == 2.5
+
+    def test_link_linkinv_roundtrip(self, counts):
+        """link(linkinv(eta)) == eta."""
+        fam = NegativeBinomial2Family(theta=1.0)
+        eta = fam.link(counts)
+        assert_allclose(fam.linkinv(eta), counts, atol=1e-12)
+
+    def test_link_known_values(self):
+        """log(1) = 0, log(e) = 1."""
+        fam = NegativeBinomial2Family(theta=1.0)
+        assert_allclose(fam.link(np.array([1.0])), [0.0], atol=1e-12)
+        assert_allclose(fam.link(np.array([np.e])), [1.0], atol=1e-12)
+
+    def test_linkinv_known_values(self):
+        """exp(0) = 1."""
+        fam = NegativeBinomial2Family(theta=1.0)
+        assert_allclose(fam.linkinv(np.array([0.0])), [1.0], atol=1e-12)
+
+    def test_variance_formula(self, counts):
+        """Var(mu) = mu + mu^2 / theta."""
+        theta = 2.0
+        fam = NegativeBinomial2Family(theta=theta)
+        expected = counts + counts**2 / theta
+        assert_allclose(fam.variance(counts), expected, atol=1e-12)
+
+    def test_variance_reduces_to_poisson_large_theta(self, counts):
+        """As theta -> inf, NB2 variance -> mu (Poisson)."""
+        fam = NegativeBinomial2Family(theta=1e12)
+        assert_allclose(fam.variance(counts), counts, rtol=1e-6)
+
+    def test_mu_eta_is_derivative(self):
+        """mu_eta should equal d(linkinv)/d(eta), verified numerically."""
+        fam = NegativeBinomial2Family(theta=1.5)
+        eta = np.array([-1.0, 0.0, 1.0, 2.0])
+        h = 1e-7
+        numerical = (fam.linkinv(eta + h) - fam.linkinv(eta - h)) / (2 * h)
+        assert_allclose(fam.mu_eta(eta), numerical, rtol=1e-5)
+
+    def test_mu_eta_equals_exp(self):
+        """For log link, d(exp(eta))/d(eta) = exp(eta)."""
+        fam = NegativeBinomial2Family(theta=1.0)
+        eta = np.array([-1.0, 0.0, 1.0, 2.0])
+        assert_allclose(fam.mu_eta(eta), np.exp(eta), atol=1e-12)
+
+    def test_dev_resids_perfect_fit(self):
+        """Deviance residuals should be zero when y == mu."""
+        fam = NegativeBinomial2Family(theta=1.0)
+        mu = np.array([1.0, 2.0, 5.0])
+        wt = np.ones_like(mu)
+        assert_allclose(fam.dev_resids(mu, mu, wt), 0.0, atol=1e-12)
+
+    def test_dev_resids_known_value(self):
+        """NB2 deviance for y=3, mu=1, theta=1, wt=1.
+
+        d_i = 2 * wt * [y*log(y/mu) - (y + theta)*log((y + theta)/(mu + theta))]
+             = 2 * [3*log(3) - 4*log(4/2)]
+             = 2 * [3*log(3) - 4*log(2)]
+        """
+        fam = NegativeBinomial2Family(theta=1.0)
+        y = np.array([3.0])
+        mu = np.array([1.0])
+        wt = np.array([1.0])
+        expected = 2.0 * (3.0 * np.log(3.0) - 4.0 * np.log(2.0))
+        assert_allclose(fam.dev_resids(y, mu, wt), expected, atol=1e-12)
+
+    def test_dev_resids_y_zero(self):
+        """For y=0, mu=2, theta=1, wt=1:
+        d_i = 2 * [0*log(0/2) - (0+1)*log((0+1)/(2+1))]
+            = 2 * [0 - log(1/3)]
+            = 2 * log(3)
+        """
+        fam = NegativeBinomial2Family(theta=1.0)
+        y = np.array([0.0])
+        mu = np.array([2.0])
+        wt = np.array([1.0])
+        expected = np.array([2.0 * np.log(3.0)])
+        assert_allclose(fam.dev_resids(y, mu, wt), expected, atol=1e-12)
+
+    def test_linkinv_clamps_large_eta(self):
+        """exp(1000) would overflow; linkinv should stay finite."""
+        fam = NegativeBinomial2Family(theta=1.0)
+        mu = fam.linkinv(np.array([500.0]))
+        assert np.all(np.isfinite(mu))
+
+    def test_theta_must_be_positive(self):
+        """theta <= 0 should raise."""
+        with pytest.raises(ValueError, match="theta must be positive"):
+            NegativeBinomial2Family(theta=0.0)
+        with pytest.raises(ValueError, match="theta must be positive"):
+            NegativeBinomial2Family(theta=-1.0)
+
+
+# ---------------------------------------------------------------------------
 # Weights
 # ---------------------------------------------------------------------------
 
@@ -248,13 +364,16 @@ class TestGaussianFamily:
 class TestWeights:
     """Deviance residuals should scale linearly with weights."""
 
-    @pytest.mark.parametrize("cls", [BinomialFamily, PoissonFamily, GaussianFamily])
+    @pytest.mark.parametrize(
+        "cls",
+        [BinomialFamily, PoissonFamily, GaussianFamily, NegativeBinomial2Family],
+    )
     def test_dev_resids_weight_scaling(self, cls):
         fam = cls()
         if cls is BinomialFamily:
             y = np.array([1.0, 0.0, 1.0])
             mu = np.array([0.7, 0.3, 0.9])
-        elif cls is PoissonFamily:
+        elif cls is PoissonFamily or cls is NegativeBinomial2Family:
             y = np.array([3.0, 0.0, 5.0])
             mu = np.array([2.0, 1.0, 4.0])
         else:
@@ -295,6 +414,12 @@ class TestResolveFamily:
 
         fam = resolve_family("gaussian")
         assert isinstance(fam, GaussianFamily)
+
+    def test_string_negativebinomial(self):
+        from interlace.glmm_family import resolve_family
+
+        fam = resolve_family("negativebinomial")
+        assert isinstance(fam, NegativeBinomial2Family)
 
     def test_passthrough_instance(self):
         from interlace.glmm_family import resolve_family

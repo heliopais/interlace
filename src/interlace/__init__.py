@@ -24,7 +24,7 @@ from interlace.formula import (
     parse_formula,
     parse_random_effects,
 )
-from interlace.glmm_family import GLMMFamily
+from interlace.glmm_family import GLMMFamily, NegativeBinomial2Family
 from interlace.glmm_laplace import GLMMResult
 from interlace.glmm_laplace import fit_glmm as glmer
 from interlace.influence import (
@@ -109,6 +109,7 @@ __all__ = [
     "glmer",
     "GLMMResult",
     "GLMMFamily",
+    "NegativeBinomial2Family",
 ]
 
 
