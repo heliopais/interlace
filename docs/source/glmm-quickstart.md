@@ -128,12 +128,37 @@ result = interlace.glmer(
 
 ---
 
+## Adaptive Gauss-Hermite quadrature (AGQ)
+
+The default Laplace approximation (`nAGQ=1`) is fast but can be inaccurate for
+models with few observations per group (e.g. sparse binary data). Setting
+`nAGQ > 1` uses adaptive Gauss-Hermite quadrature for a more accurate
+marginal-likelihood integral, matching `lme4::glmer(nAGQ = ...)`.
+
+```python
+result = interlace.glmer(
+    formula="incidence / size ~ period",
+    data=df,
+    family="binomial",
+    groups="herd",
+    weights=df["size"].values,
+    nAGQ=25,
+)
+```
+
+**Constraints:** `nAGQ > 1` requires a single grouping factor with a random
+intercept only (no random slopes or crossed random effects). This matches
+lme4's restriction.
+
+---
+
 ## Comparison with R
 
 | interlace | R (lme4) |
 |-----------|----------|
 | `interlace.glmer(formula, data, family="binomial", groups="herd", weights=w)` | `glmer(cbind(incidence, size - incidence) ~ period + (1\|herd), data, family=binomial)` |
 | `interlace.glmer(formula, data, family="poisson", groups="site")` | `glmer(count ~ x + (1\|site), data, family=poisson)` |
+| `interlace.glmer(..., nAGQ=25)` | `glmer(..., nAGQ=25)` |
 | `result.fe_params` | `fixef(fit)` |
 | `result.variance_components` | `as.data.frame(VarCorr(fit))` |
 | `result.predict(newdata)` | `predict(fit, newdata, type="response")` |

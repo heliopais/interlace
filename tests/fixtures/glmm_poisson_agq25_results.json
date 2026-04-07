@@ -1,0 +1,20 @@
+{
+  "fixed_effects": {
+    "(Intercept)": 0.80870313479,
+    "x": 0.41330209061
+  },
+  "fixed_effects_se": {
+    "(Intercept)": 0.19327872402,
+    "x": 0.047696725305
+  },
+  "variance_components": {
+    "group": 0.34691804376
+  },
+  "loglik": -361.5921990662,
+  "loglik_lme4_scale": -120.2493887162,
+  "aic": 246.4987774325,
+  "nobs": 200,
+  "theta": 0.58899749045,
+  "nAGQ": 25,
+  "converged": true
+}

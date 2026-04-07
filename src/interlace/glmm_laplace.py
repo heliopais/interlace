@@ -500,6 +500,151 @@ def _laplace_objective(
 
 
 # ---------------------------------------------------------------------------
+# AGQ (Adaptive Gauss-Hermite Quadrature) objective
+# ---------------------------------------------------------------------------
+
+
+def _agq_loglik(
+    theta: np.ndarray,
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    family: GLMMFamily,
+    specs: list[RandomEffectSpec],
+    n_levels: list[int],
+    weights: np.ndarray,
+    nAGQ: int,
+    group_indices: list[np.ndarray],
+    warm: dict[str, np.ndarray | None],
+) -> float:
+    """Compute the AGQ-approximated marginal log-likelihood.
+
+    For each group i the marginal contribution is estimated by adaptive
+    Gauss-Hermite quadrature over the scalar random intercept u_i, adapting
+    the quadrature nodes to the conditional mode and curvature found by PIRLS.
+
+    Parameters
+    ----------
+    theta : Variance parameters.
+    y, X, Z : Model matrices.
+    family : GLMMFamily instance.
+    specs : Random effect specifications (must be single scalar intercept).
+    n_levels : Number of levels per grouping factor.
+    weights : Prior weights.
+    nAGQ : Number of GH quadrature points.
+    group_indices : List of arrays, one per group level, each containing
+        the row indices of observations belonging to that level.
+    warm : Warm-start dict for PIRLS.
+
+    Returns
+    -------
+    Negative log-likelihood (for minimisation).
+    """
+    from numpy.polynomial.hermite import hermgauss
+
+    # Step 1: PIRLS to find conditional modes and working quantities
+    beta, u, _mu, _laplace_ll, _conv = _pirls(
+        y,
+        X,
+        Z,
+        family,
+        theta,
+        specs,
+        n_levels,
+        weights,
+        u0=warm.get("u"),
+        beta0=warm.get("beta"),
+    )
+    warm["u"] = u
+    warm["beta"] = beta
+
+    sigma_u = float(theta[0])  # theta parameterises SD: sigma_u = theta * sigma
+    # For GLMM dispersion is 1 (binomial/Poisson), so var_u = theta^2
+    var_u = sigma_u**2
+
+    if var_u < 1e-20:
+        # Degenerate: no random effects, fall back to conditional ll
+        eta = X @ beta
+        mu = family.linkinv(eta)
+        if not isinstance(family, GaussianFamily):
+            mu = _clamp_mu(mu, family)
+        cond_ll = _conditional_loglik(y, mu, weights, family)
+        return -cond_ll if np.isfinite(cond_ll) else 1e20
+
+    # Step 2: Compute conditional precision per group from PIRLS working weights
+    eta_hat = X @ beta + Z @ u
+    mu_hat = family.linkinv(eta_hat)
+    if not isinstance(family, GaussianFamily):
+        mu_hat = _clamp_mu(mu_hat, family)
+
+    mu_eta_hat = family.mu_eta(eta_hat)
+    var_mu_hat = family.variance(mu_hat)
+    w_hat = weights * mu_eta_hat**2 / var_mu_hat  # IRLS weights at mode
+
+    # GH nodes and weights
+    gh_z, gh_w = hermgauss(nAGQ)  # ∫ exp(-t²) f(t) dt ≈ Σ w_k f(z_k)
+
+    q = n_levels[0]  # number of groups
+    total_ll = 0.0
+
+    for i in range(q):
+        idx = group_indices[i]
+        u_hat_i = float(u[i])
+
+        # Conditional precision: h_i = Σ_j w_{ij} + 1/var_u
+        h_i = float(np.sum(w_hat[idx])) + 1.0 / var_u
+        sigma_c_i = 1.0 / np.sqrt(h_i)  # conditional SD
+
+        # Pre-extract group data
+        y_i = y[idx]
+        X_i = X[idx]
+        w_i = weights[idx]
+
+        # For each GH node, compute log-integrand
+        # u_k = u_hat_i + sqrt(2) * sigma_c_i * z_k
+        log_integrands = np.empty(nAGQ)
+        for k in range(nAGQ):
+            u_ik = u_hat_i + np.sqrt(2.0) * sigma_c_i * gh_z[k]
+
+            # Linear predictor for group i at this u
+            eta_ik = X_i @ beta + u_ik
+            mu_ik = family.linkinv(eta_ik)
+            if not isinstance(family, GaussianFamily):
+                mu_ik = _clamp_mu(mu_ik, family)
+
+            # Conditional log-likelihood for group i
+            cll_ik = _conditional_loglik(y_i, mu_ik, w_i, family)
+
+            # Log prior: log N(u_ik; 0, var_u)
+            log_prior_ik = -0.5 * u_ik**2 / var_u
+
+            # g(u_ik) = cond_ll + log_prior (unnormalised)
+            g_ik = cll_ik + log_prior_ik
+
+            # Integrand for GH: exp(g(u_ik) + z_k^2) * w_k
+            # We work on log scale: log(w_k) + g_ik + z_k^2
+            log_integrands[k] = np.log(gh_w[k]) + g_ik + gh_z[k] ** 2
+
+        # log L_i = log(sqrt(2) * sigma_c_i) + logsumexp(log_integrands)
+        max_li = np.max(log_integrands)
+        log_Li = (
+            0.5 * np.log(2.0)
+            + np.log(sigma_c_i)
+            + max_li
+            + np.log(np.sum(np.exp(log_integrands - max_li)))
+        )
+        total_ll += log_Li
+
+    # Subtract the log-prior normalising constant: -0.5*q*log(2*pi*var_u)
+    # (the N(0, var_u) density has normalisation 1/sqrt(2*pi*var_u) per group)
+    total_ll -= 0.5 * q * np.log(2.0 * np.pi * var_u)
+
+    if not np.isfinite(total_ll):
+        return 1e20
+    return float(-total_ll)
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -513,8 +658,9 @@ def fit_glmm(
     weights: np.ndarray | None = None,
     optimizer: str = "lbfgsb",
     theta0: np.ndarray | None = None,
+    nAGQ: int = 1,
 ) -> GLMMResult:
-    """Fit a generalized linear mixed model via Laplace approximation.
+    """Fit a generalized linear mixed model.
 
     Parameters
     ----------
@@ -536,6 +682,11 @@ def fit_glmm(
         ``"lbfgsb"`` (default) or ``"bobyqa"``.
     theta0 :
         Initial theta. Defaults to ones.
+    nAGQ :
+        Number of adaptive Gauss-Hermite quadrature points.  ``1`` (default)
+        uses the Laplace approximation.  Values ``> 1`` use AGQ for a more
+        accurate marginal-likelihood integral; this requires a single scalar
+        random intercept (one grouping factor, intercept only).
 
     Returns
     -------
@@ -555,6 +706,20 @@ def fit_glmm(
         raise ValueError("Either 'groups' or 'random' must be provided.")
 
     group_cols = [s.group for s in specs]
+
+    # --- Validate nAGQ ---
+    if nAGQ < 1:
+        raise ValueError("nAGQ must be >= 1.")
+    if nAGQ > 1:
+        if len(specs) > 1:
+            msg = "nAGQ > 1 is only supported with a single grouping factor."
+            raise ValueError(msg)
+        if specs[0].n_terms > 1:
+            msg = (
+                "nAGQ > 1 is only supported for scalar random intercepts "
+                "(no random slopes)."
+            )
+            raise ValueError(msg)
 
     # --- Parse formula, build X ---
     parsed = parse_formula(formula, data, groups=group_cols[0])
@@ -585,7 +750,27 @@ def fit_glmm(
     # --- Optimize ---
     warm: dict[str, np.ndarray | None] = {"u": None, "beta": None}
 
+    # Precompute group indices for AGQ
+    if nAGQ > 1:
+        group_codes = group_array(specs[0], nw_data)
+        group_uniques = sorted(np.unique(group_codes).tolist())
+        group_indices = [np.where(group_codes == lvl)[0] for lvl in group_uniques]
+
     def obj(theta: np.ndarray) -> float:
+        if nAGQ > 1:
+            return _agq_loglik(
+                theta,
+                y,
+                X,
+                Z,
+                fam,
+                specs,
+                n_levels_list,
+                weights_arr,
+                nAGQ,
+                group_indices,
+                warm,
+            )
         return _laplace_objective(
             theta, y, X, Z, fam, specs, n_levels_list, weights_arr, warm
         )
@@ -605,7 +790,7 @@ def fit_glmm(
         opt_converged = bool(res.success)
 
     # --- Final PIRLS at optimum ---
-    beta_hat, u_hat, mu_hat, llf, pirls_converged = _pirls(
+    beta_hat, u_hat, mu_hat, laplace_llf, pirls_converged = _pirls(
         y,
         X,
         Z,
@@ -618,6 +803,25 @@ def fit_glmm(
         beta0=warm.get("beta"),
     )
     converged = opt_converged and pirls_converged
+
+    # For AGQ, recompute the final log-likelihood using AGQ at theta_hat
+    if nAGQ > 1:
+        warm_final: dict[str, np.ndarray | None] = {"u": u_hat, "beta": beta_hat}
+        llf = -_agq_loglik(
+            theta_hat,
+            y,
+            X,
+            Z,
+            fam,
+            specs,
+            n_levels_list,
+            weights_arr,
+            nAGQ,
+            group_indices,
+            warm_final,
+        )
+    else:
+        llf = laplace_llf
 
     # --- Fixed effects standard errors ---
     # From the Hessian of the penalized log-likelihood w.r.t. beta

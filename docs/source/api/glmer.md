@@ -1,8 +1,9 @@
 # glmer
 
-Fit a generalised linear mixed model (GLMM) via Laplace approximation with
-penalised iteratively reweighted least squares (PIRLS) — targeting parity with
-R's [`lme4::glmer()`](https://lme4.r-lib.org/reference/glmer.html).
+Fit a generalised linear mixed model (GLMM) via Laplace approximation or
+adaptive Gauss-Hermite quadrature (AGQ) with penalised iteratively reweighted
+least squares (PIRLS) — targeting parity with R's
+[`lme4::glmer()`](https://lme4.r-lib.org/reference/glmer.html).
 
 ```{eval-rst}
 .. autofunction:: interlace.glmer
@@ -20,6 +21,7 @@ R's [`lme4::glmer()`](https://lme4.r-lib.org/reference/glmer.html).
 | `weights` | `ndarray` | Prior weights; for binomial proportion responses, pass trial counts |
 | `optimizer` | `"lbfgsb"` or `"bobyqa"` | Optimizer. `"bobyqa"` is gradient-free and more robust |
 | `theta0` | `ndarray` | Initial variance parameters; defaults to ones |
+| `nAGQ` | `int` | Number of adaptive Gauss-Hermite quadrature points (default `1` = Laplace) |
 
 ## Supported families
 
@@ -83,6 +85,27 @@ result = interlace.glmer(
 )
 ```
 
+### Adaptive Gauss-Hermite quadrature (AGQ)
+
+For models with a single scalar random intercept, set `nAGQ > 1` for a more
+accurate marginal-likelihood approximation than Laplace. This mirrors
+`lme4::glmer(nAGQ = ...)`.
+
+```python
+result = interlace.glmer(
+    formula="incidence / size ~ period",
+    data=df,
+    family="binomial",
+    groups="herd",
+    weights=df["size"].values,
+    nAGQ=25,  # 25 quadrature points
+)
+```
+
+`nAGQ=1` (the default) uses the Laplace approximation. Higher values are more
+accurate but slower. `nAGQ > 1` requires exactly one grouping factor with a
+random intercept only (no random slopes).
+
 ### Prediction
 
 ```python
@@ -109,7 +132,7 @@ preds_marginal = result.predict(newdata=df_new, include_re=False)
 | `theta` | `ndarray` | Variance parameters (Cholesky factors) |
 | `converged` | `bool` | Whether both PIRLS and outer optimizer converged |
 | `nobs` | `int` | Number of observations |
-| `llf` | `float` | Log-likelihood (Laplace approximation) |
+| `llf` | `float` | Log-likelihood (Laplace or AGQ, depending on `nAGQ`) |
 | `aic` | `float` | Akaike information criterion |
 | `bic` | `float` | Bayesian information criterion |
 | `family` | `GLMMFamily` | Family object used for fitting |
