@@ -287,6 +287,7 @@ def _glm_start(
     X: np.ndarray,
     family: GLMMFamily,
     weights: np.ndarray,
+    offset: np.ndarray | None = None,
 ) -> np.ndarray:
     """Compute starting beta from a fixed-effects-only GLM (IRLS).
 
@@ -294,6 +295,8 @@ def _glm_start(
     starting point for PIRLS.
     """
     n, p = X.shape
+    _off = offset if offset is not None else np.zeros(n)
+
     # Initialize mu from y, with safety clamps
     if family.name == "binomial":
         mu = np.clip(y, 0.01, 0.99)
@@ -308,7 +311,8 @@ def _glm_start(
         mu_eta_val = family.mu_eta(eta)
         var_mu = family.variance(mu)
         w = weights * mu_eta_val**2 / var_mu
-        z_w = eta + (y - mu) / mu_eta_val
+        # Working residual on the link scale, excluding offset
+        z_w = (eta - _off) + (y - mu) / mu_eta_val
 
         WX = np.sqrt(w)[:, None] * X
         Wz = np.sqrt(w) * z_w
@@ -316,7 +320,7 @@ def _glm_start(
             beta_new = la.solve(WX.T @ WX, WX.T @ Wz, assume_a="pos")
         except la.LinAlgError:
             break
-        eta = X @ beta_new
+        eta = X @ beta_new + _off
         mu = family.linkinv(eta)
         if not isinstance(family, GaussianFamily):
             mu = _clamp_mu(mu, family)
@@ -340,6 +344,7 @@ def _pirls(
     weights: np.ndarray,
     u0: np.ndarray | None = None,
     beta0: np.ndarray | None = None,
+    offset: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, bool]:
     """Run PIRLS to find conditional modes (u_hat, beta_hat).
 
@@ -355,6 +360,7 @@ def _pirls(
     weights : Prior weights (n,). For binomial, this is the trial count.
     u0 : Initial random effects (q,). Defaults to zeros.
     beta0 : Initial fixed effects (p,). Defaults to zeros.
+    offset : Offset vector (n,). Added to the linear predictor.
 
     Returns
     -------
@@ -371,13 +377,19 @@ def _pirls(
 
     u = np.zeros(q) if u0 is None else u0.copy()
     # Initialize beta from a GLM fit (no random effects) when not warm-starting.
-    beta = _glm_start(y, X, family, weights) if beta0 is None else beta0.copy()
+    beta = (
+        _glm_start(y, X, family, weights, offset=offset)
+        if beta0 is None
+        else beta0.copy()
+    )
+
+    _off = offset if offset is not None else np.zeros(n)
 
     converged = False
 
     for _iteration in range(_PIRLS_MAXITER):
         # Current linear predictor and mean
-        eta = X @ beta + Z @ u
+        eta = X @ beta + Z @ u + _off
         mu = family.linkinv(eta)
 
         # Clamp mu to avoid numerical issues
@@ -390,8 +402,8 @@ def _pirls(
 
         # W = diag(weights * mu_eta^2 / var_mu) — the IRLS weight matrix
         w = weights * mu_eta_val**2 / var_mu  # (n,)
-        # Working residual: z_w = eta + (y - mu) / mu_eta
-        z_w = eta + (y - mu) / mu_eta_val  # (n,)
+        # Working residual (offset excluded so we solve for X@beta + Z@u only)
+        z_w = (eta - _off) + (y - mu) / mu_eta_val  # (n,)
 
         # Penalized weighted least squares via Lambda parameterisation.
         # Let v = Lambda^{-1} u so the penalty term becomes v'v.
@@ -457,7 +469,7 @@ def _pirls(
             break
 
     # Final values
-    eta = X @ beta + Z @ u
+    eta = X @ beta + Z @ u + _off
     mu = family.linkinv(eta)
     if not isinstance(family, GaussianFamily):
         mu = _clamp_mu(mu, family)
@@ -499,6 +511,7 @@ def _laplace_objective(
     n_levels: list[int],
     weights: np.ndarray,
     warm: dict[str, np.ndarray | None],
+    offset: np.ndarray | None = None,
 ) -> float:
     """Negative Laplace log-likelihood (to minimize over theta)."""
     beta, u, _mu, ll, _conv = _pirls(
@@ -512,6 +525,7 @@ def _laplace_objective(
         weights,
         u0=warm.get("u"),
         beta0=warm.get("beta"),
+        offset=offset,
     )
     # Warm-start next call
     warm["u"] = u
@@ -539,6 +553,7 @@ def _agq_loglik(
     nAGQ: int,
     group_indices: list[np.ndarray],
     warm: dict[str, np.ndarray | None],
+    offset: np.ndarray | None = None,
 ) -> float:
     """Compute the AGQ-approximated marginal log-likelihood.
 
@@ -558,6 +573,7 @@ def _agq_loglik(
     group_indices : List of arrays, one per group level, each containing
         the row indices of observations belonging to that level.
     warm : Warm-start dict for PIRLS.
+    offset : Offset vector (n,). Added to the linear predictor.
 
     Returns
     -------
@@ -577,9 +593,12 @@ def _agq_loglik(
         weights,
         u0=warm.get("u"),
         beta0=warm.get("beta"),
+        offset=offset,
     )
     warm["u"] = u
     warm["beta"] = beta
+
+    _off = offset if offset is not None else np.zeros(len(y))
 
     sigma_u = float(theta[0])  # theta parameterises SD: sigma_u = theta * sigma
     # For GLMM dispersion is 1 (binomial/Poisson), so var_u = theta^2
@@ -587,7 +606,7 @@ def _agq_loglik(
 
     if var_u < 1e-20:
         # Degenerate: no random effects, fall back to conditional ll
-        eta = X @ beta
+        eta = X @ beta + _off
         mu = family.linkinv(eta)
         if not isinstance(family, GaussianFamily):
             mu = _clamp_mu(mu, family)
@@ -595,7 +614,7 @@ def _agq_loglik(
         return -cond_ll if np.isfinite(cond_ll) else 1e20
 
     # Step 2: Compute conditional precision per group from PIRLS working weights
-    eta_hat = X @ beta + Z @ u
+    eta_hat = X @ beta + Z @ u + _off
     mu_hat = family.linkinv(eta_hat)
     if not isinstance(family, GaussianFamily):
         mu_hat = _clamp_mu(mu_hat, family)
@@ -622,6 +641,7 @@ def _agq_loglik(
         y_i = y[idx]
         X_i = X[idx]
         w_i = weights[idx]
+        off_i = _off[idx]
 
         # For each GH node, compute log-integrand
         # u_k = u_hat_i + sqrt(2) * sigma_c_i * z_k
@@ -630,7 +650,7 @@ def _agq_loglik(
             u_ik = u_hat_i + np.sqrt(2.0) * sigma_c_i * gh_z[k]
 
             # Linear predictor for group i at this u
-            eta_ik = X_i @ beta + u_ik
+            eta_ik = X_i @ beta + u_ik + off_i
             mu_ik = family.linkinv(eta_ik)
             if not isinstance(family, GaussianFamily):
                 mu_ik = _clamp_mu(mu_ik, family)
@@ -682,6 +702,7 @@ def fit_glmm(
     optimizer: str = "lbfgsb",
     theta0: np.ndarray | None = None,
     nAGQ: int = 1,
+    offset: np.ndarray | None = None,
 ) -> GLMMResult:
     """Fit a generalized linear mixed model.
 
@@ -710,6 +731,10 @@ def fit_glmm(
         uses the Laplace approximation.  Values ``> 1`` use AGQ for a more
         accurate marginal-likelihood integral; this requires a single scalar
         random intercept (one grouping factor, intercept only).
+    offset :
+        Offset vector, shape ``(n,)``.  A known term added to the linear
+        predictor that is not estimated.  Common use: ``np.log(exposure)``
+        in Poisson rate models.  Defaults to zero.
 
     Returns
     -------
@@ -763,6 +788,15 @@ def fit_glmm(
     else:
         weights_arr = np.asarray(weights, dtype=np.float64)
 
+    # --- Offset ---
+    if offset is not None:
+        offset_arr = np.asarray(offset, dtype=np.float64)
+        if offset_arr.shape != (n,):
+            msg = f"offset length ({offset_arr.size}) must match data length ({n})."
+            raise ValueError(msg)
+    else:
+        offset_arr = np.zeros(n)
+
     # --- Theta setup ---
     n_theta = sum(n_theta_for_spec(s.n_terms, s.correlated) for s in specs)
     bounds = _build_theta_bounds(specs)
@@ -793,9 +827,19 @@ def fit_glmm(
                 nAGQ,
                 group_indices,
                 warm,
+                offset=offset_arr,
             )
         return _laplace_objective(
-            theta, y, X, Z, fam, specs, n_levels_list, weights_arr, warm
+            theta,
+            y,
+            X,
+            Z,
+            fam,
+            specs,
+            n_levels_list,
+            weights_arr,
+            warm,
+            offset=offset_arr,
         )
 
     lower_bounds = np.array([lo if lo is not None else -np.inf for lo, _ in bounds])
@@ -824,6 +868,7 @@ def fit_glmm(
         weights_arr,
         u0=warm.get("u"),
         beta0=warm.get("beta"),
+        offset=offset_arr,
     )
     converged = opt_converged and pirls_converged
 
@@ -842,13 +887,14 @@ def fit_glmm(
             nAGQ,
             group_indices,
             warm_final,
+            offset=offset_arr,
         )
     else:
         llf = laplace_llf
 
     # --- Fixed effects standard errors ---
     # From the Hessian of the penalized log-likelihood w.r.t. beta
-    eta = X @ beta_hat + Z @ u_hat
+    eta = X @ beta_hat + Z @ u_hat + offset_arr
     mu_eta_val = fam.mu_eta(eta)
     var_mu = fam.variance(mu_hat)
     w = weights_arr * mu_eta_val**2 / var_mu
@@ -936,7 +982,7 @@ def fit_glmm(
     bic = -2.0 * llf + np.log(n) * nparams
 
     # --- Fitted values (response scale) and linear predictor ---
-    eta_hat = X @ beta_hat + Z @ u_hat
+    eta_hat = X @ beta_hat + Z @ u_hat + offset_arr
     fittedvalues = np.asarray(fam.linkinv(eta_hat))
 
     return GLMMResult(

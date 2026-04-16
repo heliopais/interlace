@@ -122,6 +122,7 @@ def fit(
     optimizer: str = "lbfgsb",
     theta0: np.ndarray | None = None,
     weights: np.ndarray | None = None,
+    offset: np.ndarray | None = None,
 ) -> CrossedLMEResult:
     """Fit a linear mixed model with crossed random effects via profiled REML.
 
@@ -162,6 +163,10 @@ def fit(
         contribution to the log-likelihood is scaled by its weight.
         Equivalent to pre-multiplying all data by ``sqrt(diag(weights))``.
         Defaults to ones (unweighted).
+    offset:
+        Offset vector, shape ``(n,)``.  A known term added to the linear
+        predictor that is not estimated.  For LMMs (identity link) this is
+        equivalent to fitting ``y - offset ~ …``.  Defaults to zero.
 
     Returns
     -------
@@ -200,6 +205,17 @@ def fit(
             raise ValueError(msg)
         if np.any(weights_arr <= 0):
             raise ValueError("All weights must be positive.")
+
+    # --- Validate and apply offset ---
+    offset_arr: np.ndarray | None = None
+    y_orig = y  # keep original for residuals / fitted values
+    if offset is not None:
+        offset_arr = np.asarray(offset, dtype=np.float64)
+        if offset_arr.shape != (n,):
+            msg = f"offset length ({offset_arr.size}) must match data length ({n})."
+            raise ValueError(msg)
+        # For identity-link LMM, offset enters as y_adj = y - offset.
+        y = y - offset_arr
 
     # --- 2. Build joint sparse Z and collect n_levels per spec ---
     Z = build_joint_z_from_specs(specs, data)
@@ -252,7 +268,9 @@ def fit(
 
     # --- 6. Fitted values and conditional residuals ---
     fittedvalues = X @ beta + Z @ blups
-    resid = y - fittedvalues
+    if offset_arr is not None:
+        fittedvalues = fittedvalues + offset_arr
+    resid = y_orig - fittedvalues
 
     # --- 7. Standard errors and Satterthwaite DFs ---
     sigma2 = reml.sigma2
@@ -284,7 +302,7 @@ def fit(
         fe_cov=fe_cov,
         model=ModelInfo(
             exog=X,
-            endog=y,
+            endog=y_orig,
             groups=nw_data[group_cols[0]].to_numpy(),
             endog_names=formula.split("~")[0].strip(),
             formula=formula,
@@ -381,7 +399,7 @@ def fit(
 
     model_info = ModelInfo(
         exog=X,
-        endog=y,
+        endog=y_orig,
         groups=nw_data[group_cols[0]].to_numpy(),
         endog_names=formula.split("~")[0].strip(),
         formula=formula,
