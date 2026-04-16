@@ -255,16 +255,33 @@ def _precompute(
     y: np.ndarray,
     X: np.ndarray,
     Z: sp.csc_matrix,
+    weights: np.ndarray | None = None,
 ) -> dict[str, np.ndarray | sp.csc_matrix | float]:
-    """Precompute all cross-products that are constant across REML evaluations."""
-    ZtZ: sp.csc_matrix = (Z.T @ Z).tocsc()
+    """Precompute all cross-products that are constant across REML evaluations.
+
+    When *weights* is provided, all cross-products are weighted:
+    ``X'WX``, ``X'Wy``, ``Z'WZ``, ``Z'WX``, ``Z'Wy``, ``y'Wy``
+    where ``W = diag(weights)``.  This is equivalent to pre-multiplying all
+    data vectors/matrices by ``sqrt(W)``.
+    """
+    if weights is not None:
+        sqW = np.sqrt(weights)
+        Xw = sqW[:, None] * X
+        yw = sqW * y
+        Zw = sp.diags(sqW, format="csc") @ Z
+    else:
+        Xw = X
+        yw = y
+        Zw = Z
+
+    ZtZ: sp.csc_matrix = (Zw.T @ Zw).tocsc()
     ZtX: np.ndarray = (
-        (Z.T @ X).toarray() if sp.issparse(Z.T @ X) else np.asarray(Z.T @ X)
+        (Zw.T @ Xw).toarray() if sp.issparse(Zw.T @ Xw) else np.asarray(Zw.T @ Xw)
     )
-    Zty: np.ndarray = np.asarray(Z.T @ y).squeeze()
-    XtX: np.ndarray = X.T @ X
-    Xty: np.ndarray = X.T @ y
-    yty: float = float(y @ y)
+    Zty: np.ndarray = np.asarray(Zw.T @ yw).squeeze()
+    XtX: np.ndarray = Xw.T @ Xw
+    Xty: np.ndarray = Xw.T @ yw
+    yty: float = float(yw @ yw)
     return dict(ZtZ=ZtZ, ZtX=ZtX, Zty=Zty, XtX=XtX, Xty=Xty, yty=yty)
 
 
@@ -556,6 +573,7 @@ def fit_reml(
     optimizer: str = "lbfgsb",
     tight: bool = True,
     use_gradient: bool = False,
+    weights: np.ndarray | None = None,
 ) -> REMLResult:
     """Fit a linear mixed model by profiled REML.
 
@@ -577,6 +595,8 @@ def fit_reml(
         installed via the ``bobyqa`` optional extra), a gradient-free
         trust-region method that is more robust near variance-parameter
         boundaries and is the same algorithm used by lme4.
+    weights:
+        Observation-level prior weights, shape (n,). Defaults to ones.
 
     Returns
     -------
@@ -600,7 +620,7 @@ def fit_reml(
     if theta0 is None:
         theta0 = np.ones(n_theta)
 
-    cache = _precompute(y, X, Z)
+    cache = _precompute(y, X, Z, weights=weights)
 
     # Cholesky factorisation (once for sparsity analysis + initial numeric factor):
     # sparsity pattern of A11 is fixed across all theta evaluations, so only the
@@ -886,6 +906,7 @@ def fit_ml(
     specs: list[RandomEffectSpec] | None = None,
     n_levels: list[int] | None = None,
     optimizer: str = "lbfgsb",
+    weights: np.ndarray | None = None,
 ) -> REMLResult:
     """Fit a linear mixed model by profiled ML.
 
@@ -902,6 +923,8 @@ def fit_ml(
     ----------
     y, X, Z, q_sizes, theta0, specs, n_levels, optimizer:
         Same as :func:`fit_reml`.
+    weights:
+        Observation-level prior weights, shape (n,). Defaults to ones.
 
     Returns
     -------
@@ -926,7 +949,7 @@ def fit_ml(
     if theta0 is None:
         theta0 = np.ones(n_theta)
 
-    cache = _precompute(y, X, Z)
+    cache = _precompute(y, X, Z, weights=weights)
 
     cholmod = _try_cholmod()
     if cholmod is not None:

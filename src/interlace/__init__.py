@@ -121,6 +121,7 @@ def fit(
     random: list[str] | None = None,
     optimizer: str = "lbfgsb",
     theta0: np.ndarray | None = None,
+    weights: np.ndarray | None = None,
 ) -> CrossedLMEResult:
     """Fit a linear mixed model with crossed random effects via profiled REML.
 
@@ -156,6 +157,11 @@ def fit(
         Initial theta for the optimizer.  Defaults to ``np.ones(n_theta)``.
         Pass the ``theta`` attribute of a previously fitted model to
         warm-start the optimizer (e.g. for case-deletion refits).
+    weights:
+        Observation-level prior weights, shape ``(n,)``.  Each observation's
+        contribution to the log-likelihood is scaled by its weight.
+        Equivalent to pre-multiplying all data by ``sqrt(diag(weights))``.
+        Defaults to ones (unweighted).
 
     Returns
     -------
@@ -185,6 +191,16 @@ def fit(
     term_names = parsed.term_names
     n, p = X.shape
 
+    # --- Validate weights ---
+    weights_arr: np.ndarray | None = None
+    if weights is not None:
+        weights_arr = np.asarray(weights, dtype=np.float64)
+        if weights_arr.shape != (n,):
+            msg = f"weights length ({weights_arr.size}) must match data length ({n})."
+            raise ValueError(msg)
+        if np.any(weights_arr <= 0):
+            raise ValueError("All weights must be positive.")
+
     # --- 2. Build joint sparse Z and collect n_levels per spec ---
     Z = build_joint_z_from_specs(specs, data)
     n_levels_list: list[int] = [
@@ -202,11 +218,12 @@ def fit(
         n_levels=n_levels_list,
         optimizer=optimizer,
         theta0=theta0,
+        weights=weights_arr,
     )
 
     # --- 4. Recover quantities at optimum ---
     Lambda = make_lambda(reml.theta, specs, n_levels_list)
-    cache = _precompute(y, X, Z)
+    cache = _precompute(y, X, Z, weights=weights_arr)
 
     ZtZ = sp.csc_matrix(cache["ZtZ"])
     ZtX = np.asarray(cache["ZtX"])
@@ -223,9 +240,12 @@ def fit(
     rhs = Xty - lZtX.T @ c1  # X'Ω⁻¹y  (p,)
     beta = la.solve(MX, rhs, assume_a="pos")
 
-    # --- 5. BLUPs: b̂ = Lambda A11⁻¹ Lambda' Z'ε ---
+    # --- 5. BLUPs: b̂ = Lambda A11⁻¹ Lambda' Z'Wε ---
     eps = y - X @ beta
-    Zte = np.asarray(Z.T @ eps).squeeze()
+    if weights_arr is not None:
+        Zte = np.asarray(Z.T @ (weights_arr * eps)).squeeze()
+    else:
+        Zte = np.asarray(Z.T @ eps).squeeze()
     blups = np.asarray(
         Lambda @ _sparse_solve(A11, np.asarray(Lambda.T @ Zte).squeeze())
     ).squeeze()
