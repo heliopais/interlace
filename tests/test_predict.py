@@ -375,3 +375,46 @@ def test_predict_does_not_use_narwhals_column_selection(
     # Compare against correct prediction (no mock)
     pred_correct = result.predict(newdata=newdata, include_re=False)
     np.testing.assert_allclose(pred, pred_correct, rtol=1e-8)
+
+
+# ---------------------------------------------------------------------------
+# Edge case: newdata missing a group column (crossed random effects)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def crossed_data_and_result():
+    """Fit a model with two crossed random intercepts."""
+    rng = np.random.default_rng(55)
+    n = 200
+    g1 = rng.choice([f"a{i}" for i in range(10)], n)
+    g2 = rng.choice([f"b{j}" for j in range(8)], n)
+    x = rng.standard_normal(n)
+    u1 = {f"a{i}": rng.normal(0, 0.5) for i in range(10)}
+    u2 = {f"b{j}": rng.normal(0, 0.3) for j in range(8)}
+    y = (
+        2.0
+        + 0.6 * x
+        + np.array([u1[v] for v in g1])
+        + np.array([u2[v] for v in g2])
+        + rng.normal(0, 0.4, n)
+    )
+    df = pd.DataFrame({"y": y, "x": x, "g1": g1, "g2": g2})
+    result = interlace.fit("y ~ x", data=df, random=["(1 | g1)", "(1 | g2)"])
+    return df, result
+
+
+def test_predict_missing_group_column_in_newdata(crossed_data_and_result):
+    """When newdata omits one group column, predict should still work using
+    only the BLUP from the present group (the missing one contributes 0)."""
+    df, result = crossed_data_and_result
+    # newdata has g1 but NOT g2
+    newdata = df[["x", "g1"]].iloc[:10].reset_index(drop=True)
+    pred = result.predict(newdata=newdata)
+
+    # Expected: fe prediction + g1 BLUP only (g2 contributes 0)
+    pred_fe = result.predict(newdata=newdata, include_re=False)
+    g1_blups = result.random_effects["g1"]
+    g1_contrib = np.array([g1_blups.get(v, 0.0) for v in newdata["g1"]], dtype=float)
+    expected = pred_fe + g1_contrib
+    np.testing.assert_allclose(pred, expected, rtol=1e-8)
