@@ -178,9 +178,53 @@ result = interlace.glmer(
 )
 ```
 
-**Constraints:** `nAGQ > 1` requires a single grouping factor with a random
-intercept only (no random slopes or crossed random effects). This matches
-lme4's restriction.
+### When Laplace is good enough
+
+The Laplace approximation (`nAGQ=1`) works well when:
+
+- Each group has many observations (e.g. 10+ per level)
+- The response is not extremely sparse (i.e. not nearly all zeros or all ones)
+- You are using Poisson or Gaussian families (where the conditional distribution
+  is closer to normal)
+
+In these settings, Laplace and AGQ produce nearly identical parameter estimates,
+so the extra computation of AGQ is unnecessary.
+
+### When AGQ matters
+
+Consider `nAGQ > 1` (e.g. `nAGQ=10` or `nAGQ=25`) when:
+
+- **Binary outcomes with few observations per group** — this is the most common
+  case where Laplace bias is noticeable. With only 2--5 binary observations per
+  group, Laplace can underestimate the random-effect variance and bias the
+  fixed-effect estimates.
+- **Small cluster sizes in binomial models** — proportions computed from small
+  trial counts (e.g. 3/5, 1/2) lead to discrete, non-normal conditional
+  distributions that the Laplace approximation handles poorly.
+- **You need accurate likelihood-based statistics** — AIC, BIC, and likelihood
+  ratio tests all depend on the marginal log-likelihood. AGQ provides a more
+  accurate value.
+
+Values of `nAGQ` between 10 and 25 are typical. Going higher rarely changes
+results but increases computation time.
+
+### Restriction to scalar random effects
+
+`nAGQ > 1` requires exactly one grouping factor with a random intercept only —
+no random slopes and no crossed random effects. This matches lme4's restriction.
+If your model has multiple grouping factors or random slopes, `nAGQ=1` (Laplace)
+is the only option.
+
+**Why?** AGQ works by numerically integrating out each group's random effect
+using quadrature points along a single dimension. With vector random effects
+(e.g. a random intercept *and* slope), the integral becomes multi-dimensional:
+`nAGQ` points per dimension means `nAGQ^d` evaluations per group, where `d` is
+the dimension of the random-effect vector. For even modest `d` and `nAGQ`, this
+becomes computationally intractable. lme4 enforces the same constraint for the
+same reason.
+
+For models with vector random effects, the Laplace approximation is the standard
+approach and is generally accurate when cluster sizes are not very small.
 
 ---
 

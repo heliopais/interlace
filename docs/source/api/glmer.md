@@ -137,7 +137,9 @@ result = interlace.glmer(
 
 `nAGQ=1` (the default) uses the Laplace approximation. Higher values are more
 accurate but slower. `nAGQ > 1` requires exactly one grouping factor with a
-random intercept only (no random slopes).
+random intercept only (no random slopes). See the
+{doc}`/glmm-quickstart` AGQ section for guidance on when Laplace is sufficient
+vs when AGQ improves estimation.
 
 ### Prediction
 
