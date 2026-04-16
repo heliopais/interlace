@@ -213,3 +213,65 @@ class TestResultMethodDelegation:
     def test_bootMer_method_on_result(self, result) -> None:
         br = result.bootMer(B=5, seed=0)
         assert isinstance(br, BootResult)
+
+
+# ---------------------------------------------------------------------------
+# Coverage: polars frame replacement, show_progress
+# ---------------------------------------------------------------------------
+
+
+class TestReplaceColInFrame:
+    """Tests for _replace_col_in_frame with different frame types."""
+
+    def test_polars_dataframe(self, simple_df, result) -> None:
+        """_replace_col_in_frame works with polars DataFrames."""
+        import polars as pl
+
+        from interlace.simulate import _replace_col_in_frame
+
+        # Build polars frame directly (avoids pyarrow dependency for conversion)
+        frame = pl.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
+        new_vals = np.array([10, 20, 30])
+        out = _replace_col_in_frame(frame, "a", new_vals)
+        assert isinstance(out, pl.DataFrame)
+        assert out["a"].to_list() == [10, 20, 30]
+        assert out["b"].to_list() == [4.0, 5.0, 6.0]
+
+    def test_generic_narwhals_fallback(self) -> None:
+        """_replace_col_in_frame uses narwhals fallback for non-pandas/polars frames."""
+        from unittest.mock import patch
+
+        import pandas as pd
+
+        from interlace.simulate import _replace_col_in_frame
+
+        frame = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+        new_vals = np.array([10, 20, 30])
+
+        # Patch isinstance to return False for both pd.DataFrame and pl.DataFrame,
+        # forcing the generic narwhals fallback path
+        orig = isinstance
+
+        def fake_isinstance(obj, cls):
+            if cls is pd.DataFrame:
+                return False
+            try:
+                import polars as pl
+
+                if cls is pl.DataFrame:
+                    return False
+            except ImportError:
+                pass
+            return orig(obj, cls)
+
+        with patch("interlace.simulate.isinstance", side_effect=fake_isinstance):
+            out = _replace_col_in_frame(frame, "a", new_vals)
+        assert list(out["a"]) == [10, 20, 30]
+
+
+class TestBootMerShowProgress:
+    def test_show_progress_with_tqdm(self, result) -> None:
+        """bootMer with show_progress=True should work when tqdm is installed."""
+        br = bootMer(result, B=3, seed=0, show_progress=True)
+        assert isinstance(br, BootResult)
+        assert br.estimates.shape[0] == 3

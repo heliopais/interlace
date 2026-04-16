@@ -350,3 +350,41 @@ class TestSummaryTables:
     def test_tables_0_is_dataframe(self, single_re_result):
         tables = single_re_result.summary().tables
         assert isinstance(tables[0], pd.DataFrame)
+
+
+# ---------------------------------------------------------------------------
+# Coverage: __repr__, correlation row rendering, _is_na edge case, _pval_stars
+# ---------------------------------------------------------------------------
+
+
+class TestSummaryCoverage:
+    def test_summary_repr_delegates_to_str(self, single_re_result):
+        """__repr__ should produce the same output as __str__."""
+        s = single_re_result.summary()
+        assert repr(s) == str(s)
+
+    def test_summary_slopes_renders_correlation_row(self, slopes_result):
+        """Slopes summary should contain a [corr ...] row."""
+        s = str(slopes_result.summary())
+        assert "[corr" in s
+
+    def test_is_na_with_non_comparable_type(self):
+        """_is_na handles types that raise on != comparison."""
+        from interlace.summary import _is_na
+
+        # Object that raises TypeError on !=
+        class BadCompare:
+            def __ne__(self, other):
+                raise TypeError("no comparison")
+
+        assert _is_na(BadCompare()) is False
+
+    def test_pval_stars_all_levels(self):
+        """_pval_stars returns correct stars for all significance thresholds."""
+        from interlace.summary import _pval_stars
+
+        assert _pval_stars(0.0001) == "***"
+        assert _pval_stars(0.005) == "**"
+        assert _pval_stars(0.03) == "*"
+        assert _pval_stars(0.07) == "."
+        assert _pval_stars(0.5) == " "
