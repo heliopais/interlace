@@ -22,6 +22,8 @@ least squares (PIRLS) — targeting parity with R's
 | `optimizer` | `"lbfgsb"` or `"bobyqa"` | Optimizer. `"bobyqa"` is gradient-free and more robust |
 | `theta0` | `ndarray` | Initial variance parameters; defaults to ones |
 | `nAGQ` | `int` | Number of adaptive Gauss-Hermite quadrature points (default `1` = Laplace) |
+| `offset` | `ndarray` | Known term added to the linear predictor (e.g. `np.log(exposure)` for Poisson rates) |
+| `dispformula` | `str` | Formula for the dispersion sub-model with log link (e.g. `"~1"`, `"~ z"`) |
 
 ## Supported families
 
@@ -141,6 +143,52 @@ random intercept only (no random slopes). See the
 {doc}`/glmm-quickstart` AGQ section for guidance on when Laplace is sufficient
 vs when AGQ improves estimation.
 
+### Dispersion modelling (`dispformula`)
+
+By default, the dispersion (scale) parameter is fixed at 1.0 for binomial and
+Poisson families.  For Gaussian GLMMs, you can estimate the residual variance
+or model heteroscedasticity using `dispformula`.
+
+**Scalar dispersion** (`~1`): estimates a single residual variance
+$\phi = \exp(\delta_0)$.
+
+```python
+result = interlace.glmer(
+    formula="y ~ x1 + x2",
+    data=df,
+    family="gaussian",
+    groups="site",
+    dispformula="~1",
+)
+
+# Estimated residual variance
+import numpy as np
+phi_hat = np.exp(result.disp_params["Intercept"])
+print(f"Residual variance: {phi_hat:.3f}")
+```
+
+**Covariate-dependent dispersion** (`~ z`): models observation-level variance as
+$\phi_i = \exp(\delta_0 + \delta_1 z_i)$ (heteroscedastic model).
+
+```python
+result = interlace.glmer(
+    formula="y ~ x1 + x2",
+    data=df,
+    family="gaussian",
+    groups="site",
+    dispformula="~ z",
+)
+
+print(result.disp_params)   # log-scale dispersion coefficients
+print(result.dispersion)    # per-observation phi values
+```
+
+The dispersion sub-model coefficients are on the **log scale** (log link ensures
+$\phi > 0$).  They are stored in `result.disp_params` as a `pd.Series`.  The
+per-observation dispersion values are in `result.dispersion`.
+
+`dispformula` cannot be combined with `nAGQ > 1`.
+
 ### Prediction
 
 ```python
@@ -174,6 +222,8 @@ preds_marginal = result.predict(newdata=df_new, include_re=False)
 | `ngroups` | `dict` | Number of levels per grouping factor |
 | `scale` | `float` | Dispersion parameter (1.0 for binomial and Poisson) |
 | `fittedvalues` | `ndarray` | Fitted values on the response scale |
+| `disp_params` | `pd.Series \| None` | Dispersion formula coefficients (log scale); `None` when no `dispformula` |
+| `dispersion` | `ndarray \| None` | Per-observation dispersion values; `None` when no `dispformula` |
 
 ## Custom families
 

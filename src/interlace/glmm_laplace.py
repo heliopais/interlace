@@ -81,6 +81,8 @@ class GLMMResult:
     _eta: np.ndarray = field(
         default_factory=lambda: np.array([])
     )  # linear predictor (link scale)
+    disp_params: pd.Series | None = None  # dispersion formula coefficients (log link)
+    dispersion: np.ndarray | None = None  # per-observation dispersion values
 
     def predict(
         self,
@@ -225,6 +227,7 @@ def _conditional_loglik(
     mu: np.ndarray,
     weights: np.ndarray,
     family: GLMMFamily,
+    phi: np.ndarray | None = None,
 ) -> float:
     """Compute the conditional log-likelihood sum_i log p(y_i | mu_i).
 
@@ -235,8 +238,12 @@ def _conditional_loglik(
     For Poisson (count y, wt=1):
         ll_i = y_i*log(mu_i) - mu_i - log(y_i!)
 
-    For Gaussian (wt = 1/sigma^2 or 1):
-        ll_i = -0.5 * wt * (y_i - mu_i)^2  (up to constants)
+    For Gaussian with dispersion phi_i:
+        ll_i = -0.5 * [log(phi_i) + (y_i - mu_i)^2 / phi_i] + const
+
+    Parameters
+    ----------
+    phi : Per-observation dispersion vector.  ``None`` means dispersion = 1.
     """
     from scipy.special import gammaln
 
@@ -271,10 +278,15 @@ def _conditional_loglik(
         )
         return float(np.sum(weights * ll))
     elif family.name == "gaussian":
-        # -0.5 * sum(wt * (y - mu)^2) + const
-        # The constant is -0.5 * n * log(2*pi) for unit weights
         n = len(y)
-        ll = -0.5 * np.sum(weights * (y - mu) ** 2) - 0.5 * n * np.log(2.0 * np.pi)
+        if phi is not None:
+            # Heteroscedastic: -0.5 * sum[log(phi_i) + (y-mu)^2/phi_i] + const
+            ll = -0.5 * np.sum(
+                np.log(phi) + weights * (y - mu) ** 2 / phi
+            ) - 0.5 * n * np.log(2.0 * np.pi)
+        else:
+            # Homoscedastic (phi = 1)
+            ll = -0.5 * np.sum(weights * (y - mu) ** 2) - 0.5 * n * np.log(2.0 * np.pi)
         return float(ll)
     else:
         # Fallback: use -0.5 * deviance (no normalizing constant)
@@ -345,6 +357,7 @@ def _pirls(
     u0: np.ndarray | None = None,
     beta0: np.ndarray | None = None,
     offset: np.ndarray | None = None,
+    phi: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, bool]:
     """Run PIRLS to find conditional modes (u_hat, beta_hat).
 
@@ -361,6 +374,7 @@ def _pirls(
     u0 : Initial random effects (q,). Defaults to zeros.
     beta0 : Initial fixed effects (p,). Defaults to zeros.
     offset : Offset vector (n,). Added to the linear predictor.
+    phi : Per-observation dispersion vector (n,).  ``None`` means 1.
 
     Returns
     -------
@@ -400,8 +414,10 @@ def _pirls(
         mu_eta_val = family.mu_eta(eta)  # d(mu)/d(eta)
         var_mu = family.variance(mu)
 
-        # W = diag(weights * mu_eta^2 / var_mu) — the IRLS weight matrix
-        w = weights * mu_eta_val**2 / var_mu  # (n,)
+        # W = diag(weights * mu_eta^2 / (phi * var_mu)) — the IRLS weight matrix
+        # When phi is provided, it scales the variance function.
+        denom = var_mu if phi is None else phi * var_mu
+        w = weights * mu_eta_val**2 / denom  # (n,)
         # Working residual (offset excluded so we solve for X@beta + Z@u only)
         z_w = (eta - _off) + (y - mu) / mu_eta_val  # (n,)
 
@@ -481,7 +497,8 @@ def _pirls(
     # Recompute A at final values for log|A|
     mu_eta_val = family.mu_eta(eta)
     var_mu = family.variance(mu)
-    w = weights * mu_eta_val**2 / var_mu
+    denom_final = var_mu if phi is None else phi * var_mu
+    w = weights * mu_eta_val**2 / denom_final
     WZs_final = sp.diags(np.sqrt(w), format="csc") @ Z_star
     A_final = ((WZs_final.T @ WZs_final) + sp.eye(q, format="csc")).tocsc()
     log_det_A = sparse_chol_logdet(A_final)
@@ -489,7 +506,7 @@ def _pirls(
     # Laplace log-likelihood:
     # ll = log p(y|u_hat, beta_hat) - 0.5*v'v - 0.5*log|A|
     # where log p(y|...) is the conditional log-likelihood (not deviance).
-    cond_ll = _conditional_loglik(y, mu, weights, family)
+    cond_ll = _conditional_loglik(y, mu, weights, family, phi=phi)
 
     laplace_ll = cond_ll - 0.5 * penalty - 0.5 * log_det_A
 
@@ -512,6 +529,7 @@ def _laplace_objective(
     weights: np.ndarray,
     warm: dict[str, np.ndarray | None],
     offset: np.ndarray | None = None,
+    phi: np.ndarray | None = None,
 ) -> float:
     """Negative Laplace log-likelihood (to minimize over theta)."""
     beta, u, _mu, ll, _conv = _pirls(
@@ -526,6 +544,7 @@ def _laplace_objective(
         u0=warm.get("u"),
         beta0=warm.get("beta"),
         offset=offset,
+        phi=phi,
     )
     # Warm-start next call
     warm["u"] = u
@@ -703,6 +722,7 @@ def fit_glmm(
     theta0: np.ndarray | None = None,
     nAGQ: int = 1,
     offset: np.ndarray | None = None,
+    dispformula: str | None = None,
 ) -> GLMMResult:
     """Fit a generalized linear mixed model.
 
@@ -735,11 +755,18 @@ def fit_glmm(
         Offset vector, shape ``(n,)``.  A known term added to the linear
         predictor that is not estimated.  Common use: ``np.log(exposure)``
         in Poisson rate models.  Defaults to zero.
+    dispformula :
+        Formula for the dispersion sub-model with a log link, e.g.
+        ``"~1"`` for scalar dispersion or ``"~ z"`` for covariate-dependent
+        dispersion.  The dispersion for observation *i* is
+        ``phi_i = exp(X_d[i] @ delta)``.  ``None`` (default) fixes
+        dispersion at 1.0.  Cannot be combined with ``nAGQ > 1``.
 
     Returns
     -------
     GLMMResult
     """
+    import formulaic
     import narwhals as nw
 
     fam = resolve_family(family)
@@ -769,12 +796,31 @@ def fit_glmm(
             )
             raise ValueError(msg)
 
+    # --- Validate dispformula + nAGQ ---
+    if dispformula is not None and nAGQ > 1:
+        msg = "dispformula cannot be combined with nAGQ > 1."
+        raise ValueError(msg)
+
     # --- Parse formula, build X ---
     parsed = parse_formula(formula, data, groups=group_cols[0])
     y = parsed.y
     X = parsed.X
     term_names = parsed.term_names
     n, p = X.shape
+
+    # --- Build dispersion design matrix ---
+    if dispformula is not None:
+        disp_formula_rhs = dispformula.lstrip("~").strip()
+        if not disp_formula_rhs:
+            disp_formula_rhs = "1"
+        X_d_mm = formulaic.model_matrix("~ " + disp_formula_rhs, nw_data)
+        disp_term_names = list(X_d_mm.columns)
+        X_d = np.asarray(X_d_mm, dtype=np.float64)
+        n_disp = X_d.shape[1]
+    else:
+        X_d = None
+        disp_term_names = None
+        n_disp = 0
 
     # --- Build Z ---
     Z = build_joint_z_from_specs(specs, data)
@@ -799,7 +845,7 @@ def fit_glmm(
 
     # --- Theta setup ---
     n_theta = sum(n_theta_for_spec(s.n_terms, s.correlated) for s in specs)
-    bounds = _build_theta_bounds(specs)
+    theta_bounds = _build_theta_bounds(specs)
 
     if theta0 is None:
         theta0 = np.ones(n_theta)
@@ -813,9 +859,18 @@ def fit_glmm(
         group_uniques = sorted(np.unique(group_codes).tolist())
         group_indices = [np.where(group_codes == lvl)[0] for lvl in group_uniques]
 
-    def obj(theta: np.ndarray) -> float:
-        if nAGQ > 1:
-            return _agq_loglik(
+    if X_d is not None:
+        # Joint optimization over [theta | delta].
+        # delta are the dispersion regression coefficients (log link, unbounded).
+        delta0 = np.zeros(n_disp)
+        params0 = np.concatenate([theta0, delta0])
+        joint_bounds = list(theta_bounds) + [(None, None)] * n_disp
+
+        def joint_obj(params: np.ndarray) -> float:
+            theta = params[:n_theta]
+            delta = params[n_theta:]
+            phi = np.exp(X_d @ delta)
+            return _laplace_objective(
                 theta,
                 y,
                 X,
@@ -824,37 +879,93 @@ def fit_glmm(
                 specs,
                 n_levels_list,
                 weights_arr,
-                nAGQ,
-                group_indices,
+                warm,
+                offset=offset_arr,
+                phi=phi,
+            )
+
+        lower_bounds = np.array(
+            [lo if lo is not None else -np.inf for lo, _ in joint_bounds]
+        )
+
+        if optimizer == "bobyqa":
+            import pybobyqa
+
+            upper = np.array(
+                [hi if hi is not None else np.inf for _, hi in joint_bounds]
+            )
+            soln = pybobyqa.solve(joint_obj, params0, bounds=(lower_bounds, upper))
+            params_hat = soln.x
+            opt_converged = soln.msg == "Success: rho has reached rhoend"
+        else:
+            res = opt.minimize(
+                joint_obj,
+                params0,
+                method="L-BFGS-B",
+                bounds=joint_bounds,
+            )
+            params_hat = res.x
+            opt_converged = bool(res.success)
+
+        theta_hat = params_hat[:n_theta]
+        delta_hat = params_hat[n_theta:]
+        phi_hat = np.exp(X_d @ delta_hat)
+    else:
+        # No dispformula — original optimization path
+        delta_hat = None
+        phi_hat = None
+
+        def obj(theta: np.ndarray) -> float:
+            if nAGQ > 1:
+                return _agq_loglik(
+                    theta,
+                    y,
+                    X,
+                    Z,
+                    fam,
+                    specs,
+                    n_levels_list,
+                    weights_arr,
+                    nAGQ,
+                    group_indices,
+                    warm,
+                    offset=offset_arr,
+                )
+            return _laplace_objective(
+                theta,
+                y,
+                X,
+                Z,
+                fam,
+                specs,
+                n_levels_list,
+                weights_arr,
                 warm,
                 offset=offset_arr,
             )
-        return _laplace_objective(
-            theta,
-            y,
-            X,
-            Z,
-            fam,
-            specs,
-            n_levels_list,
-            weights_arr,
-            warm,
-            offset=offset_arr,
+
+        lower_bounds = np.array(
+            [lo if lo is not None else -np.inf for lo, _ in theta_bounds]
         )
 
-    lower_bounds = np.array([lo if lo is not None else -np.inf for lo, _ in bounds])
+        if optimizer == "bobyqa":
+            import pybobyqa
 
-    if optimizer == "bobyqa":
-        import pybobyqa
-
-        upper = np.array([hi if hi is not None else np.inf for _, hi in bounds])
-        soln = pybobyqa.solve(obj, theta0, bounds=(lower_bounds, upper))
-        theta_hat = soln.x
-        opt_converged = soln.msg == "Success: rho has reached rhoend"
-    else:
-        res = opt.minimize(obj, theta0, method="L-BFGS-B", bounds=bounds)
-        theta_hat = res.x
-        opt_converged = bool(res.success)
+            upper = np.array(
+                [hi if hi is not None else np.inf for _, hi in theta_bounds]
+            )
+            soln = pybobyqa.solve(obj, theta0, bounds=(lower_bounds, upper))
+            theta_hat = soln.x
+            opt_converged = soln.msg == "Success: rho has reached rhoend"
+        else:
+            res = opt.minimize(
+                obj,
+                theta0,
+                method="L-BFGS-B",
+                bounds=theta_bounds,
+            )
+            theta_hat = res.x
+            opt_converged = bool(res.success)
 
     # --- Final PIRLS at optimum ---
     beta_hat, u_hat, mu_hat, laplace_llf, pirls_converged = _pirls(
@@ -869,6 +980,7 @@ def fit_glmm(
         u0=warm.get("u"),
         beta0=warm.get("beta"),
         offset=offset_arr,
+        phi=phi_hat,
     )
     converged = opt_converged and pirls_converged
 
@@ -897,7 +1009,8 @@ def fit_glmm(
     eta = X @ beta_hat + Z @ u_hat + offset_arr
     mu_eta_val = fam.mu_eta(eta)
     var_mu = fam.variance(mu_hat)
-    w = weights_arr * mu_eta_val**2 / var_mu
+    denom_se = var_mu if phi_hat is None else phi_hat * var_mu
+    w = weights_arr * mu_eta_val**2 / denom_se
     WX = np.sqrt(w)[:, None] * X
     XtWX = WX.T @ WX
 
@@ -947,8 +1060,6 @@ def fit_glmm(
             theta_j0 = theta_hat[theta_idx]
             variance_components[spec.group] = float(sigma2 * theta_j0**2)
         else:
-            # Multi-term (random slopes) — not yet needed for Phase 1
-            # but included for completeness
             term_names_j = (["(Intercept)"] if spec.intercept else []) + list(
                 spec.predictors
             )
@@ -976,8 +1087,14 @@ def fit_glmm(
         theta_idx += n_theta_j
         blup_offset += n_blups_j
 
+    # --- Dispersion results ---
+    if delta_hat is not None:
+        disp_params = pd.Series(delta_hat, index=disp_term_names)
+    else:
+        disp_params = None
+
     # --- Information criteria ---
-    nparams = p + n_theta
+    nparams = p + n_theta + n_disp
     aic = -2.0 * llf + 2.0 * nparams
     bic = -2.0 * llf + np.log(n) * nparams
 
@@ -1003,4 +1120,6 @@ def fit_glmm(
         _formula=formula,
         _group_cols=group_cols,
         _eta=np.asarray(eta_hat),
+        disp_params=disp_params,
+        dispersion=phi_hat,
     )
