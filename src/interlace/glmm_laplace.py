@@ -555,6 +555,92 @@ def _laplace_objective(
     return -ll
 
 
+def _laplace_objective_profiled(
+    theta_beta: np.ndarray,
+    n_theta: int,
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    family: GLMMFamily,
+    specs: list,
+    n_levels: list[int],
+    weights: np.ndarray,
+    warm: dict[str, np.ndarray | None],
+    offset: np.ndarray | None = None,
+) -> float:
+    """Negative Laplace log-likelihood optimising (theta, beta) jointly.
+
+    Beta is taken from the outer optimiser and held fixed inside PIRLS,
+    which only solves for u.  This matches lme4's nAGQ=1 phase where
+    Nelder-Mead searches over (theta, beta) simultaneously.
+    """
+    theta = theta_beta[:n_theta]
+    beta_fixed = theta_beta[n_theta:]
+
+    n = len(y)
+    q = Z.shape[1]
+    Lambda = make_lambda(theta, specs, n_levels)
+    Z_star = Z @ Lambda
+    _off = offset if offset is not None else np.zeros(n)
+
+    # Run PIRLS for u only, with beta fixed
+    u = warm.get("u")
+    if u is None:
+        u = np.zeros(q)
+    else:
+        u = u.copy()
+
+    for _iteration in range(_PIRLS_MAXITER):
+        eta = X @ beta_fixed + Z @ u + _off
+        mu = family.linkinv(eta)
+        if not isinstance(family, GaussianFamily):
+            mu = _clamp_mu(mu, family)
+
+        mu_eta_val = family.mu_eta(eta)
+        var_mu = family.variance(mu)
+        w = weights * mu_eta_val**2 / var_mu
+
+        # Solve for v only: (Z_*'WZ_* + I) v = Z_*'W * residual
+        # where residual = (y - mu) / mu_eta + Z_*' v_old (incremental)
+        wtres = (y - mu) / mu_eta_val
+        ZstWr = np.asarray(Z_star.T @ (w * (Z_star @ (u / Lambda.diagonal()) + wtres))).squeeze()  # noqa: E501
+        sqrtW = np.sqrt(w)
+        WZs = sp.diags(sqrtW, format="csc") @ Z_star
+        A = ((WZs.T @ WZs) + sp.eye(q, format="csc")).tocsc()
+        v_new = spla.spsolve(A, ZstWr)
+        u_new = np.asarray(Lambda @ v_new).squeeze()
+
+        delta_u = np.max(np.abs(u_new - u))
+        u = u_new
+
+        if delta_u < _PIRLS_TOL:
+            break
+
+    warm["u"] = u
+
+    # Compute Laplace log-likelihood
+    eta = X @ beta_fixed + Z @ u + _off
+    mu = family.linkinv(eta)
+    if not isinstance(family, GaussianFamily):
+        mu = _clamp_mu(mu, family)
+
+    cond_ll = _conditional_loglik(y, mu, weights, family)
+    penalty = float(v_new @ v_new)
+
+    mu_eta_val = family.mu_eta(eta)
+    var_mu = family.variance(mu)
+    w = weights * mu_eta_val**2 / var_mu
+    WZs_final = sp.diags(np.sqrt(w), format="csc") @ Z_star
+    A_final = ((WZs_final.T @ WZs_final) + sp.eye(q, format="csc")).tocsc()
+    log_det_A = sparse_chol_logdet(A_final)
+
+    ll = cond_ll - 0.5 * penalty - 0.5 * log_det_A
+
+    if not np.isfinite(ll):
+        return 1e20
+    return -ll
+
+
 # ---------------------------------------------------------------------------
 # AGQ (Adaptive Gauss-Hermite Quadrature) objective
 # ---------------------------------------------------------------------------
@@ -967,21 +1053,84 @@ def fit_glmm(
             theta_hat = res.x
             opt_converged = bool(res.success)
 
+    # --- Phase 2: refine (theta, beta) jointly (lme4 nAGQ=1 style) ---
+    # After finding theta_hat, re-optimise (theta, beta) jointly using
+    # Nelder-Mead.  PIRLS in this phase only solves for u, with beta
+    # supplied from the outer optimiser.  This avoids the PIRLS multimodality
+    # issue that can occur with many observation-level random effects.
+    if nAGQ <= 1 and phi_hat is None:
+        # Get beta from the phase 1 warm cache
+        beta_phase1 = warm.get("beta")
+        if beta_phase1 is None:
+            beta_phase1 = np.zeros(p)
+        params_phase2 = np.concatenate([theta_hat, beta_phase1])
+        warm_phase2: dict[str, np.ndarray | None] = {"u": warm.get("u")}
+
+        res2 = opt.minimize(
+            _laplace_objective_profiled,
+            params_phase2,
+            args=(
+                n_theta,
+                y,
+                X,
+                Z,
+                fam,
+                specs,
+                n_levels_list,
+                weights_arr,
+                warm_phase2,
+                offset_arr,
+            ),
+            method="Nelder-Mead",
+            options={"xatol": 1e-7, "fatol": 1e-7, "maxiter": 2000,
+                     "adaptive": True},
+        )
+        # Accept phase 2 if it improved the objective
+        phase1_ll = -(obj(theta_hat) if callable(obj) else np.inf)
+        phase2_ll = -res2.fun
+        _phase2_accepted = False
+        if phase2_ll > phase1_ll + 0.01:
+            theta_hat = res2.x[:n_theta]
+            warm["beta"] = res2.x[n_theta:]
+            warm["u"] = warm_phase2.get("u")
+            opt_converged = opt_converged and bool(res2.success)
+            _phase2_accepted = True
+    else:
+        _phase2_accepted = False
+
     # --- Final PIRLS at optimum ---
-    beta_hat, u_hat, mu_hat, laplace_llf, pirls_converged = _pirls(
-        y,
-        X,
-        Z,
-        fam,
-        theta_hat,
-        specs,
-        n_levels_list,
-        weights_arr,
-        u0=warm.get("u"),
-        beta0=warm.get("beta"),
-        offset=offset_arr,
-        phi=phi_hat,
-    )
+    if _phase2_accepted:
+        # Phase 2 found a better optimum by profiling beta out of PIRLS.
+        # Run the profiled objective one final time to get clean (beta, u, ll).
+        _laplace_objective_profiled(
+            np.concatenate([theta_hat, warm["beta"]]),
+            n_theta, y, X, Z, fam, specs, n_levels_list,
+            weights_arr, warm_phase2, offset_arr,
+        )
+        beta_hat = warm["beta"].copy()
+        u_hat = warm_phase2["u"].copy()
+        _off_final = offset_arr
+        eta_final = X @ beta_hat + Z @ u_hat + _off_final
+        mu_hat = fam.linkinv(eta_final)
+        if not isinstance(fam, GaussianFamily):
+            mu_hat = _clamp_mu(mu_hat, fam)
+        laplace_llf = phase2_ll
+        pirls_converged = True
+    else:
+        beta_hat, u_hat, mu_hat, laplace_llf, pirls_converged = _pirls(
+            y,
+            X,
+            Z,
+            fam,
+            theta_hat,
+            specs,
+            n_levels_list,
+            weights_arr,
+            u0=warm.get("u"),
+            beta0=warm.get("beta"),
+            offset=offset_arr,
+            phi=phi_hat,
+        )
     converged = opt_converged and pirls_converged
 
     # For AGQ, recompute the final log-likelihood using AGQ at theta_hat
