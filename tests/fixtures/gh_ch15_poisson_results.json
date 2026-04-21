@@ -1,0 +1,31 @@
+{
+  "model": "poisson_overdispersed",
+  "formula": "y ~ roach100 + treatment + senior + (1 | obs_id)",
+  "nobs": 262,
+  "fixed_effects": {
+    "(Intercept)": 1.078365427,
+    "roach100": 1.6749468055,
+    "treatment": -0.82323475571,
+    "senior": -1.0436686159
+  },
+  "fixed_effects_se": {
+    "(Intercept)": 0.27239341417,
+    "roach100": 0.19359984647,
+    "treatment": 0.30925608601,
+    "senior": 0.34669103813
+  },
+  "theta": 2.2083158081,
+  "loglik": -896.4020794824,
+  "aic": 1802.8041589648,
+  "bic": 1820.6458814836,
+  "deviance": 58.6195051358,
+  "converged": true,
+  "variance_components": {
+    "obs_id": 4.8766587082
+  },
+  "ngroups": {
+    "obs_id": 262
+  },
+  "family": "poisson",
+  "link": "log"
+}

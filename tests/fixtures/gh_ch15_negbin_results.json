@@ -1,0 +1,15 @@
+{
+  "model": "negbin_glm",
+  "formula": "y ~ roach100 + treatment + senior",
+  "nobs": 262,
+  "fixed_effects": {
+    "(Intercept)": 2.8387768718,
+    "roach100": 1.2881804663,
+    "treatment": -0.7767872916,
+    "senior": -0.34437089075
+  },
+  "loglik": -889.29173459,
+  "aic": 1788.58346918,
+  "nb_theta": 0.27426462556,
+  "nb_theta_se": 0.026184925153
+}

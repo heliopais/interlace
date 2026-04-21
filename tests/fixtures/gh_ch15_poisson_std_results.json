@@ -1,0 +1,15 @@
+{
+  "model": "poisson_standard",
+  "formula": "y ~ roach100 + treatment + senior",
+  "nobs": 262,
+  "fixed_effects": {
+    "(Intercept)": 3.0892463455,
+    "roach100": 0.69828914583,
+    "treatment": -0.51672617947,
+    "senior": -0.37987505107
+  },
+  "loglik": -6091.9776355459,
+  "aic": 12191.9552710918,
+  "deviance": 11429.4670762271,
+  "dispersion": 65.4381506041
+}
