@@ -562,7 +562,7 @@ def _laplace_objective_profiled(
     X: np.ndarray,
     Z: sp.csc_matrix,
     family: GLMMFamily,
-    specs: list,
+    specs: list[RandomEffectSpec],
     n_levels: list[int],
     weights: np.ndarray,
     warm: dict[str, np.ndarray | None],
@@ -584,11 +584,8 @@ def _laplace_objective_profiled(
     _off = offset if offset is not None else np.zeros(n)
 
     # Run PIRLS for u only, with beta fixed
-    u = warm.get("u")
-    if u is None:
-        u = np.zeros(q)
-    else:
-        u = u.copy()
+    u_cached = warm.get("u")
+    u = np.zeros(q) if u_cached is None else u_cached.copy()
 
     for _iteration in range(_PIRLS_MAXITER):
         eta = X @ beta_fixed + Z @ u + _off
@@ -1107,8 +1104,8 @@ def fit_glmm(
             n_theta, y, X, Z, fam, specs, n_levels_list,
             weights_arr, warm_phase2, offset_arr,
         )
-        beta_hat = warm["beta"].copy()
-        u_hat = warm_phase2["u"].copy()
+        beta_hat = warm["beta"].copy()  # type: ignore[union-attr]
+        u_hat = warm_phase2["u"].copy()  # type: ignore[union-attr]
         _off_final = offset_arr
         eta_final = X @ beta_hat + Z @ u_hat + _off_final
         mu_hat = fam.linkinv(eta_final)
