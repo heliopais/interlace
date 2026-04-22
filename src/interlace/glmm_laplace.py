@@ -284,7 +284,12 @@ def _clamp_mu(mu: np.ndarray, family: GLMMFamily) -> np.ndarray:
     """Clamp mu to valid range for the family."""
     if family.name in ("binomial", "beta"):
         return np.asarray(np.clip(mu, _MU_EPS, 1.0 - _MU_EPS))
-    if family.name in ("poisson", "negativebinomial", "zeroinflated_negativebinomial"):
+    if family.name in (
+        "poisson",
+        "negativebinomial",
+        "zeroinflated_negativebinomial",
+        "zeroinflated_poisson",
+    ):
         return np.asarray(np.maximum(mu, _MU_EPS))
     return mu
 
@@ -378,7 +383,7 @@ def _conditional_loglik(
             # No zero-inflation: identical to NB2
             ll = nb2_ll
         else:
-            ll = np.empty_like(y)
+            ll = np.empty_like(y, dtype=np.float64)
             zero = y == 0
             pos = ~zero
             # y=0: log[pi + (1-pi) * f_NB2(0|mu, theta)]
@@ -401,7 +406,7 @@ def _conditional_loglik(
             # No zero-inflation: identical to Poisson
             ll = pois_ll
         else:
-            ll = np.empty_like(y)
+            ll = np.empty_like(y, dtype=np.float64)
             zero = y == 0
             pos = ~zero
             # y=0: log[pi + (1-pi) * exp(-mu)]
@@ -452,7 +457,7 @@ def _conditional_loglik(
             # No inflation: identical to Beta
             ll = beta_ll
         else:
-            ll = np.empty_like(y)
+            ll = np.empty_like(y, dtype=np.float64)
             p_beta = 1.0 - p0 - p1
             zero = y == 0.0
             one = y == 1.0
@@ -492,7 +497,12 @@ def _glm_start(
     # Initialize mu from y, with safety clamps
     if family.name == "binomial":
         mu = np.clip(y, 0.01, 0.99)
-    elif family.name in ("poisson", "negativebinomial"):
+    elif family.name in (
+        "poisson",
+        "negativebinomial",
+        "zeroinflated_negativebinomial",
+        "zeroinflated_poisson",
+    ):
         mu = np.maximum(y, 0.1)
     else:
         mu = y.copy()
@@ -523,6 +533,113 @@ def _glm_start(
         beta = beta_new
 
     return beta
+
+
+# ---------------------------------------------------------------------------
+# ZI-adjusted PIRLS working quantities
+# ---------------------------------------------------------------------------
+
+_ZI_FAMILIES = frozenset({"zeroinflated_negativebinomial", "zeroinflated_poisson"})
+
+
+def _zi_pirls_weights(
+    y: np.ndarray,
+    mu: np.ndarray,
+    weights: np.ndarray,
+    family: GLMMFamily,
+    offset: np.ndarray,
+    eta: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute ZI-adjusted PIRLS working weights and working response.
+
+    For zero-inflated families, the standard PIRLS working weights
+    (derived from count-component variance) are wrong because they ignore
+    the zero-inflation mixture.  This function computes the score and
+    negative observed Hessian of the *full* ZI conditional log-likelihood
+    w.r.t. eta, then converts to (w, z_w) for the PIRLS linear system.
+
+    Returns
+    -------
+    w : Working weights (n,), always positive.
+    z_w : Working response (n,).
+    """
+    from interlace.glmm_family import ZeroInflatedNB2Family, ZeroInflatedPoissonFamily
+
+    n = len(y)
+    score_unit = np.zeros(n)
+    neg_hess_unit = np.zeros(n)
+
+    zero = y == 0
+    pos = ~zero
+
+    if isinstance(family, ZeroInflatedNB2Family):
+        theta = family.theta
+        pi = family.pi
+
+        # --- Positive observations: NB2 score/hessian (log link) ---
+        if np.any(pos):
+            mu_p = mu[pos]
+            y_p = y[pos]
+            score_unit[pos] = y_p - mu_p * (y_p + theta) / (mu_p + theta)
+            neg_hess_unit[pos] = (y_p + theta) * theta * mu_p / (mu_p + theta) ** 2
+
+        # --- Zero observations ---
+        if np.any(zero):
+            mu_z = mu[zero]
+            if pi > 0:
+                f0 = (theta / (mu_z + theta)) ** theta
+                P0 = pi + (1 - pi) * f0
+                r0 = (1 - pi) * f0 / P0
+
+                score_unit[zero] = -r0 * theta * mu_z / (mu_z + theta)
+
+                raw_hess = (
+                    theta**2 * mu_z / (mu_z + theta) ** 2 * r0 * (1 - mu_z * (1 - r0))
+                )
+                # Floor: count-component Hessian at y=0, scaled down
+                floor = theta**2 * mu_z / (mu_z + theta) ** 2 * 0.01
+                neg_hess_unit[zero] = np.maximum(raw_hess, floor)
+            else:
+                # pi=0: pure NB2 at y=0
+                mu_z = mu[zero]
+                score_unit[zero] = -mu_z * theta / (mu_z + theta)
+                neg_hess_unit[zero] = theta**2 * mu_z / (mu_z + theta) ** 2
+
+    elif isinstance(family, ZeroInflatedPoissonFamily):
+        pi = family.pi
+
+        # --- Positive observations: Poisson score/hessian ---
+        if np.any(pos):
+            score_unit[pos] = y[pos] - mu[pos]
+            neg_hess_unit[pos] = mu[pos]
+
+        # --- Zero observations ---
+        if np.any(zero):
+            mu_z = mu[zero]
+            if pi > 0:
+                f0 = np.exp(-mu_z)
+                P0 = pi + (1 - pi) * f0
+                r0 = (1 - pi) * f0 / P0
+
+                score_unit[zero] = -r0 * mu_z
+
+                raw_hess = r0 * mu_z * (1 - mu_z * (1 - r0))
+                floor = mu_z * 0.01
+                neg_hess_unit[zero] = np.maximum(raw_hess, floor)
+            else:
+                # pi=0: pure Poisson at y=0
+                score_unit[zero] = -mu[zero]
+                neg_hess_unit[zero] = mu[zero]
+    else:
+        raise ValueError(f"_zi_pirls_weights called with non-ZI family: {family.name}")
+
+    # Ensure positivity for numerical stability
+    neg_hess_unit = np.maximum(neg_hess_unit, 1e-10)
+
+    w = weights * neg_hess_unit
+    z_w = (eta - offset) + score_unit / neg_hess_unit
+
+    return w, z_w
 
 
 def _pirls(
@@ -591,20 +708,24 @@ def _pirls(
             mu = _clamp_mu(mu, family)
 
         # Working weights and working residual
-        mu_eta_val = family.mu_eta(eta)  # d(mu)/d(eta)
-
-        # W = diag(weights * mu_eta^2 / var) — the IRLS weight matrix
-        # For NB2 with dispformula, phi carries per-obs theta → recompute variance.
-        # For other families, phi scales the variance multiplicatively.
-        if phi is not None and family.name == "negativebinomial":
-            var_mu = mu + mu**2 / phi  # NB2 variance with per-obs theta
-            denom = var_mu
+        if family.name in _ZI_FAMILIES:
+            # ZI families need score/Hessian of the full mixture likelihood.
+            w, z_w = _zi_pirls_weights(y, mu, weights, family, _off, eta)
         else:
-            var_mu = family.variance(mu)
-            denom = var_mu if phi is None else phi * var_mu
-        w = weights * mu_eta_val**2 / denom  # (n,)
-        # Working residual (offset excluded so we solve for X@beta + Z@u only)
-        z_w = (eta - _off) + (y - mu) / mu_eta_val  # (n,)
+            mu_eta_val = family.mu_eta(eta)  # d(mu)/d(eta)
+
+            # W = diag(weights * mu_eta^2 / var) — the IRLS weight matrix
+            # For NB2 with dispformula, phi carries per-obs theta → recompute var.
+            # For other families, phi scales the variance multiplicatively.
+            if phi is not None and family.name == "negativebinomial":
+                var_mu = mu + mu**2 / phi  # NB2 variance with per-obs theta
+                denom = var_mu
+            else:
+                var_mu = family.variance(mu)
+                denom = var_mu if phi is None else phi * var_mu
+            w = weights * mu_eta_val**2 / denom  # (n,)
+            # Working residual (offset excluded so we solve for X@beta + Z@u)
+            z_w = (eta - _off) + (y - mu) / mu_eta_val  # (n,)
 
         # Penalized weighted least squares via Lambda parameterisation.
         # Let v = Lambda^{-1} u so the penalty term becomes v'v.
@@ -680,14 +801,17 @@ def _pirls(
     penalty = float(v_final @ v_final)
 
     # Recompute A at final values for log|A|
-    mu_eta_val = family.mu_eta(eta)
-    if phi is not None and family.name == "negativebinomial":
-        var_mu = mu + mu**2 / phi
-        denom_final = var_mu
+    if family.name in _ZI_FAMILIES:
+        w, _z_w_final = _zi_pirls_weights(y, mu, weights, family, _off, eta)
     else:
-        var_mu = family.variance(mu)
-        denom_final = var_mu if phi is None else phi * var_mu
-    w = weights * mu_eta_val**2 / denom_final
+        mu_eta_val = family.mu_eta(eta)
+        if phi is not None and family.name == "negativebinomial":
+            var_mu = mu + mu**2 / phi
+            denom_final = var_mu
+        else:
+            var_mu = family.variance(mu)
+            denom_final = var_mu if phi is None else phi * var_mu
+        w = weights * mu_eta_val**2 / denom_final
     WZs_final = sp.diags(np.sqrt(w), format="csc") @ Z_star
     A_final = ((WZs_final.T @ WZs_final) + sp.eye(q, format="csc")).tocsc()
     log_det_A = sparse_chol_logdet(A_final)
@@ -782,13 +906,17 @@ def _laplace_objective_profiled(
         if not isinstance(family, GaussianFamily):
             mu = _clamp_mu(mu, family)
 
-        mu_eta_val = family.mu_eta(eta)
-        var_mu = family.variance(mu)
-        w = weights * mu_eta_val**2 / var_mu
+        if family.name in _ZI_FAMILIES:
+            w, z_w_prof = _zi_pirls_weights(y, mu, weights, family, _off, eta)
+            wtres = z_w_prof - (eta - _off)  # score/neg_hess
+        else:
+            mu_eta_val = family.mu_eta(eta)
+            var_mu = family.variance(mu)
+            w = weights * mu_eta_val**2 / var_mu
+            wtres = (y - mu) / mu_eta_val
 
         # Solve for v only: (Z_*'WZ_* + I) v = Z_*'W * residual
         # where residual = (y - mu) / mu_eta + Z_*' v_old (incremental)
-        wtres = (y - mu) / mu_eta_val
         ZstWr = np.asarray(
             Z_star.T @ (w * (Z_star @ (u / Lambda.diagonal()) + wtres))
         ).squeeze()  # noqa: E501
@@ -815,9 +943,12 @@ def _laplace_objective_profiled(
     cond_ll = _conditional_loglik(y, mu, weights, family)
     penalty = float(v_new @ v_new)
 
-    mu_eta_val = family.mu_eta(eta)
-    var_mu = family.variance(mu)
-    w = weights * mu_eta_val**2 / var_mu
+    if family.name in _ZI_FAMILIES:
+        w, _ = _zi_pirls_weights(y, mu, weights, family, _off, eta)
+    else:
+        mu_eta_val = family.mu_eta(eta)
+        var_mu = family.variance(mu)
+        w = weights * mu_eta_val**2 / var_mu
     WZs_final = sp.diags(np.sqrt(w), format="csc") @ Z_star
     A_final = ((WZs_final.T @ WZs_final) + sp.eye(q, format="csc")).tocsc()
     log_det_A = sparse_chol_logdet(A_final)
@@ -1246,7 +1377,7 @@ def fit_glmm(
     # Nelder-Mead.  PIRLS in this phase only solves for u, with beta
     # supplied from the outer optimiser.  This avoids the PIRLS multimodality
     # issue that can occur with many observation-level random effects.
-    if nAGQ <= 1 and phi_hat is None:
+    if nAGQ <= 1 and phi_hat is None and fam.name not in _ZI_FAMILIES:
         # Get beta from the phase 1 warm cache
         beta_phase1 = warm.get("beta")
         if beta_phase1 is None:
@@ -1351,14 +1482,17 @@ def fit_glmm(
     # --- Fixed effects standard errors ---
     # From the Hessian of the penalized log-likelihood w.r.t. beta
     eta = X @ beta_hat + Z @ u_hat + offset_arr
-    mu_eta_val = fam.mu_eta(eta)
-    if phi_hat is not None and fam.name == "negativebinomial":
-        var_mu = mu_hat + mu_hat**2 / phi_hat
-        denom_se = var_mu
+    if fam.name in _ZI_FAMILIES:
+        w, _z_w_se = _zi_pirls_weights(y, mu_hat, weights_arr, fam, offset_arr, eta)
     else:
-        var_mu = fam.variance(mu_hat)
-        denom_se = var_mu if phi_hat is None else phi_hat * var_mu
-    w = weights_arr * mu_eta_val**2 / denom_se
+        mu_eta_val = fam.mu_eta(eta)
+        if phi_hat is not None and fam.name == "negativebinomial":
+            var_mu = mu_hat + mu_hat**2 / phi_hat
+            denom_se = var_mu
+        else:
+            var_mu = fam.variance(mu_hat)
+            denom_se = var_mu if phi_hat is None else phi_hat * var_mu
+        w = weights_arr * mu_eta_val**2 / denom_se
     WX = np.sqrt(w)[:, None] * X
     XtWX = WX.T @ WX
 

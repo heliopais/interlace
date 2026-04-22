@@ -253,3 +253,97 @@ class TestGLMMResultProperties:
 
     def test_has_converged(self, cbpp_fit):
         assert isinstance(cbpp_fit.converged, bool)
+
+
+# ---------------------------------------------------------------------------
+# 5. ZINB2 GLMM parity with glmmTMB
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def zinb2_data() -> pd.DataFrame:
+    return pd.read_csv(FIXTURES / "zinb2_data.csv")
+
+
+@pytest.fixture(scope="module")
+def zinb2_ref() -> dict:
+    return json.loads((FIXTURES / "zinb2_results.json").read_text())
+
+
+@pytest.fixture(scope="module")
+def zinb2_fit(zinb2_data) -> GLMMResult:
+    """Fit ZINB2 GLMM: y ~ x + (1|group), family=ZeroInflatedNB2.
+
+    We pass theta and pi as fixed constants (not jointly estimated).
+    glmmTMB jointly optimises theta and pi, so our estimates will differ.
+    This test validates that the ZINB2 family flows through fit_glmm.
+    """
+    from interlace.glmm_family import ZeroInflatedNB2Family
+
+    return fit_glmm(
+        formula="y ~ x",
+        data=zinb2_data,
+        family=ZeroInflatedNB2Family(theta=2.0, pi=0.3),
+        groups="group",
+    )
+
+
+@pytest.fixture(scope="module")
+def zinb2_fit_nb2_only(zinb2_data) -> GLMMResult:
+    """Fit plain NB2 (pi=0) on the ZINB2 dataset as a baseline."""
+    from interlace.glmm_family import ZeroInflatedNB2Family
+
+    return fit_glmm(
+        formula="y ~ x",
+        data=zinb2_data,
+        family=ZeroInflatedNB2Family(theta=2.0, pi=0.0),
+        groups="group",
+    )
+
+
+class TestZINB2GLMM:
+    """Zero-inflated NB2 GLMM should match glmmTMB.
+
+    Theta and pi are passed as known constants (not jointly estimated),
+    so some tolerance is expected vs glmmTMB's joint MLE.
+    """
+
+    def test_converged(self, zinb2_fit):
+        assert zinb2_fit.converged
+
+    def test_fixed_effects(self, zinb2_fit, zinb2_ref):
+        """Fixed effects within 0.05 of glmmTMB."""
+        ref_fe = zinb2_ref["fixed_effects"]
+        name_map = {"(Intercept)": "Intercept", "x": "x"}
+        for r_name, ref_val in ref_fe.items():
+            py_name = name_map[r_name]
+            assert abs(zinb2_fit.fe_params[py_name] - ref_val) < 0.05, (
+                f"{py_name}: interlace={zinb2_fit.fe_params[py_name]:.4f}, "
+                f"glmmTMB={ref_val:.4f}"
+            )
+
+    def test_variance_component(self, zinb2_fit, zinb2_ref):
+        """Group variance within 20% of glmmTMB."""
+        ref_vc = zinb2_ref["variance_components"]["group"]
+        fit_vc = zinb2_fit.variance_components["group"]
+        assert abs(fit_vc - ref_vc) / ref_vc < 0.20, (
+            f"group VC: interlace={fit_vc:.4f}, glmmTMB={ref_vc:.4f}"
+        )
+
+    def test_loglik(self, zinb2_fit, zinb2_ref):
+        """Log-likelihood within 5.0 of glmmTMB."""
+        assert abs(zinb2_fit.llf - zinb2_ref["loglik"]) < 5.0, (
+            f"loglik: interlace={zinb2_fit.llf:.2f}, glmmTMB={zinb2_ref['loglik']:.2f}"
+        )
+
+    def test_zi_improves_loglik(self, zinb2_fit, zinb2_fit_nb2_only):
+        """Fitting with pi > 0 should give a better log-likelihood
+        than pi=0 on zero-inflated data."""
+        assert zinb2_fit.llf > zinb2_fit_nb2_only.llf, (
+            f"ZI ll={zinb2_fit.llf:.2f} should be > NB2 ll={zinb2_fit_nb2_only.llf:.2f}"
+        )
+
+    def test_result_has_family(self, zinb2_fit):
+        from interlace.glmm_family import ZeroInflatedNB2Family
+
+        assert isinstance(zinb2_fit.family, ZeroInflatedNB2Family)
