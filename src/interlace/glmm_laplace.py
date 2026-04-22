@@ -387,6 +387,29 @@ def _conditional_loglik(
             ll[pos] = np.log(1 - pi) + nb2_ll[pos]
 
         return float(np.sum(weights * ll))
+    elif family.name == "zeroinflated_poisson":
+        from interlace.glmm_family import ZeroInflatedPoissonFamily
+
+        assert isinstance(family, ZeroInflatedPoissonFamily)
+        pi = family.pi
+        mu_safe = np.maximum(mu, _MU_EPS)
+
+        # Poisson log-pmf for all observations
+        pois_ll = y * np.log(mu_safe) - mu_safe - gammaln(y + 1)
+
+        if pi == 0.0:
+            # No zero-inflation: identical to Poisson
+            ll = pois_ll
+        else:
+            ll = np.empty_like(y)
+            zero = y == 0
+            pos = ~zero
+            # y=0: log[pi + (1-pi) * exp(-mu)]
+            ll[zero] = np.log(pi + (1 - pi) * np.exp(-mu_safe[zero]))
+            # y>0: log(1-pi) + log f_Pois(y|mu)
+            ll[pos] = np.log(1 - pi) + pois_ll[pos]
+
+        return float(np.sum(weights * ll))
     elif family.name == "beta":
         from interlace.glmm_family import BetaFamily
 

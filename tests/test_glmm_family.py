@@ -14,6 +14,7 @@ from interlace.glmm_family import (
     NegativeBinomial2Family,
     PoissonFamily,
     ZeroInflatedNB2Family,
+    ZeroInflatedPoissonFamily,
     ZeroOneInflatedBetaFamily,
 )
 
@@ -554,6 +555,170 @@ class TestZeroInflatedNB2Family:
 
 
 # ---------------------------------------------------------------------------
+# Zero-Inflated Poisson (log link)
+# ---------------------------------------------------------------------------
+
+
+class TestZeroInflatedPoissonFamily:
+    """Tests for ZeroInflatedPoissonFamily.
+
+    The count component uses a log link and Poisson variance, identical to
+    PoissonFamily.  The zero-inflation probability pi is stored on the family
+    but does not alter link/linkinv/mu_eta/variance (those operate on the
+    count linear predictor only).  dev_resids uses the Poisson deviance.
+    """
+
+    def test_name(self):
+        fam = ZeroInflatedPoissonFamily(pi=0.2)
+        assert fam.name == "zeroinflated_poisson"
+
+    def test_default_params(self):
+        fam = ZeroInflatedPoissonFamily()
+        assert fam.pi == 0.0
+
+    def test_custom_pi(self):
+        fam = ZeroInflatedPoissonFamily(pi=0.3)
+        assert fam.pi == 0.3
+
+    def test_pi_must_be_in_unit_interval(self):
+        """pi must be in [0, 1)."""
+        with pytest.raises(ValueError, match="pi must be in"):
+            ZeroInflatedPoissonFamily(pi=-0.1)
+        with pytest.raises(ValueError, match="pi must be in"):
+            ZeroInflatedPoissonFamily(pi=1.0)
+        with pytest.raises(ValueError, match="pi must be in"):
+            ZeroInflatedPoissonFamily(pi=1.5)
+        # Edge: pi=0 is valid (no zero-inflation, reduces to Poisson)
+        fam = ZeroInflatedPoissonFamily(pi=0.0)
+        assert fam.pi == 0.0
+
+    # -- Link functions (log link, same as Poisson) --
+
+    def test_link_linkinv_roundtrip(self, counts):
+        """link(linkinv(eta)) == eta."""
+        fam = ZeroInflatedPoissonFamily(pi=0.2)
+        eta = fam.link(counts)
+        assert_allclose(fam.linkinv(eta), counts, atol=1e-12)
+
+    def test_link_known_values(self):
+        """log(1) = 0, log(e) = 1."""
+        fam = ZeroInflatedPoissonFamily(pi=0.2)
+        assert_allclose(fam.link(np.array([1.0])), [0.0], atol=1e-12)
+        assert_allclose(fam.link(np.array([np.e])), [1.0], atol=1e-12)
+
+    def test_linkinv_known_values(self):
+        """exp(0) = 1."""
+        fam = ZeroInflatedPoissonFamily(pi=0.2)
+        assert_allclose(fam.linkinv(np.array([0.0])), [1.0], atol=1e-12)
+
+    def test_linkinv_clamps_large_eta(self):
+        """exp(1000) would overflow; linkinv should stay finite."""
+        fam = ZeroInflatedPoissonFamily(pi=0.2)
+        mu = fam.linkinv(np.array([500.0]))
+        assert np.all(np.isfinite(mu))
+
+    # -- Variance (Poisson count component) --
+
+    def test_variance_formula(self, counts):
+        """Var(mu) = mu (Poisson count component)."""
+        fam = ZeroInflatedPoissonFamily(pi=0.3)
+        assert_allclose(fam.variance(counts), counts, atol=1e-12)
+
+    def test_variance_independent_of_pi(self, counts):
+        """Variance function does not depend on pi (count component only)."""
+        fam0 = ZeroInflatedPoissonFamily(pi=0.0)
+        fam5 = ZeroInflatedPoissonFamily(pi=0.5)
+        assert_allclose(fam0.variance(counts), fam5.variance(counts), atol=1e-15)
+
+    def test_variance_matches_poisson(self, counts):
+        """Count-component variance should match PoissonFamily."""
+        fam_zip = ZeroInflatedPoissonFamily(pi=0.3)
+        fam_pois = PoissonFamily()
+        assert_allclose(fam_zip.variance(counts), fam_pois.variance(counts), atol=1e-15)
+
+    # -- mu_eta (d(linkinv)/d(eta)) --
+
+    def test_mu_eta_is_derivative(self):
+        """mu_eta should equal d(linkinv)/d(eta), verified numerically."""
+        fam = ZeroInflatedPoissonFamily(pi=0.2)
+        eta = np.array([-1.0, 0.0, 1.0, 2.0])
+        h = 1e-7
+        numerical = (fam.linkinv(eta + h) - fam.linkinv(eta - h)) / (2 * h)
+        assert_allclose(fam.mu_eta(eta), numerical, rtol=1e-5)
+
+    def test_mu_eta_equals_exp(self):
+        """For log link, d(exp(eta))/d(eta) = exp(eta)."""
+        fam = ZeroInflatedPoissonFamily(pi=0.2)
+        eta = np.array([-1.0, 0.0, 1.0, 2.0])
+        assert_allclose(fam.mu_eta(eta), np.exp(eta), atol=1e-12)
+
+    # -- Deviance residuals (Poisson count component) --
+
+    def test_dev_resids_perfect_fit(self):
+        """Deviance residuals should be zero when y == mu."""
+        fam = ZeroInflatedPoissonFamily(pi=0.2)
+        mu = np.array([1.0, 2.0, 5.0])
+        wt = np.ones_like(mu)
+        assert_allclose(fam.dev_resids(mu, mu, wt), 0.0, atol=1e-12)
+
+    def test_dev_resids_known_value(self):
+        """Poisson deviance for y=3, mu=1, wt=1.
+
+        d_i = 2 * wt * [y*log(y/mu) - (y - mu)]
+             = 2 * [3*log(3) - 2]
+        """
+        fam = ZeroInflatedPoissonFamily(pi=0.2)
+        y = np.array([3.0])
+        mu = np.array([1.0])
+        wt = np.array([1.0])
+        expected = 2.0 * (3.0 * np.log(3.0) - 2.0)
+        assert_allclose(fam.dev_resids(y, mu, wt), expected, atol=1e-12)
+
+    def test_dev_resids_y_zero(self):
+        """For y=0, mu=2, wt=1:
+        d_i = 2 * [0*log(0/2) - (0 - 2)] = 2 * 2 = 4
+        """
+        fam = ZeroInflatedPoissonFamily(pi=0.2)
+        y = np.array([0.0])
+        mu = np.array([2.0])
+        wt = np.array([1.0])
+        expected = np.array([4.0])
+        assert_allclose(fam.dev_resids(y, mu, wt), expected, atol=1e-12)
+
+    def test_dev_resids_matches_poisson(self):
+        """Count-component deviance should match PoissonFamily."""
+        fam_zip = ZeroInflatedPoissonFamily(pi=0.3)
+        fam_pois = PoissonFamily()
+        y = np.array([0.0, 1.0, 3.0, 7.0])
+        mu = np.array([2.0, 2.0, 2.0, 2.0])
+        wt = np.ones(4)
+        assert_allclose(
+            fam_zip.dev_resids(y, mu, wt),
+            fam_pois.dev_resids(y, mu, wt),
+            atol=1e-12,
+        )
+
+    # -- pi=0 reduces to Poisson --
+
+    def test_pi_zero_matches_poisson_everywhere(self, counts):
+        """With pi=0, ZIP should be identical to Poisson for all methods."""
+        fam_zip = ZeroInflatedPoissonFamily(pi=0.0)
+        fam_pois = PoissonFamily()
+        eta = np.log(counts)
+        assert_allclose(fam_zip.link(counts), fam_pois.link(counts), atol=1e-15)
+        assert_allclose(fam_zip.linkinv(eta), fam_pois.linkinv(eta), atol=1e-15)
+        assert_allclose(fam_zip.mu_eta(eta), fam_pois.mu_eta(eta), atol=1e-15)
+        assert_allclose(fam_zip.variance(counts), fam_pois.variance(counts), atol=1e-15)
+
+    # -- GLMMFamily protocol --
+
+    def test_satisfies_protocol(self):
+        """ZeroInflatedPoissonFamily should satisfy the GLMMFamily protocol."""
+        fam = ZeroInflatedPoissonFamily(pi=0.2)
+        assert isinstance(fam, GLMMFamily)
+
+
+# ---------------------------------------------------------------------------
 # Beta (logit link)
 # ---------------------------------------------------------------------------
 
@@ -799,6 +964,7 @@ class TestWeights:
             NegativeBinomial2Family,
             BetaFamily,
             ZeroInflatedNB2Family,
+            ZeroInflatedPoissonFamily,
             ZeroOneInflatedBetaFamily,
         ],
     )
@@ -807,7 +973,12 @@ class TestWeights:
         if cls is BinomialFamily:
             y = np.array([1.0, 0.0, 1.0])
             mu = np.array([0.7, 0.3, 0.9])
-        elif cls in (PoissonFamily, NegativeBinomial2Family, ZeroInflatedNB2Family):
+        elif cls in (
+            PoissonFamily,
+            NegativeBinomial2Family,
+            ZeroInflatedNB2Family,
+            ZeroInflatedPoissonFamily,
+        ):
             y = np.array([3.0, 0.0, 5.0])
             mu = np.array([2.0, 1.0, 4.0])
         elif cls in (BetaFamily, ZeroOneInflatedBetaFamily):
@@ -875,6 +1046,12 @@ class TestResolveFamily:
 
         fam = resolve_family("zeroinflated_negativebinomial")
         assert isinstance(fam, ZeroInflatedNB2Family)
+
+    def test_string_zeroinflated_poisson(self):
+        from interlace.glmm_family import resolve_family
+
+        fam = resolve_family("zeroinflated_poisson")
+        assert isinstance(fam, ZeroInflatedPoissonFamily)
 
     def test_string_zerooneinflated_beta(self):
         from interlace.glmm_family import resolve_family

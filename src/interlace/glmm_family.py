@@ -268,6 +268,65 @@ class ZeroInflatedNB2Family:
         return 2.0 * wt * d
 
 
+class ZeroInflatedPoissonFamily:
+    """Zero-inflated Poisson family with log link.
+
+    A mixture model: with probability *pi* the observation is a structural
+    zero, and with probability *(1 - pi)* it follows Poisson(mu).
+
+    For PIRLS purposes the link, variance, and mu_eta operate on the
+    **count component** only (identical to :class:`PoissonFamily`).
+    The zero-inflation probability is stored but handled separately in the
+    likelihood (see ``_conditional_loglik``).
+
+    Parameters
+    ----------
+    pi:
+        Zero-inflation probability.  Must be in [0, 1).  Default is 0.0
+        (no zero-inflation, equivalent to plain Poisson).
+    """
+
+    name: str = "zeroinflated_poisson"
+
+    def __init__(self, pi: float = 0.0) -> None:
+        if pi < 0 or pi >= 1:
+            raise ValueError("pi must be in [0, 1)")
+        self.pi = pi
+
+    def link(self, mu: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Log link."""
+        return np.log(mu)
+
+    def linkinv(self, eta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """exp(eta), clamped to avoid overflow."""
+        return np.exp(np.clip(eta, -_EXP_MAX, _EXP_MAX))
+
+    def mu_eta(self, eta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """d(exp(eta))/d(eta) = exp(eta)."""
+        return self.linkinv(eta)
+
+    def variance(self, mu: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Var(Y) = mu (count component)."""
+        return mu.copy()
+
+    def dev_resids(
+        self,
+        y: NDArray[np.float64],
+        mu: NDArray[np.float64],
+        wt: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        """Poisson unit deviance residuals (count component).
+
+        d_i = 2 * wt * [y*log(y/mu) - (y - mu)]
+
+        Uses the 0*log(0) = 0 convention.
+        """
+        d = -(y - mu)
+        pos = y > 0
+        d[pos] += y[pos] * np.log(y[pos] / mu[pos])
+        return 2.0 * wt * d
+
+
 class BetaFamily:
     """Beta family with logit link.
 
@@ -453,6 +512,7 @@ _FAMILIES: dict[
         | GaussianFamily
         | NegativeBinomial2Family
         | ZeroInflatedNB2Family
+        | ZeroInflatedPoissonFamily
         | BetaFamily
         | ZeroOneInflatedBetaFamily
     ],
@@ -462,6 +522,7 @@ _FAMILIES: dict[
     "gaussian": GaussianFamily,
     "negativebinomial": NegativeBinomial2Family,
     "zeroinflated_negativebinomial": ZeroInflatedNB2Family,
+    "zeroinflated_poisson": ZeroInflatedPoissonFamily,
     "beta": BetaFamily,
     "zerooneinflated_beta": ZeroOneInflatedBetaFamily,
 }
