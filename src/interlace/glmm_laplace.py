@@ -203,6 +203,73 @@ class GLMMResult:
 
         return np.asarray(eta)
 
+    def summary(self) -> _GLMMSummary:
+        """Return a human-readable summary of the fitted GLMM."""
+        return _GLMMSummary(self)
+
+
+class _GLMMSummary:
+    """Human-readable summary of a fitted GLMM."""
+
+    def __init__(self, result: GLMMResult) -> None:
+        self._result = result
+
+    def __str__(self) -> str:
+        return self._render()
+
+    def __repr__(self) -> str:
+        return self._render()
+
+    def _render(self) -> str:
+        r = self._result
+        lines: list[str] = []
+
+        lines.append("Generalized linear mixed model fit by Laplace")
+        lines.append(f"Family: {r.family.name}")
+        lines.append(f"Formula: {r._formula}")
+        lines.append("")
+
+        # Fixed effects
+        lines.append("Fixed effects:")
+        fe_arr = np.asarray(r.fe_params)
+        bse_arr = np.asarray(r.fe_bse)
+        z_arr = fe_arr / bse_arr
+        names = list(r.fe_params.index)
+        header = f"  {'':20} {'Estimate':>12} {'Std. Error':>12} {'z value':>10}"
+        lines.append(header)
+        for name, est, se, zv in zip(names, fe_arr, bse_arr, z_arr, strict=True):
+            lines.append(f"  {name:<20} {est:>12.4f} {se:>12.4f} {zv:>10.4f}")
+        lines.append("")
+
+        # Random effects
+        lines.append("Random effects:")
+        for grp, vc in r.variance_components.items():
+            n_grp = r.ngroups[grp]
+            sd = np.sqrt(vc)
+            lines.append(f"  {grp:<15} Var: {vc:.6f}  SD: {sd:.6f}  (n={n_grp})")
+        lines.append("")
+
+        # Dispersion model coefficients
+        if r.disp_params is not None:
+            lines.append("Dispersion model coefficients (log link):")
+            dp = r.disp_params
+            dp_names = list(dp.index)
+            dp_vals = np.asarray(dp)
+            header_d = f"  {'':20} {'Estimate':>12}"
+            lines.append(header_d)
+            for name, val in zip(dp_names, dp_vals, strict=True):
+                lines.append(f"  {name:<20} {val:>12.4f}")
+            lines.append("")
+
+        # Model fit
+        groups_str = "; ".join(f"{g}: {n}" for g, n in r.ngroups.items())
+        lines.append(f"Number of obs: {r.nobs}, groups: {groups_str}")
+        lines.append(f"AIC: {r.aic:.2f}  BIC: {r.bic:.2f}  logLik: {r.llf:.2f}")
+        status = "converged" if r.converged else "DID NOT CONVERGE"
+        lines.append(f"Optimizer: {status}")
+
+        return "\n".join(lines)
+
 
 # ---------------------------------------------------------------------------
 # PIRLS inner loop
@@ -215,7 +282,7 @@ _MU_EPS = 1e-10  # clamp mu away from 0 boundary
 
 def _clamp_mu(mu: np.ndarray, family: GLMMFamily) -> np.ndarray:
     """Clamp mu to valid range for the family."""
-    if family.name == "binomial":
+    if family.name in ("binomial", "beta"):
         return np.asarray(np.clip(mu, _MU_EPS, 1.0 - _MU_EPS))
     if family.name in ("poisson", "negativebinomial"):
         return np.asarray(np.maximum(mu, _MU_EPS))
@@ -261,7 +328,9 @@ def _conditional_loglik(
         return float(np.sum(weights * ll))
     elif family.name == "negativebinomial":
         assert isinstance(family, NegativeBinomial2Family)
-        theta = family.theta
+        # When phi is provided for NB2, it carries per-observation theta
+        # (the shape/overdispersion parameter), matching glmmTMB convention.
+        theta = phi if phi is not None else np.full_like(y, family.theta)
         mu_safe = np.maximum(mu, _MU_EPS)
         # NB2 log-likelihood:
         # ll_i = lgamma(y+theta) - lgamma(theta) - lgamma(y+1)
@@ -288,6 +357,23 @@ def _conditional_loglik(
             # Homoscedastic (phi = 1)
             ll = -0.5 * np.sum(weights * (y - mu) ** 2) - 0.5 * n * np.log(2.0 * np.pi)
         return float(ll)
+    elif family.name == "beta":
+        from interlace.glmm_family import BetaFamily
+
+        assert isinstance(family, BetaFamily)
+        precision = phi if phi is not None else np.full_like(y, family.phi)
+        mu_safe = np.clip(mu, _MU_EPS, 1.0 - _MU_EPS)
+        y_safe = np.clip(y, _MU_EPS, 1.0 - _MU_EPS)
+        a = mu_safe * precision
+        b = (1.0 - mu_safe) * precision
+        ll = (
+            gammaln(precision)
+            - gammaln(a)
+            - gammaln(b)
+            + (a - 1.0) * np.log(y_safe)
+            + (b - 1.0) * np.log(1.0 - y_safe)
+        )
+        return float(np.sum(weights * ll))
     else:
         # Fallback: use -0.5 * deviance (no normalizing constant)
         dev = float(np.sum(family.dev_resids(y, mu, weights)))
@@ -412,11 +498,16 @@ def _pirls(
 
         # Working weights and working residual
         mu_eta_val = family.mu_eta(eta)  # d(mu)/d(eta)
-        var_mu = family.variance(mu)
 
-        # W = diag(weights * mu_eta^2 / (phi * var_mu)) — the IRLS weight matrix
-        # When phi is provided, it scales the variance function.
-        denom = var_mu if phi is None else phi * var_mu
+        # W = diag(weights * mu_eta^2 / var) — the IRLS weight matrix
+        # For NB2 with dispformula, phi carries per-obs theta → recompute variance.
+        # For other families, phi scales the variance multiplicatively.
+        if phi is not None and family.name == "negativebinomial":
+            var_mu = mu + mu**2 / phi  # NB2 variance with per-obs theta
+            denom = var_mu
+        else:
+            var_mu = family.variance(mu)
+            denom = var_mu if phi is None else phi * var_mu
         w = weights * mu_eta_val**2 / denom  # (n,)
         # Working residual (offset excluded so we solve for X@beta + Z@u only)
         z_w = (eta - _off) + (y - mu) / mu_eta_val  # (n,)
@@ -496,8 +587,12 @@ def _pirls(
 
     # Recompute A at final values for log|A|
     mu_eta_val = family.mu_eta(eta)
-    var_mu = family.variance(mu)
-    denom_final = var_mu if phi is None else phi * var_mu
+    if phi is not None and family.name == "negativebinomial":
+        var_mu = mu + mu**2 / phi
+        denom_final = var_mu
+    else:
+        var_mu = family.variance(mu)
+        denom_final = var_mu if phi is None else phi * var_mu
     w = weights * mu_eta_val**2 / denom_final
     WZs_final = sp.diags(np.sqrt(w), format="csc") @ Z_star
     A_final = ((WZs_final.T @ WZs_final) + sp.eye(q, format="csc")).tocsc()
@@ -600,7 +695,9 @@ def _laplace_objective_profiled(
         # Solve for v only: (Z_*'WZ_* + I) v = Z_*'W * residual
         # where residual = (y - mu) / mu_eta + Z_*' v_old (incremental)
         wtres = (y - mu) / mu_eta_val
-        ZstWr = np.asarray(Z_star.T @ (w * (Z_star @ (u / Lambda.diagonal()) + wtres))).squeeze()  # noqa: E501
+        ZstWr = np.asarray(
+            Z_star.T @ (w * (Z_star @ (u / Lambda.diagonal()) + wtres))
+        ).squeeze()  # noqa: E501
         sqrtW = np.sqrt(w)
         WZs = sp.diags(sqrtW, format="csc") @ Z_star
         A = ((WZs.T @ WZs) + sp.eye(q, format="csc")).tocsc()
@@ -1079,8 +1176,7 @@ def fit_glmm(
                 offset_arr,
             ),
             method="Nelder-Mead",
-            options={"xatol": 1e-7, "fatol": 1e-7, "maxiter": 2000,
-                     "adaptive": True},
+            options={"xatol": 1e-7, "fatol": 1e-7, "maxiter": 2000, "adaptive": True},
         )
         # Accept phase 2 if it improved the objective
         phase1_ll = -(obj(theta_hat) if callable(obj) else np.inf)
@@ -1101,8 +1197,16 @@ def fit_glmm(
         # Run the profiled objective one final time to get clean (beta, u, ll).
         _laplace_objective_profiled(
             np.concatenate([theta_hat, warm["beta"]]),
-            n_theta, y, X, Z, fam, specs, n_levels_list,
-            weights_arr, warm_phase2, offset_arr,
+            n_theta,
+            y,
+            X,
+            Z,
+            fam,
+            specs,
+            n_levels_list,
+            weights_arr,
+            warm_phase2,
+            offset_arr,
         )
         beta_hat = warm["beta"].copy()  # type: ignore[union-attr]
         u_hat = warm_phase2["u"].copy()  # type: ignore[union-attr]
@@ -1154,8 +1258,12 @@ def fit_glmm(
     # From the Hessian of the penalized log-likelihood w.r.t. beta
     eta = X @ beta_hat + Z @ u_hat + offset_arr
     mu_eta_val = fam.mu_eta(eta)
-    var_mu = fam.variance(mu_hat)
-    denom_se = var_mu if phi_hat is None else phi_hat * var_mu
+    if phi_hat is not None and fam.name == "negativebinomial":
+        var_mu = mu_hat + mu_hat**2 / phi_hat
+        denom_se = var_mu
+    else:
+        var_mu = fam.variance(mu_hat)
+        denom_se = var_mu if phi_hat is None else phi_hat * var_mu
     w = weights_arr * mu_eta_val**2 / denom_se
     WX = np.sqrt(w)[:, None] * X
     XtWX = WX.T @ WX

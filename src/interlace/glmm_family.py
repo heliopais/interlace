@@ -201,18 +201,106 @@ class NegativeBinomial2Family:
         return 2.0 * wt * d
 
 
+class BetaFamily:
+    """Beta family with logit link.
+
+    The Beta distribution is parameterised by mean *mu* in (0, 1) and precision
+    *phi* > 0.  The shape parameters are a = mu * phi, b = (1 - mu) * phi,
+    giving variance V(mu) = mu * (1 - mu) / (1 + phi).
+
+    Parameters
+    ----------
+    phi:
+        Precision parameter.  Must be positive.  Default is 1.0.
+    """
+
+    name: str = "beta"
+
+    def __init__(self, phi: float = 1.0) -> None:
+        if phi <= 0:
+            raise ValueError("phi must be positive")
+        self.phi = phi
+
+    def link(self, mu: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Logit: log(mu / (1 - mu))."""
+        return np.log(mu / (1.0 - mu))
+
+    def linkinv(self, eta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Inverse logit (expit), numerically stable."""
+        from scipy.special import expit
+
+        return np.asarray(expit(eta), dtype=np.float64)
+
+    def mu_eta(self, eta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """d(linkinv)/d(eta) = mu * (1 - mu)."""
+        mu = self.linkinv(eta)
+        return mu * (1.0 - mu)
+
+    def variance(self, mu: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Var(Y) = mu * (1 - mu) / (1 + phi)."""
+        return mu * (1.0 - mu) / (1.0 + self.phi)
+
+    def dev_resids(
+        self,
+        y: NDArray[np.float64],
+        mu: NDArray[np.float64],
+        wt: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        """Beta unit deviance residuals.
+
+        d_i = 2 * wt * [log f(y; y, phi) - log f(y; mu, phi)]
+
+        where f is the Beta density with a = mean * phi, b = (1 - mean) * phi.
+        The lgamma(phi) terms cancel in the saturated - fitted difference.
+        """
+        from scipy.special import gammaln
+
+        phi = self.phi
+        # Saturated model: mean = y
+        a_sat = y * phi
+        b_sat = (1.0 - y) * phi
+        # Fitted model: mean = mu
+        a_fit = mu * phi
+        b_fit = (1.0 - mu) * phi
+
+        # log f(y; mean, phi) = lgamma(phi) - lgamma(a) - lgamma(b)
+        #                       + (a-1)*log(y) + (b-1)*log(1-y)
+        # The lgamma(phi) and the -log(y) -log(1-y) terms cancel in the diff.
+        ll_sat = (
+            -gammaln(a_sat)
+            - gammaln(b_sat)
+            + a_sat * np.log(y)
+            + b_sat * np.log(1.0 - y)
+        )
+        ll_fit = (
+            -gammaln(a_fit)
+            - gammaln(b_fit)
+            + a_fit * np.log(y)
+            + b_fit * np.log(1.0 - y)
+        )
+
+        return np.asarray(2.0 * wt * (ll_sat - ll_fit), dtype=np.float64)
+
+
 # ---------------------------------------------------------------------------
 # Resolver: string | GLMMFamily → GLMMFamily
 # ---------------------------------------------------------------------------
 
 _FAMILIES: dict[
     str,
-    type[BinomialFamily | PoissonFamily | GaussianFamily | NegativeBinomial2Family],
+    type[
+        BinomialFamily
+        | PoissonFamily
+        | GaussianFamily
+        | NegativeBinomial2Family
+        | BetaFamily
+    ],
 ] = {
     "binomial": BinomialFamily,
     "poisson": PoissonFamily,
     "gaussian": GaussianFamily,
     "negativebinomial": NegativeBinomial2Family,
+    "beta": BetaFamily,
 }
 
 

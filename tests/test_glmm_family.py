@@ -7,6 +7,7 @@ import pytest
 from numpy.testing import assert_allclose
 
 from interlace.glmm_family import (
+    BetaFamily,
     BinomialFamily,
     GaussianFamily,
     GLMMFamily,
@@ -47,7 +48,13 @@ class TestProtocolConformance:
 
     @pytest.mark.parametrize(
         "cls",
-        [BinomialFamily, PoissonFamily, GaussianFamily, NegativeBinomial2Family],
+        [
+            BinomialFamily,
+            PoissonFamily,
+            GaussianFamily,
+            NegativeBinomial2Family,
+            BetaFamily,
+        ],
     )
     def test_is_runtime_checkable(self, cls):
         family = cls()
@@ -55,7 +62,13 @@ class TestProtocolConformance:
 
     @pytest.mark.parametrize(
         "cls",
-        [BinomialFamily, PoissonFamily, GaussianFamily, NegativeBinomial2Family],
+        [
+            BinomialFamily,
+            PoissonFamily,
+            GaussianFamily,
+            NegativeBinomial2Family,
+            BetaFamily,
+        ],
     )
     def test_has_required_attributes(self, cls):
         family = cls()
@@ -357,6 +370,128 @@ class TestNegativeBinomial2Family:
 
 
 # ---------------------------------------------------------------------------
+# Beta (logit link)
+# ---------------------------------------------------------------------------
+
+
+class TestBetaFamily:
+    def test_name(self):
+        fam = BetaFamily()
+        assert fam.name == "beta"
+
+    def test_default_phi(self):
+        fam = BetaFamily()
+        assert fam.phi == 1.0
+
+    def test_custom_phi(self):
+        fam = BetaFamily(phi=5.0)
+        assert fam.phi == 5.0
+
+    def test_phi_must_be_positive(self):
+        with pytest.raises(ValueError, match="phi must be positive"):
+            BetaFamily(phi=0.0)
+        with pytest.raises(ValueError, match="phi must be positive"):
+            BetaFamily(phi=-1.0)
+
+    def test_link_linkinv_roundtrip(self, prob):
+        """link(linkinv(eta)) == eta and linkinv(link(mu)) == mu."""
+        fam = BetaFamily(phi=5.0)
+        eta = fam.link(prob)
+        assert_allclose(fam.linkinv(eta), prob, atol=1e-12)
+        mu_back = fam.linkinv(fam.link(prob))
+        assert_allclose(mu_back, prob, atol=1e-12)
+
+    def test_link_known_values(self):
+        """logit(0.5) = 0, logit(0.25) = -log(3)."""
+        fam = BetaFamily()
+        assert_allclose(fam.link(np.array([0.5])), [0.0], atol=1e-12)
+        assert_allclose(fam.link(np.array([0.25])), [-np.log(3)], atol=1e-12)
+
+    def test_linkinv_known_values(self):
+        """expit(0) = 0.5."""
+        fam = BetaFamily()
+        assert_allclose(fam.linkinv(np.array([0.0])), [0.5], atol=1e-12)
+
+    def test_variance(self, prob):
+        """Var(mu) = mu * (1 - mu) / (1 + phi)."""
+        phi = 5.0
+        fam = BetaFamily(phi=phi)
+        expected = prob * (1.0 - prob) / (1.0 + phi)
+        assert_allclose(fam.variance(prob), expected, atol=1e-12)
+
+    def test_variance_reduces_to_binomial_small_phi(self, prob):
+        """As phi -> 0+, Beta variance -> mu*(1-mu) (binomial-like)."""
+        fam = BetaFamily(phi=1e-10)
+        expected = prob * (1.0 - prob)
+        assert_allclose(fam.variance(prob), expected, rtol=1e-6)
+
+    def test_variance_shrinks_with_large_phi(self, prob):
+        """Larger phi (more precision) means smaller variance."""
+        fam_lo = BetaFamily(phi=1.0)
+        fam_hi = BetaFamily(phi=100.0)
+        assert np.all(fam_hi.variance(prob) < fam_lo.variance(prob))
+
+    def test_mu_eta_is_derivative(self):
+        """mu_eta should equal d(linkinv)/d(eta), verified numerically."""
+        fam = BetaFamily(phi=3.0)
+        eta = np.array([-2.0, 0.0, 2.0])
+        h = 1e-7
+        numerical = (fam.linkinv(eta + h) - fam.linkinv(eta - h)) / (2 * h)
+        assert_allclose(fam.mu_eta(eta), numerical, rtol=1e-5)
+
+    def test_dev_resids_perfect_fit(self):
+        """Deviance residuals should be zero when y == mu."""
+        fam = BetaFamily(phi=5.0)
+        mu = np.array([0.2, 0.5, 0.8])
+        wt = np.ones_like(mu)
+        assert_allclose(fam.dev_resids(mu, mu, wt), 0.0, atol=1e-12)
+
+    def test_dev_resids_finite(self):
+        """Deviance residuals should be finite for interior y and mu.
+
+        Note: Beta deviance using the mu=y "saturated" model can be negative
+        because mu=y is *not* the true MLE (the sufficient statistic is
+        (log y, log(1-y)), not y itself).  This is well-known in the
+        beta regression literature (Ferrari & Cribari-Neto, 2004).
+        """
+        fam = BetaFamily(phi=3.0)
+        rng = np.random.default_rng(42)
+        y = rng.beta(2, 5, size=100)
+        mu = rng.beta(2, 5, size=100)
+        wt = np.ones(100)
+        dr = fam.dev_resids(y, mu, wt)
+        assert np.all(np.isfinite(dr))
+
+    def test_dev_resids_known_value(self):
+        """Beta deviance for y=0.3, mu=0.5, phi=2, wt=1.
+
+        d_i = 2 * [log_beta_pdf(y; y, phi) - log_beta_pdf(y; mu, phi)]
+        Using scipy as reference.
+        """
+        from scipy.stats import beta as beta_dist
+
+        phi = 2.0
+        fam = BetaFamily(phi=phi)
+        y = np.array([0.3])
+        mu = np.array([0.5])
+        wt = np.array([1.0])
+        # Saturated: a_sat=y*phi, b_sat=(1-y)*phi
+        ll_sat = beta_dist.logpdf(0.3, a=0.3 * phi, b=0.7 * phi)
+        ll_mod = beta_dist.logpdf(0.3, a=0.5 * phi, b=0.5 * phi)
+        expected = 2.0 * (ll_sat - ll_mod)
+        assert_allclose(fam.dev_resids(y, mu, wt), expected, atol=1e-10)
+
+    def test_linkinv_extreme_eta(self):
+        """Should not overflow for very large/small eta."""
+        fam = BetaFamily()
+        eta = np.array([-500.0, 500.0])
+        mu = fam.linkinv(eta)
+        assert np.all(np.isfinite(mu))
+        assert mu[0] < 1e-10
+        assert mu[1] > 1.0 - 1e-10
+
+
+# ---------------------------------------------------------------------------
 # Weights
 # ---------------------------------------------------------------------------
 
@@ -366,7 +501,13 @@ class TestWeights:
 
     @pytest.mark.parametrize(
         "cls",
-        [BinomialFamily, PoissonFamily, GaussianFamily, NegativeBinomial2Family],
+        [
+            BinomialFamily,
+            PoissonFamily,
+            GaussianFamily,
+            NegativeBinomial2Family,
+            BetaFamily,
+        ],
     )
     def test_dev_resids_weight_scaling(self, cls):
         fam = cls()
@@ -376,6 +517,9 @@ class TestWeights:
         elif cls is PoissonFamily or cls is NegativeBinomial2Family:
             y = np.array([3.0, 0.0, 5.0])
             mu = np.array([2.0, 1.0, 4.0])
+        elif cls is BetaFamily:
+            y = np.array([0.2, 0.5, 0.8])
+            mu = np.array([0.3, 0.6, 0.7])
         else:
             y = np.array([1.0, 2.0, 3.0])
             mu = np.array([1.5, 1.5, 1.5])
@@ -426,6 +570,12 @@ class TestResolveFamily:
 
         fam = BinomialFamily()
         assert resolve_family(fam) is fam
+
+    def test_string_beta(self):
+        from interlace.glmm_family import resolve_family
+
+        fam = resolve_family("beta")
+        assert isinstance(fam, BetaFamily)
 
     def test_unknown_string_raises(self):
         from interlace.glmm_family import resolve_family
