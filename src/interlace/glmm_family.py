@@ -201,6 +201,73 @@ class NegativeBinomial2Family:
         return 2.0 * wt * d
 
 
+class ZeroInflatedNB2Family:
+    """Zero-inflated Negative Binomial (NB2) family with log link.
+
+    A mixture model: with probability *pi* the observation is a structural
+    zero, and with probability *(1 - pi)* it follows NB2(mu, theta).
+
+    For PIRLS purposes the link, variance, and mu_eta operate on the
+    **count component** only (identical to :class:`NegativeBinomial2Family`).
+    The zero-inflation probability is stored but handled separately in the
+    likelihood (see ``_conditional_loglik``).
+
+    Parameters
+    ----------
+    theta:
+        Shape (overdispersion) parameter for the NB2 count component.
+        Must be positive.  Default is 1.0.
+    pi:
+        Zero-inflation probability.  Must be in [0, 1).  Default is 0.0
+        (no zero-inflation, equivalent to plain NB2).
+    """
+
+    name: str = "zeroinflated_negativebinomial"
+
+    def __init__(self, theta: float = 1.0, pi: float = 0.0) -> None:
+        if theta <= 0:
+            raise ValueError("theta must be positive")
+        if pi < 0 or pi >= 1:
+            raise ValueError("pi must be in [0, 1)")
+        self.theta = theta
+        self.pi = pi
+
+    def link(self, mu: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Log link."""
+        return np.log(mu)
+
+    def linkinv(self, eta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """exp(eta), clamped to avoid overflow."""
+        return np.exp(np.clip(eta, -_EXP_MAX, _EXP_MAX))
+
+    def mu_eta(self, eta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """d(exp(eta))/d(eta) = exp(eta)."""
+        return self.linkinv(eta)
+
+    def variance(self, mu: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Var(Y) = mu + mu^2 / theta (count component)."""
+        return mu + mu**2 / self.theta
+
+    def dev_resids(
+        self,
+        y: NDArray[np.float64],
+        mu: NDArray[np.float64],
+        wt: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        """NB2 unit deviance residuals (count component).
+
+        d_i = 2 * wt * [y*log(y/mu) - (y + theta)*log((y + theta)/(mu + theta))]
+
+        Uses the 0*log(0) = 0 convention.
+        """
+        theta = self.theta
+        d = np.zeros_like(y, dtype=np.float64)
+        pos = y > 0
+        d[pos] += y[pos] * np.log(y[pos] / mu[pos])
+        d -= (y + theta) * np.log((y + theta) / (mu + theta))
+        return 2.0 * wt * d
+
+
 class BetaFamily:
     """Beta family with logit link.
 
@@ -293,6 +360,7 @@ _FAMILIES: dict[
         | PoissonFamily
         | GaussianFamily
         | NegativeBinomial2Family
+        | ZeroInflatedNB2Family
         | BetaFamily
     ],
 ] = {
@@ -300,6 +368,7 @@ _FAMILIES: dict[
     "poisson": PoissonFamily,
     "gaussian": GaussianFamily,
     "negativebinomial": NegativeBinomial2Family,
+    "zeroinflated_negativebinomial": ZeroInflatedNB2Family,
     "beta": BetaFamily,
 }
 

@@ -13,6 +13,7 @@ from interlace.glmm_family import (
     GLMMFamily,
     NegativeBinomial2Family,
     PoissonFamily,
+    ZeroInflatedNB2Family,
 )
 
 # ---------------------------------------------------------------------------
@@ -54,6 +55,7 @@ class TestProtocolConformance:
             GaussianFamily,
             NegativeBinomial2Family,
             BetaFamily,
+            ZeroInflatedNB2Family,
         ],
     )
     def test_is_runtime_checkable(self, cls):
@@ -68,6 +70,7 @@ class TestProtocolConformance:
             GaussianFamily,
             NegativeBinomial2Family,
             BetaFamily,
+            ZeroInflatedNB2Family,
         ],
     )
     def test_has_required_attributes(self, cls):
@@ -370,6 +373,186 @@ class TestNegativeBinomial2Family:
 
 
 # ---------------------------------------------------------------------------
+# Zero-Inflated Negative Binomial 2 (log link, count component)
+# ---------------------------------------------------------------------------
+
+
+class TestZeroInflatedNB2Family:
+    """Tests for ZeroInflatedNB2Family.
+
+    The count component uses a log link and NB2 variance, identical to
+    NegativeBinomial2Family.  The zero-inflation probability pi is stored
+    on the family but does not alter link/linkinv/mu_eta/variance (those
+    operate on the count linear predictor only).  dev_resids uses the
+    count-component NB2 deviance.
+    """
+
+    def test_name(self):
+        fam = ZeroInflatedNB2Family(theta=1.0, pi=0.2)
+        assert fam.name == "zeroinflated_negativebinomial"
+
+    def test_default_params(self):
+        fam = ZeroInflatedNB2Family()
+        assert fam.theta == 1.0
+        assert fam.pi == 0.0
+
+    def test_custom_theta(self):
+        fam = ZeroInflatedNB2Family(theta=2.5)
+        assert fam.theta == 2.5
+
+    def test_custom_pi(self):
+        fam = ZeroInflatedNB2Family(pi=0.3)
+        assert fam.pi == 0.3
+
+    def test_theta_must_be_positive(self):
+        with pytest.raises(ValueError, match="theta must be positive"):
+            ZeroInflatedNB2Family(theta=0.0)
+        with pytest.raises(ValueError, match="theta must be positive"):
+            ZeroInflatedNB2Family(theta=-1.0)
+
+    def test_pi_must_be_in_unit_interval(self):
+        """pi must be in [0, 1)."""
+        with pytest.raises(ValueError, match="pi must be in"):
+            ZeroInflatedNB2Family(pi=-0.1)
+        with pytest.raises(ValueError, match="pi must be in"):
+            ZeroInflatedNB2Family(pi=1.0)
+        with pytest.raises(ValueError, match="pi must be in"):
+            ZeroInflatedNB2Family(pi=1.5)
+        # Edge: pi=0 is valid (no zero-inflation, reduces to NB2)
+        fam = ZeroInflatedNB2Family(pi=0.0)
+        assert fam.pi == 0.0
+
+    # -- Link functions (log link, same as NB2) --
+
+    def test_link_linkinv_roundtrip(self, counts):
+        """link(linkinv(eta)) == eta."""
+        fam = ZeroInflatedNB2Family(theta=1.0, pi=0.2)
+        eta = fam.link(counts)
+        assert_allclose(fam.linkinv(eta), counts, atol=1e-12)
+
+    def test_link_known_values(self):
+        """log(1) = 0, log(e) = 1."""
+        fam = ZeroInflatedNB2Family(theta=1.0, pi=0.2)
+        assert_allclose(fam.link(np.array([1.0])), [0.0], atol=1e-12)
+        assert_allclose(fam.link(np.array([np.e])), [1.0], atol=1e-12)
+
+    def test_linkinv_known_values(self):
+        """exp(0) = 1."""
+        fam = ZeroInflatedNB2Family(theta=1.0, pi=0.2)
+        assert_allclose(fam.linkinv(np.array([0.0])), [1.0], atol=1e-12)
+
+    def test_linkinv_clamps_large_eta(self):
+        """exp(1000) would overflow; linkinv should stay finite."""
+        fam = ZeroInflatedNB2Family(theta=1.0, pi=0.2)
+        mu = fam.linkinv(np.array([500.0]))
+        assert np.all(np.isfinite(mu))
+
+    # -- Variance (NB2 count component) --
+
+    def test_variance_formula(self, counts):
+        """Var(mu) = mu + mu^2 / theta (count component only)."""
+        theta = 2.0
+        fam = ZeroInflatedNB2Family(theta=theta, pi=0.3)
+        expected = counts + counts**2 / theta
+        assert_allclose(fam.variance(counts), expected, atol=1e-12)
+
+    def test_variance_independent_of_pi(self, counts):
+        """Variance function does not depend on pi (count component only)."""
+        fam0 = ZeroInflatedNB2Family(theta=2.0, pi=0.0)
+        fam5 = ZeroInflatedNB2Family(theta=2.0, pi=0.5)
+        assert_allclose(fam0.variance(counts), fam5.variance(counts), atol=1e-15)
+
+    def test_variance_matches_nb2(self, counts):
+        """Count-component variance should match NegativeBinomial2Family."""
+        theta = 1.5
+        fam_zinb = ZeroInflatedNB2Family(theta=theta, pi=0.3)
+        fam_nb2 = NegativeBinomial2Family(theta=theta)
+        assert_allclose(fam_zinb.variance(counts), fam_nb2.variance(counts), atol=1e-15)
+
+    def test_variance_reduces_to_poisson_large_theta(self, counts):
+        """As theta -> inf, count variance -> mu (Poisson)."""
+        fam = ZeroInflatedNB2Family(theta=1e12, pi=0.2)
+        assert_allclose(fam.variance(counts), counts, rtol=1e-6)
+
+    # -- mu_eta (d(linkinv)/d(eta)) --
+
+    def test_mu_eta_is_derivative(self):
+        """mu_eta should equal d(linkinv)/d(eta), verified numerically."""
+        fam = ZeroInflatedNB2Family(theta=1.5, pi=0.2)
+        eta = np.array([-1.0, 0.0, 1.0, 2.0])
+        h = 1e-7
+        numerical = (fam.linkinv(eta + h) - fam.linkinv(eta - h)) / (2 * h)
+        assert_allclose(fam.mu_eta(eta), numerical, rtol=1e-5)
+
+    def test_mu_eta_equals_exp(self):
+        """For log link, d(exp(eta))/d(eta) = exp(eta)."""
+        fam = ZeroInflatedNB2Family(theta=1.0, pi=0.2)
+        eta = np.array([-1.0, 0.0, 1.0, 2.0])
+        assert_allclose(fam.mu_eta(eta), np.exp(eta), atol=1e-12)
+
+    # -- Deviance residuals (NB2 count component) --
+
+    def test_dev_resids_perfect_fit(self):
+        """Deviance residuals should be zero when y == mu."""
+        fam = ZeroInflatedNB2Family(theta=1.0, pi=0.2)
+        mu = np.array([1.0, 2.0, 5.0])
+        wt = np.ones_like(mu)
+        assert_allclose(fam.dev_resids(mu, mu, wt), 0.0, atol=1e-12)
+
+    def test_dev_resids_known_value(self):
+        """NB2 deviance for y=3, mu=1, theta=1, wt=1.
+
+        d_i = 2 * wt * [y*log(y/mu) - (y + theta)*log((y + theta)/(mu + theta))]
+             = 2 * [3*log(3) - 4*log(2)]
+        """
+        fam = ZeroInflatedNB2Family(theta=1.0, pi=0.2)
+        y = np.array([3.0])
+        mu = np.array([1.0])
+        wt = np.array([1.0])
+        expected = 2.0 * (3.0 * np.log(3.0) - 4.0 * np.log(2.0))
+        assert_allclose(fam.dev_resids(y, mu, wt), expected, atol=1e-12)
+
+    def test_dev_resids_y_zero(self):
+        """For y=0, mu=2, theta=1, wt=1:
+        d_i = 2 * [0*log(0/2) - (0+1)*log((0+1)/(2+1))]
+            = 2 * log(3)
+        """
+        fam = ZeroInflatedNB2Family(theta=1.0, pi=0.2)
+        y = np.array([0.0])
+        mu = np.array([2.0])
+        wt = np.array([1.0])
+        expected = np.array([2.0 * np.log(3.0)])
+        assert_allclose(fam.dev_resids(y, mu, wt), expected, atol=1e-12)
+
+    def test_dev_resids_matches_nb2(self):
+        """Count-component deviance should match NegativeBinomial2Family."""
+        theta = 1.5
+        fam_zinb = ZeroInflatedNB2Family(theta=theta, pi=0.3)
+        fam_nb2 = NegativeBinomial2Family(theta=theta)
+        y = np.array([0.0, 1.0, 3.0, 7.0])
+        mu = np.array([2.0, 2.0, 2.0, 2.0])
+        wt = np.ones(4)
+        assert_allclose(
+            fam_zinb.dev_resids(y, mu, wt),
+            fam_nb2.dev_resids(y, mu, wt),
+            atol=1e-12,
+        )
+
+    # -- pi=0 reduces to NB2 --
+
+    def test_pi_zero_matches_nb2_everywhere(self, counts):
+        """With pi=0, ZINB2 should be identical to NB2 for all methods."""
+        theta = 2.0
+        fam_zinb = ZeroInflatedNB2Family(theta=theta, pi=0.0)
+        fam_nb2 = NegativeBinomial2Family(theta=theta)
+        eta = np.log(counts)
+        assert_allclose(fam_zinb.link(counts), fam_nb2.link(counts), atol=1e-15)
+        assert_allclose(fam_zinb.linkinv(eta), fam_nb2.linkinv(eta), atol=1e-15)
+        assert_allclose(fam_zinb.mu_eta(eta), fam_nb2.mu_eta(eta), atol=1e-15)
+        assert_allclose(fam_zinb.variance(counts), fam_nb2.variance(counts), atol=1e-15)
+
+
+# ---------------------------------------------------------------------------
 # Beta (logit link)
 # ---------------------------------------------------------------------------
 
@@ -507,6 +690,7 @@ class TestWeights:
             GaussianFamily,
             NegativeBinomial2Family,
             BetaFamily,
+            ZeroInflatedNB2Family,
         ],
     )
     def test_dev_resids_weight_scaling(self, cls):
@@ -514,7 +698,7 @@ class TestWeights:
         if cls is BinomialFamily:
             y = np.array([1.0, 0.0, 1.0])
             mu = np.array([0.7, 0.3, 0.9])
-        elif cls is PoissonFamily or cls is NegativeBinomial2Family:
+        elif cls in (PoissonFamily, NegativeBinomial2Family, ZeroInflatedNB2Family):
             y = np.array([3.0, 0.0, 5.0])
             mu = np.array([2.0, 1.0, 4.0])
         elif cls is BetaFamily:
@@ -576,6 +760,12 @@ class TestResolveFamily:
 
         fam = resolve_family("beta")
         assert isinstance(fam, BetaFamily)
+
+    def test_string_zeroinflated_negativebinomial(self):
+        from interlace.glmm_family import resolve_family
+
+        fam = resolve_family("zeroinflated_negativebinomial")
+        assert isinstance(fam, ZeroInflatedNB2Family)
 
     def test_unknown_string_raises(self):
         from interlace.glmm_family import resolve_family

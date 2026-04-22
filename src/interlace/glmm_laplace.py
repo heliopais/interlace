@@ -284,7 +284,7 @@ def _clamp_mu(mu: np.ndarray, family: GLMMFamily) -> np.ndarray:
     """Clamp mu to valid range for the family."""
     if family.name in ("binomial", "beta"):
         return np.asarray(np.clip(mu, _MU_EPS, 1.0 - _MU_EPS))
-    if family.name in ("poisson", "negativebinomial"):
+    if family.name in ("poisson", "negativebinomial", "zeroinflated_negativebinomial"):
         return np.asarray(np.maximum(mu, _MU_EPS))
     return mu
 
@@ -357,6 +357,36 @@ def _conditional_loglik(
             # Homoscedastic (phi = 1)
             ll = -0.5 * np.sum(weights * (y - mu) ** 2) - 0.5 * n * np.log(2.0 * np.pi)
         return float(ll)
+    elif family.name == "zeroinflated_negativebinomial":
+        from interlace.glmm_family import ZeroInflatedNB2Family
+
+        assert isinstance(family, ZeroInflatedNB2Family)
+        theta = phi if phi is not None else np.full_like(y, family.theta)
+        pi = family.pi
+        mu_safe = np.maximum(mu, _MU_EPS)
+
+        # NB2 log-pmf for all observations
+        nb2_ll = (
+            gammaln(y + theta)
+            - gammaln(theta)
+            - gammaln(y + 1)
+            + theta * np.log(theta / (mu_safe + theta))
+            + y * np.log(mu_safe / (mu_safe + theta))
+        )
+
+        if pi == 0.0:
+            # No zero-inflation: identical to NB2
+            ll = nb2_ll
+        else:
+            ll = np.empty_like(y)
+            zero = y == 0
+            pos = ~zero
+            # y=0: log[pi + (1-pi) * f_NB2(0|mu, theta)]
+            ll[zero] = np.log(pi + (1 - pi) * np.exp(nb2_ll[zero]))
+            # y>0: log(1-pi) + log f_NB2(y|mu, theta)
+            ll[pos] = np.log(1 - pi) + nb2_ll[pos]
+
+        return float(np.sum(weights * ll))
     elif family.name == "beta":
         from interlace.glmm_family import BetaFamily
 

@@ -1,0 +1,23 @@
+{
+  "fixed_effects": {
+    "(Intercept)": 1.6284460713,
+    "x": 0.35770836512
+  },
+  "fixed_effects_se": {
+    "(Intercept)": 0.083572269221,
+    "x": 0.042418714809
+  },
+  "zi_params": {
+    "(Intercept)": -0.76587612844
+  },
+  "disp_params": {
+    "(Intercept)": 0.84220118678
+  },
+  "variance_components": {
+    "group": 0.14914246045
+  },
+  "theta": 2.3214713489,
+  "loglik": -1384.3627327734,
+  "aic": 2778.7254655469,
+  "nobs": 600
+}
