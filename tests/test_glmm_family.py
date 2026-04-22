@@ -14,6 +14,7 @@ from interlace.glmm_family import (
     NegativeBinomial2Family,
     PoissonFamily,
     ZeroInflatedNB2Family,
+    ZeroOneInflatedBetaFamily,
 )
 
 # ---------------------------------------------------------------------------
@@ -675,6 +676,113 @@ class TestBetaFamily:
 
 
 # ---------------------------------------------------------------------------
+# Zero/one-inflated Beta (logit link)
+# ---------------------------------------------------------------------------
+
+
+class TestZeroOneInflatedBetaFamily:
+    """Tests for the zero/one-inflated Beta family."""
+
+    def test_name(self):
+        fam = ZeroOneInflatedBetaFamily()
+        assert fam.name == "zerooneinflated_beta"
+
+    def test_default_params(self):
+        fam = ZeroOneInflatedBetaFamily()
+        assert fam.phi == 1.0
+        assert fam.p0 == 0.0
+        assert fam.p1 == 0.0
+
+    def test_custom_params(self):
+        fam = ZeroOneInflatedBetaFamily(phi=5.0, p0=0.1, p1=0.2)
+        assert fam.phi == 5.0
+        assert fam.p0 == 0.1
+        assert fam.p1 == 0.2
+
+    def test_phi_must_be_positive(self):
+        with pytest.raises(ValueError, match="phi must be positive"):
+            ZeroOneInflatedBetaFamily(phi=0.0)
+        with pytest.raises(ValueError, match="phi must be positive"):
+            ZeroOneInflatedBetaFamily(phi=-1.0)
+
+    def test_p0_must_be_in_range(self):
+        with pytest.raises(ValueError, match="p0 must be in"):
+            ZeroOneInflatedBetaFamily(p0=-0.1)
+        with pytest.raises(ValueError, match="p0 must be in"):
+            ZeroOneInflatedBetaFamily(p0=1.0)
+
+    def test_p1_must_be_in_range(self):
+        with pytest.raises(ValueError, match="p1 must be in"):
+            ZeroOneInflatedBetaFamily(p1=-0.1)
+        with pytest.raises(ValueError, match="p1 must be in"):
+            ZeroOneInflatedBetaFamily(p1=1.0)
+
+    def test_p0_plus_p1_must_be_less_than_one(self):
+        with pytest.raises(ValueError, match="p0 \\+ p1 must be < 1"):
+            ZeroOneInflatedBetaFamily(p0=0.5, p1=0.5)
+        with pytest.raises(ValueError, match="p0 \\+ p1 must be < 1"):
+            ZeroOneInflatedBetaFamily(p0=0.6, p1=0.5)
+
+    # -- PIRLS component methods (Beta component only) --
+
+    def test_link_matches_beta(self, prob):
+        """link() is identical to BetaFamily (logit)."""
+        fam_zoib = ZeroOneInflatedBetaFamily(phi=3.0, p0=0.2, p1=0.1)
+        fam_beta = BetaFamily(phi=3.0)
+        assert_allclose(fam_zoib.link(prob), fam_beta.link(prob), atol=1e-15)
+
+    def test_linkinv_matches_beta(self):
+        fam_zoib = ZeroOneInflatedBetaFamily(phi=3.0, p0=0.2, p1=0.1)
+        fam_beta = BetaFamily(phi=3.0)
+        eta = np.array([-3.0, -1.0, 0.0, 1.0, 3.0])
+        assert_allclose(fam_zoib.linkinv(eta), fam_beta.linkinv(eta), atol=1e-15)
+
+    def test_mu_eta_matches_beta(self):
+        fam_zoib = ZeroOneInflatedBetaFamily(phi=3.0, p0=0.2, p1=0.1)
+        fam_beta = BetaFamily(phi=3.0)
+        eta = np.array([-3.0, -1.0, 0.0, 1.0, 3.0])
+        assert_allclose(fam_zoib.mu_eta(eta), fam_beta.mu_eta(eta), atol=1e-15)
+
+    def test_variance_matches_beta(self, prob):
+        """Variance operates on Beta component only."""
+        fam_zoib = ZeroOneInflatedBetaFamily(phi=5.0, p0=0.2, p1=0.1)
+        fam_beta = BetaFamily(phi=5.0)
+        assert_allclose(fam_zoib.variance(prob), fam_beta.variance(prob), atol=1e-15)
+
+    def test_dev_resids_matches_beta(self):
+        """Deviance residuals operate on Beta component only."""
+        fam_zoib = ZeroOneInflatedBetaFamily(phi=3.0, p0=0.2, p1=0.1)
+        fam_beta = BetaFamily(phi=3.0)
+        y = np.array([0.2, 0.5, 0.8])
+        mu = np.array([0.3, 0.6, 0.7])
+        wt = np.ones(3)
+        assert_allclose(
+            fam_zoib.dev_resids(y, mu, wt),
+            fam_beta.dev_resids(y, mu, wt),
+            atol=1e-15,
+        )
+
+    # -- Reduction to BetaFamily when p0=p1=0 --
+
+    def test_no_inflation_matches_beta(self, prob):
+        """With p0=p1=0, all methods are identical to BetaFamily."""
+        phi = 4.0
+        fam_zoib = ZeroOneInflatedBetaFamily(phi=phi, p0=0.0, p1=0.0)
+        fam_beta = BetaFamily(phi=phi)
+        eta = np.linspace(-2, 2, 5)
+        assert_allclose(fam_zoib.link(prob), fam_beta.link(prob), atol=1e-15)
+        assert_allclose(fam_zoib.linkinv(eta), fam_beta.linkinv(eta), atol=1e-15)
+        assert_allclose(fam_zoib.mu_eta(eta), fam_beta.mu_eta(eta), atol=1e-15)
+        assert_allclose(fam_zoib.variance(prob), fam_beta.variance(prob), atol=1e-15)
+
+    # -- Protocol compliance --
+
+    def test_satisfies_glmm_family_protocol(self):
+        fam = ZeroOneInflatedBetaFamily(phi=2.0, p0=0.1, p1=0.05)
+        assert isinstance(fam, GLMMFamily)
+
+
+# ---------------------------------------------------------------------------
 # Weights
 # ---------------------------------------------------------------------------
 
@@ -691,6 +799,7 @@ class TestWeights:
             NegativeBinomial2Family,
             BetaFamily,
             ZeroInflatedNB2Family,
+            ZeroOneInflatedBetaFamily,
         ],
     )
     def test_dev_resids_weight_scaling(self, cls):
@@ -701,7 +810,7 @@ class TestWeights:
         elif cls in (PoissonFamily, NegativeBinomial2Family, ZeroInflatedNB2Family):
             y = np.array([3.0, 0.0, 5.0])
             mu = np.array([2.0, 1.0, 4.0])
-        elif cls is BetaFamily:
+        elif cls in (BetaFamily, ZeroOneInflatedBetaFamily):
             y = np.array([0.2, 0.5, 0.8])
             mu = np.array([0.3, 0.6, 0.7])
         else:
@@ -766,6 +875,12 @@ class TestResolveFamily:
 
         fam = resolve_family("zeroinflated_negativebinomial")
         assert isinstance(fam, ZeroInflatedNB2Family)
+
+    def test_string_zerooneinflated_beta(self):
+        from interlace.glmm_family import resolve_family
+
+        fam = resolve_family("zerooneinflated_beta")
+        assert isinstance(fam, ZeroOneInflatedBetaFamily)
 
     def test_unknown_string_raises(self):
         from interlace.glmm_family import resolve_family

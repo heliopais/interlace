@@ -404,6 +404,47 @@ def _conditional_loglik(
             + (b - 1.0) * np.log(1.0 - y_safe)
         )
         return float(np.sum(weights * ll))
+    elif family.name == "zerooneinflated_beta":
+        from interlace.glmm_family import ZeroOneInflatedBetaFamily
+
+        assert isinstance(family, ZeroOneInflatedBetaFamily)
+        precision = phi if phi is not None else np.full_like(y, family.phi)
+        p0 = family.p0
+        p1 = family.p1
+        mu_safe = np.clip(mu, _MU_EPS, 1.0 - _MU_EPS)
+        y_safe = np.clip(y, _MU_EPS, 1.0 - _MU_EPS)
+
+        # Beta log-pdf for all observations
+        a = mu_safe * precision
+        b = (1.0 - mu_safe) * precision
+        beta_ll = (
+            gammaln(precision)
+            - gammaln(a)
+            - gammaln(b)
+            + (a - 1.0) * np.log(y_safe)
+            + (b - 1.0) * np.log(1.0 - y_safe)
+        )
+
+        if p0 == 0.0 and p1 == 0.0:
+            # No inflation: identical to Beta
+            ll = beta_ll
+        else:
+            ll = np.empty_like(y)
+            p_beta = 1.0 - p0 - p1
+            zero = y == 0.0
+            one = y == 1.0
+            interior = ~zero & ~one
+            # y=0: log[p0 + p_beta * f_Beta(0+|mu, phi)]
+            if np.any(zero):
+                ll[zero] = np.log(p0 + p_beta * np.exp(beta_ll[zero]))
+            # y=1: log[p1 + p_beta * f_Beta(1-|mu, phi)]
+            if np.any(one):
+                ll[one] = np.log(p1 + p_beta * np.exp(beta_ll[one]))
+            # 0 < y < 1: log(p_beta) + log f_Beta(y|mu, phi)
+            if np.any(interior):
+                ll[interior] = np.log(p_beta) + beta_ll[interior]
+
+        return float(np.sum(weights * ll))
     else:
         # Fallback: use -0.5 * deviance (no normalizing constant)
         dev = float(np.sum(family.dev_resids(y, mu, weights)))

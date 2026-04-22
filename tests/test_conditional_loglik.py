@@ -6,7 +6,12 @@ import numpy as np
 from numpy.testing import assert_allclose
 from scipy.special import gammaln
 
-from interlace.glmm_family import NegativeBinomial2Family, ZeroInflatedNB2Family
+from interlace.glmm_family import (
+    BetaFamily,
+    NegativeBinomial2Family,
+    ZeroInflatedNB2Family,
+    ZeroOneInflatedBetaFamily,
+)
 from interlace.glmm_laplace import _conditional_loglik
 
 
@@ -119,6 +124,123 @@ class TestConditionalLoglikZINB2:
         rng = np.random.default_rng(42)
         y = rng.negative_binomial(n=2, p=0.5, size=100).astype(float)
         mu = np.full(100, 3.0)
+        wt = np.ones(100)
+
+        ll = _conditional_loglik(y, mu, wt, fam)
+        assert np.isfinite(ll)
+
+
+class TestConditionalLoglikZOIB:
+    """Tests for the zerooneinflated_beta branch of _conditional_loglik."""
+
+    def test_hand_computed_interior(self):
+        """For interior observations (0 < y < 1), ZOIB log-likelihood is
+        log(p_beta) + Beta_logpdf, where p_beta = 1 - p0 - p1."""
+        phi = 3.0
+        p0, p1 = 0.2, 0.1
+        p_beta = 1.0 - p0 - p1
+        mu_val = 0.4
+
+        y_int = np.array([0.5])
+        mu_int = np.array([mu_val])
+        wt_int = np.array([1.0])
+
+        # Without inflation: pure Beta logpdf
+        fam_noinfl = ZeroOneInflatedBetaFamily(phi=phi, p0=0.0, p1=0.0)
+        ll_noinfl = _conditional_loglik(y_int, mu_int, wt_int, fam_noinfl)
+        expected_interior = ll_noinfl + np.log(p_beta)
+
+        # With inflation: log(p_beta) + Beta logpdf
+        fam_full = ZeroOneInflatedBetaFamily(phi=phi, p0=p0, p1=p1)
+        ll_full = _conditional_loglik(y_int, mu_int, wt_int, fam_full)
+        assert_allclose(ll_full, expected_interior, atol=1e-12)
+
+    def test_mixed_boundary_and_interior(self):
+        """Log-likelihood is finite for data with 0, interior, and 1 values."""
+        phi = 3.0
+        fam = ZeroOneInflatedBetaFamily(phi=phi, p0=0.2, p1=0.1)
+        y = np.array([0.0, 0.5, 1.0])
+        mu = np.full(3, 0.4)
+        wt = np.ones(3)
+
+        result = _conditional_loglik(y, mu, wt, fam)
+        assert np.isfinite(result)
+
+    def test_no_inflation_matches_beta(self):
+        """With p0=p1=0, ZOIB log-likelihood should equal Beta log-likelihood."""
+        phi = 5.0
+        fam_zoib = ZeroOneInflatedBetaFamily(phi=phi, p0=0.0, p1=0.0)
+        fam_beta = BetaFamily(phi=phi)
+        y = np.array([0.1, 0.3, 0.5, 0.7, 0.9])
+        mu = np.array([0.2, 0.4, 0.5, 0.6, 0.8])
+        wt = np.ones(5)
+
+        ll_zoib = _conditional_loglik(y, mu, wt, fam_zoib)
+        ll_beta = _conditional_loglik(y, mu, wt, fam_beta)
+        assert_allclose(ll_zoib, ll_beta, atol=1e-12)
+
+    def test_boundary_values_higher_with_inflation(self):
+        """Data with 0s and 1s should have higher likelihood when inflation
+        probabilities are set appropriately."""
+        phi = 5.0
+        y = np.array([0.0, 0.0, 0.5, 1.0, 1.0])
+        mu = np.array([0.3, 0.3, 0.5, 0.7, 0.7])
+        wt = np.ones(5)
+
+        fam_no_infl = ZeroOneInflatedBetaFamily(phi=phi, p0=0.0, p1=0.0)
+        fam_with_infl = ZeroOneInflatedBetaFamily(phi=phi, p0=0.3, p1=0.3)
+
+        ll_no = _conditional_loglik(y, mu, wt, fam_no_infl)
+        ll_with = _conditional_loglik(y, mu, wt, fam_with_infl)
+        assert ll_with > ll_no
+
+    def test_zero_only_inflation(self):
+        """With p1=0, only zero-inflation is active."""
+        phi = 3.0
+        p0 = 0.4
+        fam = ZeroOneInflatedBetaFamily(phi=phi, p0=p0, p1=0.0)
+        y = np.array([0.0, 0.0, 0.5])
+        mu = np.array([0.5, 0.5, 0.5])
+        wt = np.ones(3)
+
+        ll = _conditional_loglik(y, mu, wt, fam)
+        assert np.isfinite(ll)
+
+    def test_one_only_inflation(self):
+        """With p0=0, only one-inflation is active."""
+        phi = 3.0
+        p1 = 0.4
+        fam = ZeroOneInflatedBetaFamily(phi=phi, p0=0.0, p1=p1)
+        y = np.array([0.5, 1.0, 1.0])
+        mu = np.array([0.5, 0.5, 0.5])
+        wt = np.ones(3)
+
+        ll = _conditional_loglik(y, mu, wt, fam)
+        assert np.isfinite(ll)
+
+    def test_weights_scale_loglik(self):
+        """Doubling weights should double the log-likelihood for interior obs."""
+        phi = 3.0
+        fam = ZeroOneInflatedBetaFamily(phi=phi, p0=0.1, p1=0.1)
+        y = np.array([0.2, 0.5, 0.8])
+        mu = np.array([0.3, 0.5, 0.7])
+        wt1 = np.ones(3)
+        wt2 = 2.0 * np.ones(3)
+
+        ll1 = _conditional_loglik(y, mu, wt1, fam)
+        ll2 = _conditional_loglik(y, mu, wt2, fam)
+        assert_allclose(ll2, 2.0 * ll1, atol=1e-12)
+
+    def test_returns_finite(self):
+        """Log-likelihood should be finite for reasonable inputs."""
+        phi = 5.0
+        fam = ZeroOneInflatedBetaFamily(phi=phi, p0=0.1, p1=0.05)
+        rng = np.random.default_rng(42)
+        y = rng.beta(2, 5, size=100)
+        # Add some boundary values
+        y[0] = 0.0
+        y[1] = 1.0
+        mu = np.clip(rng.beta(2, 5, size=100), 0.01, 0.99)
         wt = np.ones(100)
 
         ll = _conditional_loglik(y, mu, wt, fam)

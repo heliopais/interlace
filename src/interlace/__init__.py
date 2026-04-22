@@ -29,6 +29,7 @@ from interlace.glmm_family import (
     GLMMFamily,
     NegativeBinomial2Family,
     ZeroInflatedNB2Family,
+    ZeroOneInflatedBetaFamily,
 )
 from interlace.glmm_laplace import GLMMResult
 from interlace.glmm_laplace import fit_glmm as glmer
@@ -117,6 +118,7 @@ __all__ = [
     "GLMMFamily",
     "NegativeBinomial2Family",
     "ZeroInflatedNB2Family",
+    "ZeroOneInflatedBetaFamily",
 ]
 
 

@@ -349,6 +349,98 @@ class BetaFamily:
         return np.asarray(2.0 * wt * (ll_sat - ll_fit), dtype=np.float64)
 
 
+class ZeroOneInflatedBetaFamily:
+    """Zero/one-inflated Beta family with logit link.
+
+    A mixture model:
+      - With probability *p0*, Y = 0 (point mass at zero)
+      - With probability *p1*, Y = 1 (point mass at one)
+      - With probability *(1 - p0 - p1)*, Y ~ Beta(mu, phi)
+
+    For PIRLS purposes the link, variance, and mu_eta operate on the
+    **Beta component** only (identical to :class:`BetaFamily`).
+    The inflation probabilities are stored but handled separately in the
+    likelihood (see ``_conditional_loglik``).
+
+    Parameters
+    ----------
+    phi:
+        Precision parameter for the Beta component.  Must be positive.
+        Default is 1.0.
+    p0:
+        Zero-inflation probability.  Must be in [0, 1).  Default is 0.0.
+    p1:
+        One-inflation probability.  Must be in [0, 1).  Default is 0.0.
+    """
+
+    name: str = "zerooneinflated_beta"
+
+    def __init__(self, phi: float = 1.0, p0: float = 0.0, p1: float = 0.0) -> None:
+        if phi <= 0:
+            raise ValueError("phi must be positive")
+        if p0 < 0 or p0 >= 1:
+            raise ValueError("p0 must be in [0, 1)")
+        if p1 < 0 or p1 >= 1:
+            raise ValueError("p1 must be in [0, 1)")
+        if p0 + p1 >= 1:
+            raise ValueError("p0 + p1 must be < 1")
+        self.phi = phi
+        self.p0 = p0
+        self.p1 = p1
+
+    def link(self, mu: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Logit: log(mu / (1 - mu))."""
+        return np.log(mu / (1.0 - mu))
+
+    def linkinv(self, eta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Inverse logit (expit), numerically stable."""
+        from scipy.special import expit
+
+        return np.asarray(expit(eta), dtype=np.float64)
+
+    def mu_eta(self, eta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """d(linkinv)/d(eta) = mu * (1 - mu)."""
+        mu = self.linkinv(eta)
+        return mu * (1.0 - mu)
+
+    def variance(self, mu: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Var(Y) = mu * (1 - mu) / (1 + phi)  (Beta component)."""
+        return mu * (1.0 - mu) / (1.0 + self.phi)
+
+    def dev_resids(
+        self,
+        y: NDArray[np.float64],
+        mu: NDArray[np.float64],
+        wt: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        """Beta unit deviance residuals (Beta component).
+
+        Identical to :meth:`BetaFamily.dev_resids`.
+        """
+        from scipy.special import gammaln
+
+        phi = self.phi
+        a_sat = y * phi
+        b_sat = (1.0 - y) * phi
+        a_fit = mu * phi
+        b_fit = (1.0 - mu) * phi
+
+        ll_sat = (
+            -gammaln(a_sat)
+            - gammaln(b_sat)
+            + a_sat * np.log(y)
+            + b_sat * np.log(1.0 - y)
+        )
+        ll_fit = (
+            -gammaln(a_fit)
+            - gammaln(b_fit)
+            + a_fit * np.log(y)
+            + b_fit * np.log(1.0 - y)
+        )
+
+        return np.asarray(2.0 * wt * (ll_sat - ll_fit), dtype=np.float64)
+
+
 # ---------------------------------------------------------------------------
 # Resolver: string | GLMMFamily → GLMMFamily
 # ---------------------------------------------------------------------------
@@ -362,6 +454,7 @@ _FAMILIES: dict[
         | NegativeBinomial2Family
         | ZeroInflatedNB2Family
         | BetaFamily
+        | ZeroOneInflatedBetaFamily
     ],
 ] = {
     "binomial": BinomialFamily,
@@ -370,6 +463,7 @@ _FAMILIES: dict[
     "negativebinomial": NegativeBinomial2Family,
     "zeroinflated_negativebinomial": ZeroInflatedNB2Family,
     "beta": BetaFamily,
+    "zerooneinflated_beta": ZeroOneInflatedBetaFamily,
 }
 
 
