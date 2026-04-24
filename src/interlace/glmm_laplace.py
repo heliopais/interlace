@@ -38,6 +38,7 @@ from interlace.formula import (
 from interlace.glmm_family import (
     GaussianFamily,
     GLMMFamily,
+    HurdlePoissonFamily,
     NegativeBinomial2Family,
     resolve_family,
 )
@@ -60,7 +61,62 @@ if TYPE_CHECKING:
 
 @dataclass
 class GLMMResult:
-    """Result container for a fitted GLMM."""
+    """Result container for a fitted GLMM.
+
+    Attributes
+    ----------
+    fe_params : pd.Series
+        Fixed-effect coefficient estimates, indexed by predictor name.
+    fe_bse : pd.Series
+        Standard errors of the fixed-effect estimates.
+    random_effects : dict[str, Any]
+        Mapping from group label to BLUP vector (one entry per grouping factor).
+    variance_components : dict[str, float]
+        Estimated variance components for each random-effect grouping factor.
+    theta : np.ndarray
+        Raw variance-component parameter vector passed to the optimiser
+        (relative Cholesky factors in the Lambda_theta parameterisation).
+    converged : bool
+        ``True`` if the optimiser reported successful convergence.
+    nobs : int
+        Number of observations used to fit the model.
+    llf : float
+        Laplace-approximated log-likelihood at the optimum.
+    aic : float
+        Akaike information criterion: ``-2 * llf + 2 * k``.
+    bic : float
+        Bayesian information criterion: ``-2 * llf + k * log(n)``.
+    family : GLMMFamily
+        Family object used for the conditional distribution.
+    ngroups : dict[str, int]
+        Number of levels for each grouping factor.
+    scale : float
+        Dispersion parameter (1.0 for binomial and Poisson families;
+        estimated for Gaussian).
+    fittedvalues : np.ndarray
+        In-sample fitted values on the response scale, shape ``(n,)``.
+    disp_params : pd.Series or None
+        Dispersion sub-model coefficient estimates (log link), or ``None``
+        when no ``dispformula`` was supplied.
+    dispersion : np.ndarray or None
+        Per-observation dispersion values ``exp(X_d @ delta)``, or ``None``
+        when no ``dispformula`` was supplied.
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd, interlace
+    >>> rng = np.random.default_rng(0)
+    >>> df = pd.DataFrame({"y": rng.binomial(1, 0.6, 200),
+    ...                    "x": rng.normal(size=200),
+    ...                    "g": rng.integers(0, 20, 200)})
+    >>> result = interlace.glmer("y ~ x", df, family="binomial", groups="g")
+    >>> result.fe_params
+    Intercept    ...
+    x            ...
+    dtype: float64
+    >>> result.converged
+    True
+    """
 
     fe_params: pd.Series
     fe_bse: pd.Series
@@ -287,8 +343,11 @@ def _clamp_mu(mu: np.ndarray, family: GLMMFamily) -> np.ndarray:
     if family.name in (
         "poisson",
         "negativebinomial",
+        "negativebinomial1",
         "zeroinflated_negativebinomial",
         "zeroinflated_poisson",
+        "hurdle_poisson",
+        "gamma",
     ):
         return np.asarray(np.maximum(mu, _MU_EPS))
     return mu
@@ -349,6 +408,24 @@ def _conditional_loglik(
             - theta * np.log(mu_safe + theta)
             + y * np.log(mu_safe)
             - y * np.log(mu_safe + theta)
+        )
+        return float(np.sum(weights * ll))
+    elif family.name == "negativebinomial1":
+        from interlace.glmm_family import NegativeBinomial1Family
+
+        assert isinstance(family, NegativeBinomial1Family)
+        # When phi is provided, it overrides alpha per-observation.
+        alpha = phi if phi is not None else np.full_like(y, family.alpha)
+        mu_safe = np.maximum(mu, _MU_EPS)
+        # NB1: r = mu/alpha (observation-dependent), p = 1/(1+alpha)
+        r = mu_safe / alpha
+        p = 1.0 / (1.0 + alpha)
+        ll = (
+            gammaln(y + r)
+            - gammaln(r)
+            - gammaln(y + 1)
+            + r * np.log(p)
+            + y * np.log(1.0 - p)
         )
         return float(np.sum(weights * ll))
     elif family.name == "gaussian":
@@ -414,6 +491,46 @@ def _conditional_loglik(
             # y>0: log(1-pi) + log f_Pois(y|mu)
             ll[pos] = np.log(1 - pi) + pois_ll[pos]
 
+        return float(np.sum(weights * ll))
+    elif family.name == "hurdle_poisson":
+        assert isinstance(family, HurdlePoissonFamily)
+        pi = family.pi
+        mu_safe = np.maximum(mu, _MU_EPS)
+
+        # Zero-truncated Poisson log-pmf for all observations:
+        # log f_trunc(y|mu) = y*log(mu) - mu - lgamma(y+1) - log(1-exp(-mu))
+        pois_ll = y * np.log(mu_safe) - mu_safe - gammaln(y + 1)
+        log_q = np.log(np.maximum(1.0 - np.exp(-mu_safe), _MU_EPS))
+        trunc_ll = pois_ll - log_q
+
+        if pi == 0.0:
+            # No structural zeros: pure truncated Poisson
+            ll = trunc_ll
+        else:
+            ll = np.empty_like(y, dtype=np.float64)
+            zero = y == 0
+            pos = ~zero
+            # y=0: log(pi)
+            ll[zero] = np.log(pi)
+            # y>0: log(1-pi) + log f_trunc(y|mu)
+            ll[pos] = np.log(1 - pi) + trunc_ll[pos]
+
+        return float(np.sum(weights * ll))
+    elif family.name == "gamma":
+        from interlace.glmm_family import GammaFamily
+
+        assert isinstance(family, GammaFamily)
+        shape = phi if phi is not None else np.full_like(y, family.shape)
+        mu_safe = np.maximum(mu, _MU_EPS)
+        # Gamma log-pdf: (shape-1)*log(y) - shape*y/mu - shape*log(mu)
+        #                + shape*log(shape) - lgamma(shape)
+        ll = (
+            (shape - 1.0) * np.log(y)
+            - shape * y / mu_safe
+            - shape * np.log(mu_safe)
+            + shape * np.log(shape)
+            - gammaln(shape)
+        )
         return float(np.sum(weights * ll))
     elif family.name == "beta":
         from interlace.glmm_family import BetaFamily
@@ -500,8 +617,11 @@ def _glm_start(
     elif family.name in (
         "poisson",
         "negativebinomial",
+        "negativebinomial1",
         "zeroinflated_negativebinomial",
         "zeroinflated_poisson",
+        "hurdle_poisson",
+        "gamma",
     ):
         mu = np.maximum(y, 0.1)
     else:
@@ -539,7 +659,9 @@ def _glm_start(
 # ZI-adjusted PIRLS working quantities
 # ---------------------------------------------------------------------------
 
-_ZI_FAMILIES = frozenset({"zeroinflated_negativebinomial", "zeroinflated_poisson"})
+_ZI_FAMILIES = frozenset(
+    {"zeroinflated_negativebinomial", "zeroinflated_poisson", "hurdle_poisson"}
+)
 
 
 def _zi_pirls_weights(
@@ -572,7 +694,25 @@ def _zi_pirls_weights(
     zero = y == 0
     pos = ~zero
 
-    if isinstance(family, ZeroInflatedNB2Family):
+    if isinstance(family, HurdlePoissonFamily):
+        pi = family.pi
+
+        # --- Positive observations: truncated Poisson score/hessian ---
+        # Score: dl/deta = y - mu + mu*P0/q  where P0=exp(-mu), q=1-P0
+        # Neg Hessian: mu*(1 - P0/q*(1 - mu/q))
+        if np.any(pos):
+            mu_p = mu[pos]
+            y_p = y[pos]
+            P0_p = np.exp(-mu_p)
+            q_p = np.maximum(1.0 - P0_p, _MU_EPS)
+            trunc_corr = mu_p * P0_p / q_p
+            score_unit[pos] = y_p - mu_p + trunc_corr
+            neg_hess_unit[pos] = mu_p - trunc_corr * (1.0 - mu_p / q_p)
+
+        # --- Zero observations: no dependence on eta ---
+        # score = 0, neg_hess = 0 (floored below to 1e-10)
+
+    elif isinstance(family, ZeroInflatedNB2Family):
         theta = family.theta
         pi = family.pi
 
@@ -1170,6 +1310,26 @@ def fit_glmm(
     Returns
     -------
     GLMMResult
+        Fitted GLMM result containing fixed-effect estimates (``fe_params``,
+        ``fe_bse``), BLUPs (``random_effects``), variance components
+        (``variance_components``), in-sample fitted values (``fittedvalues``),
+        log-likelihood (``llf``), information criteria (``aic``, ``bic``),
+        and convergence status (``converged``).
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd, interlace
+    >>> rng = np.random.default_rng(0)
+    >>> df = pd.DataFrame({"y": rng.binomial(10, 0.4, 200),
+    ...                    "n": np.full(200, 10),
+    ...                    "x": rng.normal(size=200),
+    ...                    "g": rng.integers(0, 20, 200)})
+    >>> result = interlace.glmer("cbind(y, n-y) ~ x", df,
+    ...                          family="binomial", groups="g")
+    >>> result.fe_params
+    Intercept    ...
+    x            ...
+    dtype: float64
     """
     import formulaic
     import narwhals as nw

@@ -1063,4 +1063,4 @@ class TestResolveFamily:
         from interlace.glmm_family import resolve_family
 
         with pytest.raises(ValueError, match="Unknown family"):
-            resolve_family("gamma")
+            resolve_family("tweedie")

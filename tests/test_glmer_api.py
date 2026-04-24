@@ -169,6 +169,6 @@ class TestGlmerErrors:
             interlace.glmer(
                 formula="proportion ~ C(period)",
                 data=cbpp_data,
-                family="gamma",
+                family="tweedie",
                 groups="herd",
             )
