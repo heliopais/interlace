@@ -290,6 +290,190 @@ class TestBreslowLoglik:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# predict()
+# ---------------------------------------------------------------------------
+
+
+class TestCoxmePredict:
+    """Tests for CoxmeResult.predict()."""
+
+    @pytest.fixture(scope="class")
+    def fitted(self):
+        df, truth = _simulate_coxme_data(n_groups=30, n_per_group=20, seed=10)
+        result = interlace.coxme("Surv(time, event) ~ x1 + x2", df, groups="group")
+        return result, df
+
+    def test_predict_exists(self, fitted):
+        result, _ = fitted
+        assert hasattr(result, "predict")
+
+    def test_predict_in_sample_no_args(self, fitted):
+        """predict() with no args returns in-sample linear predictor."""
+        result, df = fitted
+        pred = result.predict()
+        assert pred.shape == (len(df),)
+
+    def test_predict_newdata_same_as_insample(self, fitted):
+        """predict(newdata=training_data) matches predict()."""
+        result, df = fitted
+        pred_insample = result.predict()
+        pred_new = result.predict(newdata=df)
+        np.testing.assert_allclose(pred_insample, pred_new, atol=1e-10)
+
+    def test_predict_fixed_only(self, fitted):
+        """include_re=False returns X*beta only."""
+        result, df = fitted
+        pred_fe = result.predict(newdata=df, include_re=False)
+        pred_full = result.predict(newdata=df, include_re=True)
+        # Fixed-only should differ from full when frailty variance > 0
+        assert not np.allclose(pred_fe, pred_full)
+        # Fixed-only is just X*beta (no random effect contribution)
+        assert pred_fe.shape == (len(df),)
+
+    def test_predict_unseen_group_shrinks_to_zero(self, fitted):
+        """Unseen group levels get zero random effect contribution."""
+        result, df = fitted
+        # Make new data with an unseen group
+        new_df = pd.DataFrame(
+            {"x1": [0.0, 1.0], "x2": [0.5, -0.5], "group": [9999, 9999]}
+        )
+        pred_full = result.predict(newdata=new_df, include_re=True)
+        pred_fe = result.predict(newdata=new_df, include_re=False)
+        # Unseen group -> RE contribution is 0 -> both should be equal
+        np.testing.assert_allclose(pred_full, pred_fe, atol=1e-10)
+
+    def test_predict_type_lp_and_risk(self, fitted):
+        """type='risk' returns exp(linear_predictor)."""
+        result, df = fitted
+        lp = result.predict(newdata=df, type="lp")
+        risk = result.predict(newdata=df, type="risk")
+        np.testing.assert_allclose(risk, np.exp(lp), rtol=1e-10)
+
+
+# ---------------------------------------------------------------------------
+# Residuals
+# ---------------------------------------------------------------------------
+
+
+class TestCoxmeResiduals:
+    """Tests for CoxmeResult.resid()."""
+
+    @pytest.fixture(scope="class")
+    def fitted(self):
+        df, truth = _simulate_coxme_data(n_groups=30, n_per_group=20, seed=11)
+        result = interlace.coxme("Surv(time, event) ~ x1 + x2", df, groups="group")
+        return result, df
+
+    def test_resid_exists(self, fitted):
+        result, _ = fitted
+        assert hasattr(result, "resid")
+
+    def test_martingale_shape(self, fitted):
+        result, df = fitted
+        r = result.resid(type="martingale")
+        assert r.shape == (len(df),)
+
+    def test_martingale_range(self, fitted):
+        """Martingale residuals are in (-inf, 1] for events, (-inf, 0] for censored."""
+        result, df = fitted
+        r = result.resid(type="martingale")
+        event = df["event"].values
+        # Events: r = 1 - cumhaz*exp(eta) <= 1
+        assert np.all(r[event == 1] <= 1.0 + 1e-10)
+        # Censored: r = 0 - cumhaz*exp(eta) <= 0
+        assert np.all(r[event == 0] <= 1e-10)
+
+    def test_martingale_sum_equals_n_events(self, fitted):
+        """Sum of martingale residuals equals 0 (approx)."""
+        result, df = fitted
+        r = result.resid(type="martingale")
+        # sum(delta_i - Lambda(t_i)*exp(eta_i)) ~ 0
+        np.testing.assert_allclose(r.sum(), 0.0, atol=0.5)
+
+    def test_deviance_shape(self, fitted):
+        result, df = fitted
+        r = result.resid(type="deviance")
+        assert r.shape == (len(df),)
+
+    def test_deviance_symmetric(self, fitted):
+        """Deviance residuals should be more symmetric than martingale."""
+        result, _ = fitted
+        mart = result.resid(type="martingale")
+        dev = result.resid(type="deviance")
+        # Deviance residuals should have smaller skewness
+        from scipy.stats import skew
+
+        assert abs(skew(dev)) < abs(skew(mart))
+
+    def test_schoenfeld_shape(self, fitted):
+        """Schoenfeld residuals: one per event, per covariate."""
+        result, df = fitted
+        r = result.resid(type="schoenfeld")
+        n_events = df["event"].sum()
+        n_covars = len(result.fe_params)
+        assert r.shape == (n_events, n_covars)
+
+    def test_schoenfeld_columns_match_fe(self, fitted):
+        """Schoenfeld residuals DataFrame has covariate names as columns."""
+        result, _ = fitted
+        r = result.resid(type="schoenfeld")
+        assert isinstance(r, pd.DataFrame)
+        assert list(r.columns) == list(result.fe_params.index)
+
+    def test_invalid_type_raises(self, fitted):
+        result, _ = fitted
+        with pytest.raises(ValueError, match="type"):
+            result.resid(type="pearson")
+
+
+# ---------------------------------------------------------------------------
+# summary()
+# ---------------------------------------------------------------------------
+
+
+class TestCoxmeSummary:
+    """Tests for CoxmeResult.summary()."""
+
+    @pytest.fixture(scope="class")
+    def fitted(self):
+        df, truth = _simulate_coxme_data(n_groups=20, n_per_group=20, seed=12)
+        result = interlace.coxme("Surv(time, event) ~ x1 + x2", df, groups="group")
+        return result
+
+    def test_summary_exists(self, fitted):
+        assert hasattr(fitted, "summary")
+
+    def test_summary_returns_string(self, fitted):
+        s = fitted.summary()
+        assert isinstance(s, str)
+
+    def test_summary_contains_coefficients(self, fitted):
+        s = fitted.summary()
+        assert "x1" in s
+        assert "x2" in s
+
+    def test_summary_contains_variance_components(self, fitted):
+        s = fitted.summary()
+        assert "group" in s
+        assert "Variance" in s or "variance" in s.lower()
+
+    def test_summary_contains_fit_stats(self, fitted):
+        s = fitted.summary()
+        assert "concordance" in s.lower() or "Concordance" in s
+        assert "event" in s.lower()
+
+    def test_summary_repr(self, fitted):
+        """repr() should give something informative."""
+        r = repr(fitted)
+        assert "CoxmeResult" in r
+
+
+# ---------------------------------------------------------------------------
+# Edge cases
+# ---------------------------------------------------------------------------
+
+
 class TestEdgeCases:
     def test_single_covariate(self):
         """Model with a single covariate should work."""
@@ -318,3 +502,85 @@ class TestEdgeCases:
         df, _ = _simulate_coxme_data(n_groups=10, n_per_group=10, seed=9)
         with pytest.raises(ValueError, match="groups.*random"):
             interlace.coxme("Surv(time, event) ~ x1 + x2", df)
+
+
+# ---------------------------------------------------------------------------
+# Crossed random effects
+# ---------------------------------------------------------------------------
+
+
+class TestCrossedRandomEffects:
+    """Test multiple grouping factors (crossed frailties)."""
+
+    @pytest.fixture(scope="class")
+    def crossed_data(self):
+        """Simulate data with two crossed grouping factors."""
+        rng = np.random.default_rng(55)
+        n_hosp = 15
+        n_doc = 20
+        n_obs = 600
+
+        hospital = rng.integers(0, n_hosp, size=n_obs)
+        doctor = rng.integers(0, n_doc, size=n_obs)
+        x1 = rng.normal(size=n_obs)
+
+        b_hosp = rng.normal(0, 0.4, size=n_hosp)
+        b_doc = rng.normal(0, 0.3, size=n_doc)
+        eta = 0.5 * x1 + b_hosp[hospital] + b_doc[doctor]
+
+        u = rng.uniform(size=n_obs)
+        event_time = -np.log(u) / np.exp(eta)
+        censor_time = rng.exponential(scale=3.0, size=n_obs)
+        time = np.minimum(event_time, censor_time)
+        event = (event_time <= censor_time).astype(int)
+
+        df = pd.DataFrame(
+            {
+                "time": time,
+                "event": event,
+                "x1": x1,
+                "hospital": hospital,
+                "doctor": doctor,
+            }
+        )
+        return df, {"b_hosp": b_hosp, "b_doc": b_doc}
+
+    def test_crossed_converges(self, crossed_data):
+        df, _ = crossed_data
+        result = interlace.coxme(
+            "Surv(time, event) ~ x1",
+            df,
+            random=["(1|hospital)", "(1|doctor)"],
+        )
+        assert result.converged
+
+    def test_crossed_has_both_groups(self, crossed_data):
+        df, _ = crossed_data
+        result = interlace.coxme(
+            "Surv(time, event) ~ x1",
+            df,
+            random=["(1|hospital)", "(1|doctor)"],
+        )
+        assert "hospital" in result.random_effects
+        assert "doctor" in result.random_effects
+        assert "hospital" in result.variance_components
+        assert "doctor" in result.variance_components
+
+    def test_crossed_variance_positive(self, crossed_data):
+        df, _ = crossed_data
+        result = interlace.coxme(
+            "Surv(time, event) ~ x1",
+            df,
+            random=["(1|hospital)", "(1|doctor)"],
+        )
+        assert result.variance_components["hospital"] > 0
+        assert result.variance_components["doctor"] > 0
+
+    def test_crossed_beta_recovery(self, crossed_data):
+        df, _ = crossed_data
+        result = interlace.coxme(
+            "Surv(time, event) ~ x1",
+            df,
+            random=["(1|hospital)", "(1|doctor)"],
+        )
+        assert abs(result.fe_params["x1"] - 0.5) < 0.15

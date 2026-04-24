@@ -511,3 +511,48 @@
 | 15:39 | Edited src/interlace/__init__.py | 2→3 lines | ~25 |
 | 15:43 | Session end: 14 writes across 5 files (test_kenward_roger.py, kenward_roger.py, test_kr_api.py, result.py, __init__.py) | 10 reads | ~44728 tok |
 | 16:01 | Session end: 14 writes across 5 files (test_kenward_roger.py, kenward_roger.py, test_kr_api.py, result.py, __init__.py) | 10 reads | ~44728 tok |
+| 16:05 | Session end: 14 writes across 5 files (test_kenward_roger.py, kenward_roger.py, test_kr_api.py, result.py, __init__.py) | 11 reads | ~44728 tok |
+
+## Session: 2026-04-24 16:49
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 17:22 | Edited tests/test_coxme.py | modified fitted() | ~790 |
+| 17:23 | Edited src/interlace/coxme.py | modified predict() | ~676 |
+| 17:23 | Edited src/interlace/coxme.py | 18→21 lines | ~165 |
+| 17:24 | Edited tests/test_coxme.py | modified fitted() | ~860 |
+| 17:24 | Edited src/interlace/coxme.py | 3→6 lines | ~127 |
+| 17:25 | Edited src/interlace/coxme.py | modified resid() | ~1214 |
+| 17:25 | Edited src/interlace/coxme.py | 4→7 lines | ~50 |
+| 17:25 | Edited tests/test_coxme.py | modified fitted() | ~439 |
+| 17:26 | Edited src/interlace/coxme.py | modified summary() | ~474 |
+| 17:26 | Edited tests/test_coxme.py | modified test_no_groups_raises() | ~836 |
+| 17:28 | Created tests/fixtures/gen_coxme_parity.R | — | ~605 |
+| 17:29 | Created tests/test_coxme_parity.py | — | ~789 |
+| 17:29 | Edited tests/test_coxme_parity.py | modified test_se_x1() | ~189 |
+| 17:32 | Edited tests/test_coxme_parity.py | modified SE() | ~31 |
+| 17:32 | Edited tests/test_coxme_parity.py | modified SE() | ~31 |
+| 17:32 | Edited src/interlace/coxme.py | 3→3 lines | ~28 |
+| 17:32 | Edited src/interlace/coxme.py | 9→9 lines | ~108 |
+
+## Session 2026-04-24 — coxme completion
+
+| Time | Action | Files | Outcome | ~Tokens |
+|------|--------|-------|---------|---------|
+| start | Reviewed interlace-7je (coxme) — core already done | coxme.py, test_coxme.py | 26 tests passing | ~3000 |
+| +5m | Created 5 sub-issues for remaining gaps | beads | qgi, 9r0, dcb, hale, efi | ~200 |
+| +10m | TDD: predict() — 6 tests written & passing | coxme.py, test_coxme.py | predict(newdata, include_re, type) | ~1500 |
+| +15m | TDD: resid() — 9 tests written & passing | coxme.py, test_coxme.py | martingale, deviance, schoenfeld | ~2000 |
+| +20m | TDD: summary() — 6 tests written & passing | coxme.py, test_coxme.py | formatted output | ~800 |
+| +25m | TDD: crossed RE — 4 tests, 89s runtime | test_coxme.py | hospital+doctor groups | ~500 |
+| +30m | R parity fixture + 6 tests | gen_coxme_parity.R, coxme_parity.json, test_coxme_parity.py | beta <0.02, SE <10%, BLUP corr >0.99 | ~1500 |
+| +35m | make check clean: 1396 passed, 0 failed | all | lint+typecheck+test | ~500 |
+| +36m | Closed all 5 sub-issues + parent interlace-7je | beads | done | ~100 |
+| 17:39 | Session end: 17 writes across 4 files (test_coxme.py, coxme.py, gen_coxme_parity.R, test_coxme_parity.py) | 6 reads | ~36780 tok |
+| 17:42 | Created tests/_diag_se.py | — | ~1429 |
+| 17:44 | Created tests/_diag_se2.py | — | ~1577 |
+| 17:45 | Edited tests/_diag_se2.py | 12→15 lines | ~184 |
+| 17:46 | Edited src/interlace/coxme.py | modified _breslow_info_products() | ~879 |
+| 17:46 | Edited src/interlace/coxme.py | 25→20 lines | ~226 |
+| 17:46 | Edited tests/test_coxme_parity.py | modified test_se_x1() | ~161 |
+| 17:55 | Session end: 23 writes across 6 files (test_coxme.py, coxme.py, gen_coxme_parity.R, test_coxme_parity.py, _diag_se.py) | 7 reads | ~43646 tok |

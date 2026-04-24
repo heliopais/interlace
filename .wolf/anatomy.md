@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-04-24T13:39:42.489Z
-> Files: 694 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-04-24T15:46:51.387Z
+> Files: 698 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../.claude/
 
@@ -796,7 +796,7 @@
 - `clmm.py` — Cumulative link mixed model (CLMM) — proportional odds with random effects. Includes predict() and confint(). (~12500 tok)
 - `convergence.py` — Convergence and boundary diagnostics for fitted LME models. (~721 tok)
 - `correlation.py` — Residual correlation structures for linear mixed models. (~4072 tok)
-- `coxme.py` — Cox PH with Gaussian frailty (shared frailty model). (~7524 tok)
+- `coxme.py` — Cox PH with Gaussian frailty (shared frailty model). (~10678 tok)
 - `cross_val.py` — Cross-validation utilities with group-aware splits for mixed models. (~1875 tok)
 - `emmeans.py` — emmeans(): estimated marginal means for linear mixed models. (~5498 tok)
 - `glmm_family.py` — GLMMFamily protocol and concrete family implementations for GLMM support. (~7529 tok)
@@ -817,9 +817,12 @@
 ## tests/
 
 - `_diag_coxme.py` — Diagnostic script: how good are the coxme estimates really? (~559 tok)
+- `_diag_se.py` — Diagnostic: compare SE computation methods against R coxme. (~1429 tok)
+- `_diag_se2.py` — Diagnostic: exact Breslow information vs diagonal approximation. (~1614 tok)
 - `test_ar1.py` — Tests for AR(1) residual correlation structure. (~3030 tok)
 - `test_clmm.py` — Tests for cumulative link mixed models (CLMM): parity, predict, crossed RE, confint. (~5500 tok)
-- `test_coxme.py` — Tests for Cox PH with Gaussian frailty (coxme). (~3194 tok)
+- `test_coxme_parity.py` — Parity test: interlace coxme vs R coxme::coxme() reference values. (~798 tok)
+- `test_coxme.py` — Tests for Cox PH frailty: API, predict, residuals, summary, crossed RE. (~8500 tok)
 - `test_cs.py` — Tests for compound symmetry (exchangeable) residual correlation structure. (~2688 tok)
 - `test_glmer_api.py` — Tests for the public interlace.glmer() API. (~1488 tok)
 - `test_glmm_family.py` — Tests for GLMMFamily protocol and concrete family implementations. (~11295 tok)
@@ -837,6 +840,7 @@
 
 - `gen_ar1_parity.R` — Generate fixture: LMM with AR(1) residual correlation (nlme) (~710 tok)
 - `gen_clmm_parity.R` — Generate fixture: Cumulative link mixed model (ordinal::clmm) (~866 tok)
+- `gen_coxme_parity.R` — Generate coxme reference values for testing interlace. (~605 tok)
 - `gen_cs_parity.R` — Generate fixture: LMM with compound symmetry residual correlation (nlme) (~1108 tok)
 - `gen_kr_parity.R` — Generate Kenward-Roger reference values for testing interlace. (~965 tok)
 - `gen_profile_ci.R` — Generate lme4 profile CI reference values for testing interlace. (~1018 tok)

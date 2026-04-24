@@ -315,6 +315,315 @@ class CoxmeResult:
     bic: float
     concordance: float
     baseline_hazard: pd.DataFrame = field(default_factory=lambda: pd.DataFrame())
+    _eta_hat: np.ndarray = field(default_factory=lambda: np.array([]), repr=False)
+    _rhs_formula: str = field(default="", repr=False)
+    _group_cols: list[str] = field(default_factory=list, repr=False)
+    _time: np.ndarray = field(default_factory=lambda: np.array([]), repr=False)
+    _event: np.ndarray = field(default_factory=lambda: np.array([]), repr=False)
+    _X: np.ndarray = field(default_factory=lambda: np.array([]), repr=False)
+
+    def predict(
+        self,
+        newdata: Any | None = None,
+        include_re: bool = True,
+        type: str = "lp",
+    ) -> np.ndarray:
+        """Predict from the fitted Cox frailty model.
+
+        Parameters
+        ----------
+        newdata :
+            DataFrame with the same covariates (and group columns) as
+            the training data. If ``None``, returns in-sample predictions.
+        include_re :
+            If ``True`` (default), add BLUP contributions for known group
+            levels. If ``False``, return fixed-effects-only prediction.
+        type :
+            ``"lp"`` — linear predictor x'beta + z'b (default).
+            ``"risk"`` — exp(linear predictor), i.e. hazard ratio.
+
+        Returns
+        -------
+        np.ndarray of shape (n_obs,)
+        """
+        valid_types = ("lp", "risk")
+        if type not in valid_types:
+            raise ValueError(f"Unknown type '{type}'. Choose from: {valid_types}")
+
+        if newdata is None:
+            lp = self._eta_hat
+        else:
+            import formulaic
+
+            beta = np.asarray(self.fe_params)
+            if len(beta) == 0:
+                lp = np.zeros(len(newdata))
+            else:
+                mm = formulaic.model_matrix(f"~ 0 + {self._rhs_formula}", newdata)
+                X = np.asarray(mm, dtype=np.float64)
+                lp = X @ beta
+
+            if include_re:
+                for grp in self._group_cols:
+                    if grp not in self.random_effects:
+                        continue
+                    re = self.random_effects[grp]
+                    col_vals = np.asarray(newdata[grp])
+                    lookup = re.to_dict() if isinstance(re, pd.Series) else {}
+                    contrib = np.array(
+                        [lookup.get(v, 0.0) for v in col_vals], dtype=np.float64
+                    )
+                    lp = lp + contrib
+
+        if type == "risk":
+            return np.asarray(np.exp(lp))
+        return np.asarray(lp)
+
+    def summary(self) -> str:
+        """Format a summary table similar to R's print.coxme."""
+        from scipy.stats import norm
+
+        lines: list[str] = []
+        lines.append("Cox Frailty Model (coxme)")
+        lines.append(f"  n={self.nobs}, events={self.n_events}")
+        lines.append("")
+
+        # Fixed effects table
+        if len(self.fe_params) > 0:
+            lines.append("Fixed Effects:")
+            lines.append(
+                f"  {'':12s} {'coef':>9s} {'exp(coef)':>9s} "
+                f"{'se(coef)':>9s} {'z':>8s} {'p':>10s}"
+            )
+            for name in self.fe_params.index:
+                coef = self.fe_params[name]
+                se = self.fe_bse[name]
+                z = coef / se if se > 0 else np.nan
+                p = 2.0 * (1.0 - norm.cdf(abs(z))) if np.isfinite(z) else np.nan
+                lines.append(
+                    f"  {name:12s} {coef:9.4f} {np.exp(coef):9.4f} "
+                    f"{se:9.4f} {z:8.3f} {p:10.4g}"
+                )
+            lines.append("")
+
+        # Variance components
+        lines.append("Random Effects (Variance):")
+        for grp, var in self.variance_components.items():
+            n_lev = self.ngroups.get(grp, 0)
+            lines.append(f"  {grp:12s}  {var:.4f}  (sd: {np.sqrt(var):.4f}, n={n_lev})")
+        lines.append("")
+
+        # Fit statistics
+        lines.append(f"Concordance: {self.concordance:.4f}")
+        lines.append(f"Log-lik (IPL): {self.llf:.2f}  AIC: {self.aic:.2f}")
+        lines.append(f"Converged: {self.converged}")
+
+        return "\n".join(lines)
+
+    def resid(self, type: str = "martingale") -> np.ndarray | pd.DataFrame:
+        """Compute residuals for the fitted Cox frailty model.
+
+        Parameters
+        ----------
+        type :
+            ``"martingale"`` — delta_i - Lambda_0(t_i)*exp(eta_i).
+            ``"deviance"`` — signed sqrt of deviance contribution.
+            ``"schoenfeld"`` — covariate residuals at each event time
+            (one row per event, columns = covariates). Returned as DataFrame.
+
+        Returns
+        -------
+        np.ndarray of shape (n,) for martingale/deviance, or
+        pd.DataFrame of shape (n_events, p) for schoenfeld.
+        """
+        valid = ("martingale", "deviance", "schoenfeld")
+        if type not in valid:
+            raise ValueError(f"Unknown type '{type}'. Choose from: {valid}")
+
+        time = self._time
+        event = self._event
+        eta = self._eta_hat
+
+        if type in ("martingale", "deviance"):
+            return self._martingale_or_deviance(time, event, eta, type)
+        return self._schoenfeld(time, event, eta, self._X)
+
+    def _martingale_or_deviance(
+        self,
+        time: np.ndarray,
+        event: np.ndarray,
+        eta: np.ndarray,
+        rtype: str,
+    ) -> np.ndarray:
+        """Martingale: M_i = delta_i - Lambda_0(t_i)*exp(eta_i)."""
+        n = len(time)
+        order = np.argsort(time)
+        t_sorted = time[order]
+        e_sorted = event[order]
+        exp_eta_sorted = np.exp(eta[order])
+
+        # Risk set sums (same pattern as breslow_loglik)
+        cum_exp = np.zeros(n)
+        cum_exp[n - 1] = exp_eta_sorted[n - 1]
+        for i in range(n - 2, -1, -1):
+            cum_exp[i] = cum_exp[i + 1] + exp_eta_sorted[i]
+        for i in range(1, n):
+            if t_sorted[i] == t_sorted[i - 1]:
+                cum_exp[i] = cum_exp[i - 1]
+
+        # Cumulative baseline hazard at each observation time
+        # Lambda_0(t_i) = sum_{j: t_j <= t_i, d_j=1} d_j / S_0(t_j)
+        d_over_risk = np.where(e_sorted, 1.0 / cum_exp, 0.0)
+        cum_baseline = np.cumsum(d_over_risk)
+
+        # Martingale: M_i = delta_i - Lambda_0(t_i)*exp(eta_i)
+        mart_sorted = e_sorted.astype(np.float64) - cum_baseline * exp_eta_sorted
+
+        # Undo sort
+        inv_order = np.empty(n, dtype=int)
+        inv_order[order] = np.arange(n)
+        mart = mart_sorted[inv_order]
+
+        if rtype == "martingale":
+            return np.asarray(mart)
+
+        # Deviance: sign(M_i) * sqrt(-2[M_i + delta_i*log(delta_i - M_i)])
+        d = event.astype(np.float64)
+        term = d * np.log(np.maximum(d - mart, 1e-20))
+        dev_sq = -2.0 * (mart + term)
+        dev_sq = np.maximum(dev_sq, 0.0)
+        return np.asarray(np.sign(mart) * np.sqrt(dev_sq))
+
+    def _schoenfeld(
+        self,
+        time: np.ndarray,
+        event: np.ndarray,
+        eta: np.ndarray,
+        X: np.ndarray,
+    ) -> pd.DataFrame:
+        """Schoenfeld residuals: x_i - E[x | R(t_i)] at each event time."""
+        n = len(time)
+        p = X.shape[1]
+        order = np.argsort(time)
+        t_sorted = time[order]
+        e_sorted = event[order]
+        eta_sorted = eta[order]
+        X_sorted = X[order]
+
+        exp_eta = np.exp(eta_sorted - eta_sorted.max())
+
+        # Risk set weighted sums (backward cumsum)
+        cum_exp = np.zeros(n)
+        cum_exp[n - 1] = exp_eta[n - 1]
+        cum_Xexp = np.zeros((n, p))
+        cum_Xexp[n - 1] = X_sorted[n - 1] * exp_eta[n - 1]
+        for i in range(n - 2, -1, -1):
+            cum_exp[i] = cum_exp[i + 1] + exp_eta[i]
+            cum_Xexp[i] = cum_Xexp[i + 1] + X_sorted[i] * exp_eta[i]
+        # Propagate for ties
+        for i in range(1, n):
+            if t_sorted[i] == t_sorted[i - 1]:
+                cum_exp[i] = cum_exp[i - 1]
+                cum_Xexp[i] = cum_Xexp[i - 1]
+
+        # Collect Schoenfeld residuals at event times
+        rows = []
+        for i in range(n):
+            if e_sorted[i]:
+                x_bar = cum_Xexp[i] / cum_exp[i]
+                rows.append(X_sorted[i] - x_bar)
+
+        return pd.DataFrame(rows, columns=list(self.fe_params.index))
+
+
+# ---------------------------------------------------------------------------
+# Exact Breslow information
+# ---------------------------------------------------------------------------
+
+
+def _breslow_info_products(
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    eta: np.ndarray,
+    time: np.ndarray,
+    event: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Exact Breslow information products for SE computation.
+
+    The negative Hessian of the Cox partial log-likelihood is:
+        -H = Σ_{k:event} [diag(a_k) - a_k a_k']
+    where a_k[j] = exp(η_j)*1(j∈R_k) / S_0(t_k).
+
+    Using diag(w) (our inner-loop approximation) drops the rank-1 outer
+    products, overestimating information by ~5-15% and underestimating SEs.
+
+    This function computes X'(-H)X, X'(-H)Z, Z'(-H)Z exactly without
+    forming the full n×n Hessian, in O(n * d * (p+q)) time where d is
+    the number of events.
+
+    Returns (XtHX, XtHZ, ZtHZ) as dense arrays.
+    """
+    n = len(time)
+    p = X.shape[1]
+    q = Z.shape[1]
+    Z_d = Z.toarray()
+
+    order = np.argsort(time)
+    t_sorted = time[order]
+    e_sorted = event[order]
+    eta_sorted = eta[order]
+
+    eta_max = eta_sorted.max()
+    exp_eta = np.exp(eta_sorted - eta_max)
+
+    # Risk set sums (backward cumsum)
+    cum_exp = np.zeros(n)
+    cum_exp[n - 1] = exp_eta[n - 1]
+    for i in range(n - 2, -1, -1):
+        cum_exp[i] = cum_exp[i + 1] + exp_eta[i]
+    for i in range(1, n):
+        if t_sorted[i] == t_sorted[i - 1]:
+            cum_exp[i] = cum_exp[i - 1]
+
+    X_s = X[order]
+    Z_s = Z_d[order]
+
+    XtHX = np.zeros((p, p))
+    XtHZ = np.zeros((p, q))
+    ZtHZ = np.zeros((q, q))
+
+    # Backward cumulative weighted sums for O(n*d*(p+q)) → O(n*(p+q))
+    # Pre-compute cumulative sums to avoid re-summing the risk set each time
+    cum_wX = np.zeros((n + 1, p))  # cum_wX[i] = Σ_{j=i..n-1} w_j x_j
+    cum_wZ = np.zeros((n + 1, q))
+    cum_wXX = np.zeros((n + 1, p, p))  # cum_wXX[i] = Σ_{j=i..n-1} w_j x_j x_j'
+    cum_wXZ = np.zeros((n + 1, p, q))
+    cum_wZZ = np.zeros((n + 1, q, q))
+
+    for j in range(n - 1, -1, -1):
+        w_j = exp_eta[j]
+        x_j = X_s[j]
+        z_j = Z_s[j]
+        cum_wX[j] = cum_wX[j + 1] + w_j * x_j
+        cum_wZ[j] = cum_wZ[j + 1] + w_j * z_j
+        cum_wXX[j] = cum_wXX[j + 1] + w_j * np.outer(x_j, x_j)
+        cum_wXZ[j] = cum_wXZ[j + 1] + w_j * np.outer(x_j, z_j)
+        cum_wZZ[j] = cum_wZZ[j + 1] + w_j * np.outer(z_j, z_j)
+
+    for i in range(n):
+        if not e_sorted[i]:
+            continue
+        S0 = cum_exp[i]
+
+        # For ties: use the same risk set as the first of the tied group
+        x_bar = cum_wX[i] / S0
+        z_bar = cum_wZ[i] / S0
+
+        XtHX += cum_wXX[i] / S0 - np.outer(x_bar, x_bar)
+        XtHZ += cum_wXZ[i] / S0 - np.outer(x_bar, z_bar)
+        ZtHZ += cum_wZZ[i] / S0 - np.outer(z_bar, z_bar)
+
+    return XtHX, XtHZ, ZtHZ
 
 
 # ---------------------------------------------------------------------------
@@ -718,24 +1027,17 @@ def fit_coxme(
         b0=b_warm,
     )
 
-    # --- Standard errors from observed information ---
-    # Marginal variance via Schur complement:
-    # Var(beta) = (X'WX - X'WZ (Z'WZ+Sinv)^{-1} Z'WX)^{-1}
+    # --- Standard errors from exact observed information ---
+    # Use exact Breslow Hessian products (not diagonal approximation)
+    # to get SEs matching R's coxme.
     eta_hat = X @ beta_hat + Z @ b_hat if p > 0 else (Z @ b_hat)
-    W = sp.diags(w_final)
     Sigma_inv = _build_sigma_inv(theta_opt, specs, n_levels_list)
-    ZtWZ = (Z.T @ W @ Z).tocsc()
-    H_plus_Sinv = (ZtWZ + Sigma_inv).tocsc()
 
     if p > 0:
-        import scipy.sparse.linalg as spla
-
-        XtW = X.T @ W
-        XtWX = XtW @ X
-        XtWZ = XtW @ Z
-        ZtWX = XtWZ.T
-        C = np.column_stack([spla.spsolve(H_plus_Sinv, ZtWX[:, j]) for j in range(p)])
-        schur = XtWX - XtWZ @ C
+        XtHX, XtHZ, ZtHZ = _breslow_info_products(X, Z, eta_hat, time_arr, event_arr)
+        H_bb = ZtHZ + Sigma_inv.toarray()
+        H_bb_inv = np.linalg.inv(H_bb)
+        schur = XtHX - XtHZ @ H_bb_inv @ XtHZ.T
         try:
             schur_inv = np.linalg.inv(schur)
             fe_bse_arr = np.sqrt(np.diag(schur_inv))
@@ -842,4 +1144,10 @@ def fit_coxme(
         bic=bic,
         concordance=conc,
         baseline_hazard=bh,
+        _eta_hat=eta_hat,
+        _rhs_formula=rhs,
+        _group_cols=[spec.group for spec in specs],
+        _time=time_arr,
+        _event=event_arr,
+        _X=X,
     )
