@@ -243,3 +243,150 @@ class TestConfintMethod:
         ci_explicit = single_re_result.confint(method="profile")
         ci_default = single_re_result.confint()
         pd.testing.assert_frame_equal(ci_explicit, ci_default)
+
+
+# ---------------------------------------------------------------------------
+# Tests: lme4 parity on reference datasets
+# ---------------------------------------------------------------------------
+
+
+class TestProfileConfintLme4Parity:
+    """Profile CIs must match lme4 reference values to <5% relative error."""
+
+    @pytest.fixture(scope="class")
+    def dyestuff_ref(self):
+        import json
+
+        return json.loads((FIXTURES / "lme4_profile_ci_dyestuff.json").read_text())
+
+    @pytest.fixture(scope="class")
+    def sleepstudy_ref(self):
+        import json
+
+        return json.loads((FIXTURES / "lme4_profile_ci_sleepstudy.json").read_text())
+
+    @pytest.fixture(scope="class")
+    def dyestuff_ci(self):
+        data = pd.read_csv(FIXTURES / "lme4_dyestuff_data.csv")
+        result = interlace.fit("Yield ~ 1", data=data, groups="Batch")
+        return profile_confint(result)
+
+    @pytest.fixture(scope="class")
+    def sleepstudy_ci(self):
+        data = pd.read_csv(FIXTURES / "lme4_sleepstudy_data.csv")
+        result = interlace.fit(
+            "Reaction ~ Days", data=data, random=["(1 + Days | Subject)"]
+        )
+        return profile_confint(result)
+
+    def test_dyestuff_theta_lower(self, dyestuff_ci, dyestuff_ref) -> None:
+        r_lo = dyestuff_ref["ci95_theta_scale"]["Batch.(Intercept)"]["lower"]
+        lo_col = [c for c in dyestuff_ci.columns if "%" in str(c)][0]
+        our_lo = dyestuff_ci[lo_col].values[0]
+        assert abs(our_lo - r_lo) / r_lo < 0.05, (
+            f"dyestuff theta lower: ours={our_lo:.6f}, R={r_lo:.6f}"
+        )
+
+    def test_dyestuff_theta_upper(self, dyestuff_ci, dyestuff_ref) -> None:
+        r_hi = dyestuff_ref["ci95_theta_scale"]["Batch.(Intercept)"]["upper"]
+        hi_col = [c for c in dyestuff_ci.columns if "%" in str(c)][1]
+        our_hi = dyestuff_ci[hi_col].values[0]
+        assert abs(our_hi - r_hi) / r_hi < 0.05, (
+            f"dyestuff theta upper: ours={our_hi:.6f}, R={r_hi:.6f}"
+        )
+
+    def test_sleepstudy_theta0_lower(self, sleepstudy_ci, sleepstudy_ref) -> None:
+        """Subject.(Intercept) lower bound."""
+        r_lo = sleepstudy_ref["ci95_theta_scale"]["Subject.(Intercept)"]["lower"]
+        lo_col = [c for c in sleepstudy_ci.columns if "%" in str(c)][0]
+        our_lo = sleepstudy_ci[lo_col].values[0]
+        assert abs(our_lo - r_lo) / r_lo < 0.05, (
+            f"sleepstudy theta[0] lower: ours={our_lo:.6f}, R={r_lo:.6f}"
+        )
+
+    def test_sleepstudy_theta0_upper(self, sleepstudy_ci, sleepstudy_ref) -> None:
+        """Subject.(Intercept) upper bound."""
+        r_hi = sleepstudy_ref["ci95_theta_scale"]["Subject.(Intercept)"]["upper"]
+        hi_col = [c for c in sleepstudy_ci.columns if "%" in str(c)][1]
+        our_hi = sleepstudy_ci[hi_col].values[0]
+        assert abs(our_hi - r_hi) / r_hi < 0.05, (
+            f"sleepstudy theta[0] upper: ours={our_hi:.6f}, R={r_hi:.6f}"
+        )
+
+    def test_sleepstudy_theta1_boundary(self, sleepstudy_ci, sleepstudy_ref) -> None:
+        """Subject.Days.(Intercept) lower = 0 (boundary case)."""
+        lo_col = [c for c in sleepstudy_ci.columns if "%" in str(c)][0]
+        our_lo = sleepstudy_ci[lo_col].values[1]
+        # R gives 0.0; ours should also be 0 or very close
+        assert our_lo <= 1e-6, (
+            f"sleepstudy theta[1] lower should be ~0 (boundary), got {our_lo:.6f}"
+        )
+
+    def test_sleepstudy_theta1_upper(self, sleepstudy_ci, sleepstudy_ref) -> None:
+        """Subject.Days.(Intercept) upper bound."""
+        r_hi = sleepstudy_ref["ci95_theta_scale"]["Subject.Days.(Intercept)"]["upper"]
+        hi_col = [c for c in sleepstudy_ci.columns if "%" in str(c)][1]
+        our_hi = sleepstudy_ci[hi_col].values[1]
+        assert abs(our_hi - r_hi) / r_hi < 0.05, (
+            f"sleepstudy theta[1] upper: ours={our_hi:.6f}, R={r_hi:.6f}"
+        )
+
+    def test_sleepstudy_theta2_lower(self, sleepstudy_ci, sleepstudy_ref) -> None:
+        """Subject.Days lower bound."""
+        r_lo = sleepstudy_ref["ci95_theta_scale"]["Subject.Days"]["lower"]
+        lo_col = [c for c in sleepstudy_ci.columns if "%" in str(c)][0]
+        our_lo = sleepstudy_ci[lo_col].values[2]
+        assert abs(our_lo - r_lo) / r_lo < 0.05, (
+            f"sleepstudy theta[2] lower: ours={our_lo:.6f}, R={r_lo:.6f}"
+        )
+
+    def test_sleepstudy_theta2_upper(self, sleepstudy_ci, sleepstudy_ref) -> None:
+        """Subject.Days upper bound."""
+        r_hi = sleepstudy_ref["ci95_theta_scale"]["Subject.Days"]["upper"]
+        hi_col = [c for c in sleepstudy_ci.columns if "%" in str(c)][1]
+        our_hi = sleepstudy_ci[hi_col].values[2]
+        assert abs(our_hi - r_hi) / r_hi < 0.05, (
+            f"sleepstudy theta[2] upper: ours={our_hi:.6f}, R={r_hi:.6f}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: confint(method='wald')
+# ---------------------------------------------------------------------------
+
+
+class TestConfintWald:
+    def test_wald_returns_dataframe(self, single_re_result) -> None:
+        ci = single_re_result.confint(method="wald")
+        assert isinstance(ci, pd.DataFrame)
+
+    def test_wald_has_fe_rows(self, single_re_result) -> None:
+        """Wald CIs should include rows for fixed effects."""
+        ci = single_re_result.confint(method="wald")
+        # Should have at least one row (intercept)
+        assert len(ci) >= 1
+
+    def test_wald_level_parameter(self, single_re_result) -> None:
+        """Different levels should produce different widths."""
+        ci95 = single_re_result.confint(method="wald", level=0.95)
+        ci99 = single_re_result.confint(method="wald", level=0.99)
+        lo95 = [c for c in ci95.columns if "%" in str(c)][0]
+        hi95 = [c for c in ci95.columns if "%" in str(c)][1]
+        lo99 = [c for c in ci99.columns if "%" in str(c)][0]
+        hi99 = [c for c in ci99.columns if "%" in str(c)][1]
+        # 99% should be strictly wider than 95%
+        assert ci99[lo99].values[0] < ci95[lo95].values[0]
+        assert ci99[hi99].values[0] > ci95[hi95].values[0]
+
+    def test_wald_matches_fe_bse(self, single_re_result) -> None:
+        """Wald CI at 95% should match fe_params +/- 1.96*fe_bse."""
+        ci = single_re_result.confint(method="wald", level=0.95)
+        lo_col = [c for c in ci.columns if "%" in str(c)][0]
+        hi_col = [c for c in ci.columns if "%" in str(c)][1]
+        fe = single_re_result.fe_params
+        se = single_re_result.fe_bse
+        for name in fe.index:
+            exp_lo = float(fe[name] - 1.96 * se[name])
+            exp_hi = float(fe[name] + 1.96 * se[name])
+            np.testing.assert_allclose(ci.loc[name, lo_col], exp_lo, rtol=1e-4)
+            np.testing.assert_allclose(ci.loc[name, hi_col], exp_hi, rtol=1e-4)
