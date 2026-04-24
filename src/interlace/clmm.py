@@ -749,9 +749,128 @@ class CLMMResult:
     ngroups: dict[str, int]
     link: str
     _formula: str = ""
+    _group_cols: list[str] | None = None
 
     def summary(self) -> _CLMMSummary:
         return _CLMMSummary(self)
+
+    def predict(
+        self,
+        newdata: Any,
+        type: str = "prob",
+    ) -> np.ndarray:
+        """Predict from the fitted CLMM.
+
+        Parameters
+        ----------
+        newdata :
+            DataFrame with the same covariates (and group columns) as
+            the training data.
+        type :
+            ``"prob"`` — category probabilities P(Y=k), shape (n, K).
+            ``"cum.prob"`` — cumulative probabilities P(Y<=k), shape (n, K-1).
+            ``"linear.predictor"`` — eta = X'beta + Z'b, shape (n,).
+
+        Returns
+        -------
+        np.ndarray
+        """
+        valid_types = ("prob", "cum.prob", "linear.predictor")
+        if type not in valid_types:
+            raise ValueError(f"Unknown type '{type}'. Choose from: {valid_types}")
+
+        import formulaic
+
+        cdf_fn, _, _ = _LINKS[self.link]
+        thresholds_arr = np.array(list(self.thresholds.values()))
+
+        # Build X from formula (same processing as fit_clmm)
+        _, rhs = self._formula.split("~", 1)
+        mm_full = formulaic.model_matrix("~ " + rhs.strip(), newdata)
+        full_cols = list(mm_full.columns)
+        if "Intercept" in full_cols:
+            keep = [c for c in full_cols if c != "Intercept"]
+            mm = mm_full[keep]
+        else:
+            mm = mm_full
+        X = np.asarray(mm, dtype=np.float64)
+
+        # Fixed-effects linear predictor
+        eta: np.ndarray = np.asarray(X @ np.asarray(self.fe_params), dtype=np.float64)
+
+        # Add random effects (BLUPs) for known groups; unseen -> 0
+        group_cols = self._group_cols or []
+        for grp in group_cols:
+            if grp not in self.random_effects:
+                continue
+            re = self.random_effects[grp]
+            col_vals = np.asarray(newdata[grp])
+            for i, val in enumerate(col_vals):
+                if val in re.index:
+                    eta[i] += re.loc[val]
+
+        if type == "linear.predictor":
+            return eta
+
+        # Cumulative probabilities: P(Y <= k) = F(alpha_k - eta)
+        n = len(eta)
+        K_minus_1 = len(thresholds_arr)
+        cum_probs = np.empty((n, K_minus_1))
+        for k in range(K_minus_1):
+            cum_probs[:, k] = cdf_fn(thresholds_arr[k] - eta)
+
+        if type == "cum.prob":
+            return cum_probs
+
+        # Category probabilities: P(Y = k)
+        K = K_minus_1 + 1
+        probs = np.empty((n, K))
+        probs[:, 0] = cum_probs[:, 0]
+        for k in range(1, K_minus_1):
+            probs[:, k] = cum_probs[:, k] - cum_probs[:, k - 1]
+        probs[:, K - 1] = 1.0 - cum_probs[:, K_minus_1 - 1]
+        np.clip(probs, 0.0, 1.0, out=probs)
+        return probs
+
+    def confint(self, level: float = 0.95) -> pd.DataFrame:
+        """Wald confidence intervals for thresholds and fixed effects.
+
+        Parameters
+        ----------
+        level :
+            Confidence level (default 0.95).
+
+        Returns
+        -------
+        pd.DataFrame with columns ``["lower", "upper"]``.
+        """
+        from scipy.stats import norm
+
+        z = norm.ppf((1.0 + level) / 2.0)
+
+        names: list[str] = []
+        estimates: list[float] = []
+        ses: list[float] = []
+
+        for name, val in self.thresholds.items():
+            names.append(name)
+            estimates.append(val)
+            ses.append(self.threshold_bse[name])
+
+        for name, val in zip(self.fe_params.index, self.fe_params.values, strict=True):
+            names.append(str(name))
+            estimates.append(float(val))
+            ses.append(float(self.fe_bse.loc[name]))
+
+        est = np.array(estimates)
+        se = np.array(ses)
+        lower = est - z * se
+        upper = est + z * se
+
+        return pd.DataFrame(
+            {"lower": lower, "upper": upper},
+            index=names,
+        )
 
 
 class _CLMMSummary:
@@ -1229,4 +1348,5 @@ def fit_clmm(
         ngroups=ngroups,
         link=link,
         _formula=formula,
+        _group_cols=[s.group for s in specs],
     )

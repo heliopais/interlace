@@ -206,3 +206,185 @@ class TestCLMMAPI:
                 groups="judge",
                 link="identity",
             )
+
+
+# ---- predict() tests ----
+
+
+class TestCLMMPredict:
+    """Tests for CLMMResult.predict()."""
+
+    @pytest.fixture(autouse=True)
+    def _fit(self, wine_data: pd.DataFrame) -> None:
+        self.data = wine_data
+        self.result = interlace.clmm(
+            "rating ~ temp + contact",
+            wine_data,
+            groups="judge",
+            link="logit",
+        )
+
+    def test_predict_prob_shape(self) -> None:
+        """predict(type='prob') returns (n, K) array."""
+        probs = self.result.predict(self.data, type="prob")
+        assert probs.shape == (len(self.data), 5)  # 5 rating levels
+
+    def test_predict_prob_sums_to_one(self) -> None:
+        """Category probabilities sum to 1 for each observation."""
+        probs = self.result.predict(self.data, type="prob")
+        row_sums = probs.sum(axis=1)
+        np.testing.assert_allclose(row_sums, 1.0, atol=1e-8)
+
+    def test_predict_prob_nonneg(self) -> None:
+        """All predicted probabilities are non-negative."""
+        probs = self.result.predict(self.data, type="prob")
+        assert np.all(probs >= 0)
+
+    def test_predict_prob_le_one(self) -> None:
+        """All predicted probabilities are <= 1."""
+        probs = self.result.predict(self.data, type="prob")
+        assert np.all(probs <= 1.0)
+
+    def test_predict_cum_prob_shape(self) -> None:
+        """predict(type='cum.prob') returns (n, K-1) array."""
+        cum = self.result.predict(self.data, type="cum.prob")
+        assert cum.shape == (len(self.data), 4)  # K-1 = 4
+
+    def test_predict_cum_prob_monotone(self) -> None:
+        """Cumulative probabilities are non-decreasing across categories."""
+        cum = self.result.predict(self.data, type="cum.prob")
+        for j in range(1, cum.shape[1]):
+            assert np.all(cum[:, j] >= cum[:, j - 1] - 1e-10)
+
+    def test_predict_cum_prob_bounded(self) -> None:
+        """Cumulative probabilities are in [0, 1]."""
+        cum = self.result.predict(self.data, type="cum.prob")
+        assert np.all(cum >= -1e-10)
+        assert np.all(cum <= 1.0 + 1e-10)
+
+    def test_predict_linear_predictor_shape(self) -> None:
+        """predict(type='linear.predictor') returns (n,) array."""
+        eta = self.result.predict(self.data, type="linear.predictor")
+        assert eta.shape == (len(self.data),)
+
+    def test_predict_unseen_group_shrinks_to_zero(self) -> None:
+        """Unseen groups get zero random effect (fixed-effects only)."""
+        new_data = pd.DataFrame(
+            {
+                "temp": ["cold", "warm"],
+                "contact": ["no", "yes"],
+                "judge": ["UNSEEN_A", "UNSEEN_B"],
+            }
+        )
+        probs = self.result.predict(new_data, type="prob")
+        assert probs.shape == (2, 5)
+        np.testing.assert_allclose(probs.sum(axis=1), 1.0, atol=1e-8)
+
+    def test_predict_prob_consistent_with_cum_prob(self) -> None:
+        """prob[:,k] should equal cum[:,k] - cum[:,k-1]."""
+        probs = self.result.predict(self.data, type="prob")
+        cum = self.result.predict(self.data, type="cum.prob")
+        # P(Y=1) = cum[:,0]
+        np.testing.assert_allclose(probs[:, 0], cum[:, 0], atol=1e-8)
+        # P(Y=k) = cum[:,k-1] - cum[:,k-2] for k=2..K-1
+        for k in range(1, probs.shape[1] - 1):
+            np.testing.assert_allclose(
+                probs[:, k], cum[:, k] - cum[:, k - 1], atol=1e-8
+            )
+        # P(Y=K) = 1 - cum[:,-1]
+        np.testing.assert_allclose(probs[:, -1], 1.0 - cum[:, -1], atol=1e-8)
+
+    def test_predict_bad_type_raises(self) -> None:
+        with pytest.raises(ValueError, match="type"):
+            self.result.predict(self.data, type="class")
+
+
+# ---- Crossed random effects test ----
+
+
+class TestCLMMCrossedRE:
+    """Test CLMM with crossed random effects (judge + bottle)."""
+
+    def test_crossed_re_converges(self, wine_data: pd.DataFrame) -> None:
+        """CLMM with (1|judge) + (1|bottle) should converge."""
+        result = interlace.clmm(
+            "rating ~ temp + contact",
+            wine_data,
+            random=["(1|judge)", "(1|bottle)"],
+            link="logit",
+        )
+        assert result.converged
+
+    def test_crossed_re_has_both_groups(self, wine_data: pd.DataFrame) -> None:
+        """Both grouping factors should appear in random_effects."""
+        result = interlace.clmm(
+            "rating ~ temp + contact",
+            wine_data,
+            random=["(1|judge)", "(1|bottle)"],
+            link="logit",
+        )
+        assert "judge" in result.random_effects
+        assert "bottle" in result.random_effects
+        assert "judge" in result.variance_components
+        assert "bottle" in result.variance_components
+
+    def test_crossed_re_variance_positive(self, wine_data: pd.DataFrame) -> None:
+        """Both variance components should be non-negative."""
+        result = interlace.clmm(
+            "rating ~ temp + contact",
+            wine_data,
+            random=["(1|judge)", "(1|bottle)"],
+            link="logit",
+        )
+        assert result.variance_components["judge"] >= 0
+        assert result.variance_components["bottle"] >= 0
+
+
+# ---- confint() tests ----
+
+
+class TestCLMMConfint:
+    """Tests for CLMMResult.confint()."""
+
+    @pytest.fixture(autouse=True)
+    def _fit(self, wine_data: pd.DataFrame) -> None:
+        self.result = interlace.clmm(
+            "rating ~ temp + contact",
+            wine_data,
+            groups="judge",
+            link="logit",
+        )
+
+    def test_confint_returns_dataframe(self) -> None:
+        """confint() should return a DataFrame."""
+        ci = self.result.confint()
+        assert isinstance(ci, pd.DataFrame)
+
+    def test_confint_shape(self) -> None:
+        """confint() has rows for thresholds + fixed effects, 2 columns."""
+        ci = self.result.confint()
+        n_thresh = len(self.result.thresholds)
+        n_fe = len(self.result.fe_params)
+        assert ci.shape == (n_thresh + n_fe, 2)
+
+    def test_confint_lower_lt_upper(self) -> None:
+        """Lower bound < upper bound for all parameters."""
+        ci = self.result.confint()
+        assert np.all(ci.iloc[:, 0] < ci.iloc[:, 1])
+
+    def test_confint_contains_estimate(self) -> None:
+        """Point estimates fall within the confidence interval."""
+        ci = self.result.confint()
+        thresh_vals = list(self.result.thresholds.values())
+        fe_vals = list(self.result.fe_params.values)
+        estimates = thresh_vals + fe_vals
+        for i, est in enumerate(estimates):
+            assert ci.iloc[i, 0] <= est <= ci.iloc[i, 1]
+
+    def test_confint_custom_level(self) -> None:
+        """99% CI should be wider than 95% CI."""
+        ci_95 = self.result.confint(level=0.95)
+        ci_99 = self.result.confint(level=0.99)
+        width_95 = ci_95.iloc[:, 1] - ci_95.iloc[:, 0]
+        width_99 = ci_99.iloc[:, 1] - ci_99.iloc[:, 0]
+        assert np.all(width_99 > width_95)
