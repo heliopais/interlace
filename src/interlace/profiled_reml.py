@@ -15,7 +15,7 @@ Journal of Statistical Software, 67(1), 1-48.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -25,6 +25,7 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
 if TYPE_CHECKING:
+    from interlace.correlation import CorStruct
     from interlace.formula import RandomEffectSpec
 
 # ---------------------------------------------------------------------------
@@ -48,6 +49,7 @@ class REMLResult:
     fe_cov: np.ndarray | None = None  # sigma2 * (X'Ω⁻¹X)^{-1}
     _A11: Any = None  # A11 = I + W'W (q×q sparse) at optimum theta
     _W: Any = None  # W = Z @ Lambda (n×q sparse) at optimum theta
+    correlation_params: dict[str, float] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -574,6 +576,7 @@ def fit_reml(
     tight: bool = True,
     use_gradient: bool = False,
     weights: np.ndarray | None = None,
+    correlation: CorStruct | None = None,
 ) -> REMLResult:
     """Fit a linear mixed model by profiled REML.
 
@@ -597,6 +600,10 @@ def fit_reml(
         boundaries and is the same algorithm used by lme4.
     weights:
         Observation-level prior weights, shape (n,). Defaults to ones.
+    correlation:
+        Residual correlation structure (e.g. ``AR1("time")``).  Must have
+        ``setup()`` already called.  When provided, the correlation parameter(s)
+        are jointly estimated with theta.
 
     Returns
     -------
@@ -619,6 +626,24 @@ def fit_reml(
 
     if theta0 is None:
         theta0 = np.ones(n_theta)
+
+    # --- Correlation structure: joint optimisation over (theta, rho_raw) ---
+    if correlation is not None:
+        return _fit_reml_with_correlation(
+            y,
+            X,
+            Z,
+            q_sizes,
+            theta0,
+            specs=specs,
+            n_levels=n_levels,
+            optimizer=optimizer,
+            tight=tight,
+            weights=weights,
+            correlation=correlation,
+            n_theta=n_theta,
+            bounds=bounds,
+        )
 
     cache = _precompute(y, X, Z, weights=weights)
 
@@ -752,6 +777,195 @@ def fit_reml(
         fe_cov=fe_cov,
         _A11=A11,
         _W=W_final,
+    )
+
+
+# ---------------------------------------------------------------------------
+# REML with residual correlation structure
+# ---------------------------------------------------------------------------
+
+
+def _fit_reml_with_correlation(
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    q_sizes: list[int],
+    theta0: np.ndarray,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
+    optimizer: str = "lbfgsb",
+    tight: bool = True,
+    weights: np.ndarray | None = None,
+    correlation: CorStruct,
+    n_theta: int,
+    bounds: list[tuple[float | None, float | None]],
+) -> REMLResult:
+    """Fit REML with a residual correlation structure.
+
+    Joint optimisation over (theta_RE, rho_raw) where rho_raw is the
+    unconstrained parameterisation of the correlation parameter(s).
+    At each evaluation, data is whitened by R^{-1/2}(rho) and the standard
+    profiled REML is computed on the whitened data, plus the log|R| correction.
+    """
+    from interlace.correlation import rho_from_unconstrained, unconstrained_from_rho
+
+    n, p = X.shape
+    n_corr = correlation.n_corr_params
+
+    # Initial rho_raw (unconstrained space); start near 0.3
+    rho_raw0 = np.array([unconstrained_from_rho(0.3)] * n_corr)
+
+    # Apply weights upfront (whitening commutes with weight scaling)
+    if weights is not None:
+        sqW = np.sqrt(weights)
+        y_w0 = sqW * y
+        X_w0 = sqW[:, None] * X
+        Z_w0 = sp.diags(sqW, format="csc") @ Z
+    else:
+        y_w0 = y
+        X_w0 = X
+        Z_w0 = Z
+
+    def obj_joint(params: np.ndarray) -> float:
+        theta_re = params[:n_theta]
+        rho_raw = params[n_theta:]
+        rho = np.array([rho_from_unconstrained(float(r)) for r in rho_raw])
+
+        # Whiten data
+        y_w, X_w, Z_w = correlation.whiten_data(y_w0, X_w0, Z_w0, rho)
+
+        # Compute standard REML objective on whitened data (no caching —
+        # cross-products change with rho)
+        cache_w = _precompute(y_w, X_w, Z_w)
+        val = reml_objective(
+            theta_re,
+            y_w,
+            X_w,
+            Z_w,
+            q_sizes,
+            _cache=cache_w,
+            specs=specs,
+            n_levels=n_levels,
+        )
+        if not np.isfinite(val):
+            return np.inf
+
+        # Add log|R(rho)| correction
+        log_det_r = correlation.log_det_R(rho)
+        return float(val + log_det_r)
+
+    # Joint initial params and bounds
+    params0 = np.concatenate([theta0, rho_raw0])
+    # RE theta bounds + unconstrained bounds for rho_raw
+    bounds_joint = list(bounds) + [(None, None)] * n_corr
+
+    lower_bounds_joint = np.array(
+        [lo if lo is not None else -np.inf for lo, _ in bounds_joint]
+    )
+
+    if optimizer == "bobyqa":
+        import pybobyqa
+
+        upper = np.array([hi if hi is not None else np.inf for _, hi in bounds_joint])
+        soln = pybobyqa.solve(obj_joint, params0, bounds=(lower_bounds_joint, upper))
+        params_hat = soln.x
+        converged = soln.msg == "Success: rho has reached rhoend"
+    elif optimizer == "nelder-mead":
+
+        def obj_bounded(params: np.ndarray) -> float:
+            return obj_joint(np.maximum(params, lower_bounds_joint))
+
+        res = opt.minimize(obj_bounded, params0, method="Nelder-Mead")
+        params_hat = np.maximum(res.x, lower_bounds_joint)
+        converged = bool(res.success)
+    else:
+        lbfgsb_opts = None if tight else {"maxiter": 10, "maxls": 5}
+        res = opt.minimize(
+            obj_joint,
+            params0,
+            method="L-BFGS-B",
+            bounds=bounds_joint,
+            options=lbfgsb_opts,
+        )
+        params_hat = res.x
+        converged = bool(res.success)
+
+    # --- Extract optimum theta_RE and rho ---
+    theta_hat = params_hat[:n_theta]
+    rho_raw_hat = params_hat[n_theta:]
+    rho_hat = np.array([rho_from_unconstrained(float(r)) for r in rho_raw_hat])
+
+    # Build correlation_params dict
+    corr_params: dict[str, float] = {"rho": float(rho_hat[0])}
+
+    # --- Recover beta and sigma2 at optimum on whitened data ---
+    y_w, X_w, Z_w = correlation.whiten_data(y_w0, X_w0, Z_w0, rho_hat)
+    cache_w = _precompute(y_w, X_w, Z_w)
+
+    ZtZ = sp.csc_matrix(cache_w["ZtZ"])
+    ZtX = np.asarray(cache_w["ZtX"])
+    Zty = np.asarray(cache_w["Zty"])
+    XtX = np.asarray(cache_w["XtX"])
+    Xty = np.asarray(cache_w["Xty"])
+    yty = float(cache_w["yty"])
+
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
+        Lambda = make_lambda(theta_hat, specs, n_levels)  # type: ignore[arg-type]
+        A11 = _build_A11(ZtZ, Lambda)
+        lZty = np.asarray(Lambda.T @ Zty).squeeze()
+        lZtX = np.asarray(Lambda.T @ ZtX)
+        W_final: sp.csc_matrix = (Z_w @ Lambda).tocsc()
+    else:
+        _q_hat = n_levels if specs is not None else q_sizes
+        lambda_diag = make_lambda_diag(theta_hat, _q_hat)  # type: ignore[arg-type]
+        A11 = _build_A11(ZtZ, lambda_diag)
+        lZty = lambda_diag * Zty
+        lZtX = lambda_diag[:, None] * ZtX
+        W_final = (Z_w @ sp.diags(lambda_diag, format="csc")).tocsc()
+
+    c1 = _sparse_solve(A11, lZty)
+    C_X = _sparse_solve(A11, lZtX)
+    MX = XtX - lZtX.T @ C_X
+    rhs = Xty - lZtX.T @ c1
+    beta_hat = la.solve(MX, rhs, assume_a="pos")
+
+    yPy = float(yty - lZty @ c1 - rhs @ beta_hat)
+    sigma2 = yPy / (n - p)
+    fe_cov = sigma2 * np.linalg.inv(MX)
+
+    # --- REML log-likelihood (includes log|R| correction) ---
+    log_det_A11 = sparse_chol_logdet(A11)
+    log_det_MX = float(np.linalg.slogdet(MX)[1])
+    log_det_r = correlation.log_det_R(rho_hat)
+    llf = -0.5 * (
+        log_det_A11
+        + log_det_r
+        + log_det_MX
+        + (n - p) * (1.0 + np.log(2.0 * np.pi * sigma2))
+    )
+
+    # nparams includes correlation parameter(s)
+    nparams = p + n_theta + n_corr + 1
+    aic = -2.0 * llf + 2.0 * nparams
+    bic = -2.0 * llf + np.log(n) * nparams
+
+    return REMLResult(
+        beta=beta_hat,
+        theta=theta_hat,
+        sigma2=sigma2,
+        converged=converged,
+        llf=float(llf),
+        aic=float(aic),
+        bic=float(bic),
+        nobs=n,
+        nparams=nparams,
+        specs=specs,
+        n_levels=n_levels,
+        fe_cov=fe_cov,
+        _A11=A11,
+        _W=W_final,
+        correlation_params=corr_params,
     )
 
 
@@ -907,6 +1121,7 @@ def fit_ml(
     n_levels: list[int] | None = None,
     optimizer: str = "lbfgsb",
     weights: np.ndarray | None = None,
+    correlation: CorStruct | None = None,
 ) -> REMLResult:
     """Fit a linear mixed model by profiled ML.
 
@@ -948,6 +1163,23 @@ def fit_ml(
 
     if theta0 is None:
         theta0 = np.ones(n_theta)
+
+    # --- Correlation structure: joint optimisation over (theta, rho_raw) ---
+    if correlation is not None:
+        return _fit_ml_with_correlation(
+            y,
+            X,
+            Z,
+            q_sizes,
+            theta0,
+            specs=specs,
+            n_levels=n_levels,
+            optimizer=optimizer,
+            weights=weights,
+            correlation=correlation,
+            n_theta=n_theta,
+            bounds=bounds,
+        )
 
     cache = _precompute(y, X, Z, weights=weights)
 
@@ -1042,4 +1274,160 @@ def fit_ml(
         nparams=nparams,
         specs=specs,
         n_levels=n_levels,
+    )
+
+
+# ---------------------------------------------------------------------------
+# ML with residual correlation structure
+# ---------------------------------------------------------------------------
+
+
+def _fit_ml_with_correlation(
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    q_sizes: list[int],
+    theta0: np.ndarray,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
+    optimizer: str = "lbfgsb",
+    weights: np.ndarray | None = None,
+    correlation: CorStruct,
+    n_theta: int,
+    bounds: list[tuple[float | None, float | None]],
+) -> REMLResult:
+    """Fit ML with a residual correlation structure.
+
+    Analogous to :func:`_fit_reml_with_correlation` but uses the ML criterion.
+    """
+    from interlace.correlation import rho_from_unconstrained, unconstrained_from_rho
+
+    n, p = X.shape
+    n_corr = correlation.n_corr_params
+
+    rho_raw0 = np.array([unconstrained_from_rho(0.3)] * n_corr)
+
+    if weights is not None:
+        sqW = np.sqrt(weights)
+        y_w0 = sqW * y
+        X_w0 = sqW[:, None] * X
+        Z_w0 = sp.diags(sqW, format="csc") @ Z
+    else:
+        y_w0 = y
+        X_w0 = X
+        Z_w0 = Z
+
+    def obj_joint(params: np.ndarray) -> float:
+        theta_re = params[:n_theta]
+        rho_raw = params[n_theta:]
+        rho = np.array([rho_from_unconstrained(float(r)) for r in rho_raw])
+
+        y_w, X_w, Z_w = correlation.whiten_data(y_w0, X_w0, Z_w0, rho)
+        cache_w = _precompute(y_w, X_w, Z_w)
+        val = ml_objective(
+            theta_re,
+            y_w,
+            X_w,
+            Z_w,
+            q_sizes,
+            _cache=cache_w,
+            specs=specs,
+            n_levels=n_levels,
+        )
+        if not np.isfinite(val):
+            return np.inf
+
+        log_det_r = correlation.log_det_R(rho)
+        return float(val + log_det_r)
+
+    params0 = np.concatenate([theta0, rho_raw0])
+    bounds_joint = list(bounds) + [(None, None)] * n_corr
+    lower_bounds_joint = np.array(
+        [lo if lo is not None else -np.inf for lo, _ in bounds_joint]
+    )
+
+    if optimizer == "bobyqa":
+        import pybobyqa
+
+        upper = np.array([hi if hi is not None else np.inf for _, hi in bounds_joint])
+        soln = pybobyqa.solve(obj_joint, params0, bounds=(lower_bounds_joint, upper))
+        params_hat = soln.x
+        converged = soln.msg == "Success: rho has reached rhoend"
+    elif optimizer == "nelder-mead":
+
+        def obj_bounded(params: np.ndarray) -> float:
+            return obj_joint(np.maximum(params, lower_bounds_joint))
+
+        res = opt.minimize(obj_bounded, params0, method="Nelder-Mead")
+        params_hat = np.maximum(res.x, lower_bounds_joint)
+        converged = bool(res.success)
+    else:
+        res = opt.minimize(
+            obj_joint,
+            params0,
+            method="L-BFGS-B",
+            bounds=bounds_joint,
+        )
+        params_hat = res.x
+        converged = bool(res.success)
+
+    theta_hat = params_hat[:n_theta]
+    rho_raw_hat = params_hat[n_theta:]
+    rho_hat = np.array([rho_from_unconstrained(float(r)) for r in rho_raw_hat])
+    corr_params: dict[str, float] = {"rho": float(rho_hat[0])}
+
+    # --- Recover beta and sigma2 at optimum ---
+    y_w, X_w, Z_w = correlation.whiten_data(y_w0, X_w0, Z_w0, rho_hat)
+    cache_w = _precompute(y_w, X_w, Z_w)
+
+    ZtZ = sp.csc_matrix(cache_w["ZtZ"])
+    ZtX = np.asarray(cache_w["ZtX"])
+    Zty = np.asarray(cache_w["Zty"])
+    XtX = np.asarray(cache_w["XtX"])
+    Xty = np.asarray(cache_w["Xty"])
+    yty = float(cache_w["yty"])
+
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
+        Lambda = make_lambda(theta_hat, specs, n_levels)  # type: ignore[arg-type]
+        A11 = _build_A11(ZtZ, Lambda)
+        lZty = np.asarray(Lambda.T @ Zty).squeeze()
+        lZtX = np.asarray(Lambda.T @ ZtX)
+    else:
+        _q_hat = n_levels if specs is not None else q_sizes
+        lambda_diag = make_lambda_diag(theta_hat, _q_hat)  # type: ignore[arg-type]
+        A11 = _build_A11(ZtZ, lambda_diag)
+        lZty = lambda_diag * Zty
+        lZtX = lambda_diag[:, None] * ZtX
+
+    c1 = _sparse_solve(A11, lZty)
+    C_X = _sparse_solve(A11, lZtX)
+    MX = XtX - lZtX.T @ C_X
+    rhs = Xty - lZtX.T @ c1
+    beta_hat = la.solve(MX, rhs, assume_a="pos")
+
+    yPy = float(yty - lZty @ c1 - rhs @ beta_hat)
+    sigma2 = yPy / n
+
+    log_det_A11 = sparse_chol_logdet(A11)
+    log_det_r = correlation.log_det_R(rho_hat)
+    llf = -0.5 * (log_det_A11 + log_det_r + n * (1.0 + np.log(2.0 * np.pi * sigma2)))
+
+    nparams = p + n_theta + n_corr + 1
+    aic = -2.0 * llf + 2.0 * nparams
+    bic = -2.0 * llf + np.log(n) * nparams
+
+    return REMLResult(
+        beta=beta_hat,
+        theta=theta_hat,
+        sigma2=sigma2,
+        converged=converged,
+        llf=float(llf),
+        aic=float(aic),
+        bic=float(bic),
+        nobs=n,
+        nparams=nparams,
+        specs=specs,
+        n_levels=n_levels,
+        correlation_params=corr_params,
     )

@@ -16,6 +16,7 @@ from interlace.anova import anova
 from interlace.anova_type import Anova, anova_type2, anova_type3
 from interlace.augment import hlm_augment
 from interlace.convergence import isSingular
+from interlace.correlation import AR1
 from interlace.cross_val import CVResult as CVResult
 from interlace.cross_val import cross_val as cross_val
 from interlace.emmeans import EmmResult, contrast, emmeans, pairs
@@ -26,7 +27,10 @@ from interlace.formula import (
 )
 from interlace.glmm_family import (
     BetaFamily,
+    GammaFamily,
     GLMMFamily,
+    HurdlePoissonFamily,
+    NegativeBinomial1Family,
     NegativeBinomial2Family,
     ZeroInflatedNB2Family,
     ZeroInflatedPoissonFamily,
@@ -116,11 +120,16 @@ __all__ = [
     "glmer",
     "GLMMResult",
     "BetaFamily",
+    "GammaFamily",
     "GLMMFamily",
+    "NegativeBinomial1Family",
     "NegativeBinomial2Family",
     "ZeroInflatedNB2Family",
     "ZeroInflatedPoissonFamily",
     "ZeroOneInflatedBetaFamily",
+    "HurdlePoissonFamily",
+    # Correlation structures
+    "AR1",
 ]
 
 
@@ -134,6 +143,7 @@ def fit(
     theta0: np.ndarray | None = None,
     weights: np.ndarray | None = None,
     offset: np.ndarray | None = None,
+    correlation: Any | None = None,
 ) -> CrossedLMEResult:
     """Fit a linear mixed model with crossed random effects via profiled REML.
 
@@ -183,6 +193,21 @@ def fit(
     -------
     CrossedLMEResult
         Drop-in replacement for statsmodels ``MixedLMResults``.
+
+    Examples
+    --------
+    >>> import interlace
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({
+    ...     "y": [1.0, 2.0, 3.0, 1.5, 2.5, 3.5],
+    ...     "x": [0.1, 0.2, 0.3, 0.1, 0.2, 0.3],
+    ...     "g": ["a", "a", "a", "b", "b", "b"],
+    ... })
+    >>> result = interlace.fit("y ~ x", df, groups="g")
+    >>> result.fe_params
+    Intercept    ...
+    x            ...
+    dtype: float64
     """
     if method not in ("REML", "ML"):
         raise ValueError(f"method must be 'REML' or 'ML'; got '{method}'")
@@ -234,6 +259,19 @@ def fit(
         int(np.unique(group_array(spec, nw_data)).shape[0]) for spec in specs
     ]
 
+    # --- 2b. Set up correlation structure (if any) ---
+    if correlation is not None:
+        from interlace.correlation import CorStruct
+
+        if not isinstance(correlation, CorStruct):
+            msg = f"correlation must be a CorStruct instance, got {type(correlation)}"
+            raise TypeError(msg)
+        # Extract time column and primary grouping column for setup
+        time_col = correlation.time_col
+        time_arr = nw_data[time_col].to_numpy().astype(np.float64)
+        group_arr_for_corr = nw_data[group_cols[0]].to_numpy()
+        correlation.setup(group_arr_for_corr, time_arr)
+
     # --- 3. Fit (REML or ML) ---
     _fit_fn = fit_reml if method == "REML" else fit_ml
     reml = _fit_fn(
@@ -246,6 +284,7 @@ def fit(
         optimizer=optimizer,
         theta0=theta0,
         weights=weights_arr,
+        correlation=correlation,
     )
 
     # --- 4. Recover quantities at optimum ---
@@ -424,6 +463,7 @@ def fit(
         "random": random,
         "method": method,
         "optimizer": optimizer,
+        "correlation": correlation,
     }
 
     result = CrossedLMEResult(
@@ -456,6 +496,7 @@ def fit(
         _fit_kwargs=_fit_kwargs,
         _A11=reml._A11,
         _W=reml._W,
+        correlation_params=reml.correlation_params,
     )
 
     if isSingular(result):
@@ -493,5 +534,9 @@ def update(
     Returns
     -------
     CrossedLMEResult
+
+    Examples
+    --------
+    >>> result2 = interlace.update(result, ". ~ . + x2")
     """
     return result.update(formula=formula, data=data, **kwargs)

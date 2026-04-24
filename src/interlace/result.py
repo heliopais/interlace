@@ -75,6 +75,74 @@ class CrossedLMEResult:
 
     Attribute names and structure mirror statsmodels MixedLMResults so that
     this object is a drop-in replacement.
+
+    Attributes
+    ----------
+    fe_params : pd.Series
+        Fixed-effect coefficient estimates, indexed by predictor name.
+    fe_bse : pd.Series
+        Standard errors of the fixed-effect estimates.
+    fe_pvalues : pd.Series
+        Two-sided p-values for fixed-effect coefficients (t-distribution,
+        Satterthwaite degrees of freedom).
+    fe_conf_int : pd.DataFrame
+        95 % confidence intervals for fixed effects; columns ``"lower"``
+        and ``"upper"``.
+    fe_df : pd.Series
+        Satterthwaite denominator degrees of freedom for each fixed effect.
+    random_effects : dict[str, Any]
+        Predicted random intercepts (BLUPs) keyed by grouping-factor name.
+        Each value is a ``pd.Series`` (intercept-only) or ``pd.DataFrame``
+        (random slopes).
+    variance_components : dict[str, Any]
+        Estimated variance components keyed by grouping-factor name.
+    theta : np.ndarray
+        Raw Cholesky factor elements (the optimised parameter vector).
+    resid : np.ndarray
+        Conditional residuals ``y - X @ fe_params - Z @ u``.
+    fittedvalues : np.ndarray
+        Conditional fitted values ``X @ fe_params + Z @ u``.
+    scale : float
+        Residual variance estimate (``sigma^2``).
+    fe_cov : np.ndarray
+        Fixed-effects covariance matrix (``p x p``):
+        ``scale * (X' Omega^{-1} X)^{-1}``.
+    model : ModelInfo
+        Lightweight container carrying model matrices and metadata
+        (``exog``, ``endog_names``, ``groups``, ``formula``, etc.).
+    converged : bool
+        ``True`` if the optimiser reported successful convergence.
+    nobs : int
+        Number of observations used in fitting.
+    ngroups : dict[str, int]
+        Number of unique levels per grouping factor.
+    method : str
+        Estimation method used: ``"REML"`` or ``"ML"``.
+    llf : float
+        Maximised (restricted) log-likelihood at convergence.
+    aic : float
+        Akaike information criterion: ``-2 * llf + 2 * nparams``.
+    bic : float
+        Bayesian information criterion:
+        ``-2 * llf + nparams * log(nobs)``.
+    nparams : int
+        Total number of free parameters (fixed effects ``p`` + variance
+        components ``n_theta`` + residual variance ``1``).
+
+    Examples
+    --------
+    >>> import interlace, pandas as pd
+    >>> df = pd.DataFrame({
+    ...     "y": [1.0, 2.0, 3.0, 1.5, 2.5, 3.5],
+    ...     "x": [0.1, 0.2, 0.3, 0.1, 0.2, 0.3],
+    ...     "g": ["a", "a", "a", "b", "b", "b"],
+    ... })
+    >>> result = interlace.fit("y ~ x", df, groups="g")
+    >>> result.fe_params
+    Intercept    ...
+    x            ...
+    dtype: float64
+    >>> result.summary()  # doctest: +SKIP
     """
 
     # Fixed effects
@@ -129,6 +197,9 @@ class CrossedLMEResult:
     # GLS-LOO precomputed matrices (Woodbury): W = Z@Lambda (n×q), A11 = I+W'W (q×q)
     _A11: Any = field(default=None, repr=False)
     _W: Any = field(default=None, repr=False)
+
+    # Correlation structure parameters (e.g. {"rho": 0.7} for AR(1))
+    correlation_params: dict[str, float] = field(default_factory=dict)
 
     # ------------------------------------------------------------------
     # statsmodels-compatible aliases
@@ -427,28 +498,50 @@ class CrossedLMEResult:
         method: str = "profile",
         level: float = 0.95,
     ) -> Any:
-        """Confidence intervals for variance parameters.
+        """Confidence intervals for fixed-effect parameters.
 
         Parameters
         ----------
         method:
-            ``'profile'`` (default) uses profile likelihood CIs via 1D
-            Brent root-finding.  Other values raise :class:`ValueError`.
+            ``'profile'`` (default) uses profile likelihood CIs for
+            variance parameters (theta) via 1D Brent root-finding.
+            ``'wald'`` returns normal-approximation CIs for fixed effects
+            based on the estimated standard errors.
         level:
             Nominal coverage probability (default 0.95).
 
         Returns
         -------
         pd.DataFrame
-            Columns ``['estimate', lo_col, hi_col]``; rows are named after
-            the theta parameters.  See
-            :func:`~interlace.profile_ci.profile_confint` for details.
+            For ``method='profile'``: rows are theta parameters, columns
+            ``['estimate', lo_col, hi_col]``.
+            For ``method='wald'``: rows are fixed-effect names, columns
+            ``['estimate', lo_col, hi_col]``.
         """
+        import pandas as _pd
+        from scipy.stats import norm as _norm
+
         if method == "profile":
             from interlace.profile_ci import profile_confint
 
             return profile_confint(self, level=level)
-        msg = f"method={method!r} is not supported; choose 'profile'"
+        if method == "wald":
+            z = _norm.ppf((1.0 + level) / 2.0)
+            lo_pct = 100.0 * (1.0 - level) / 2.0
+            hi_pct = 100.0 - lo_pct
+            lo_col = f"{lo_pct:.1f} %"
+            hi_col = f"{hi_pct:.1f} %"
+            beta = self.fe_params.values
+            se = self.fe_bse.values
+            return _pd.DataFrame(
+                {
+                    "estimate": beta,
+                    lo_col: beta - z * se,
+                    hi_col: beta + z * se,
+                },
+                index=self.fe_params.index,
+            )
+        msg = f"method={method!r} is not supported; choose 'profile' or 'wald'"
         raise ValueError(msg)
 
     def update(
