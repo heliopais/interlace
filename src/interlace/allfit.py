@@ -23,6 +23,12 @@ class AllFitResult:
         Dict of pairwise LLF differences (for diagnostics / summary).
     _theta_diffs:
         Dict of pairwise max-relative theta differences (for diagnostics).
+
+    Examples
+    --------
+    >>> af = interlace.allFit("y ~ x", df, groups="g")
+    >>> af.converged
+    >>> print(af.summary())
     """
 
     results: dict[str, Any]
@@ -93,14 +99,33 @@ def allFit(
 
     Parameters
     ----------
-    formula, data, groups, method, random, theta0:
-        Passed through to :func:`interlace.fit` for each optimizer.
+    formula:
+        Fixed-effects formula, e.g. ``"y ~ x1 + x2"``.
+    data:
+        DataFrame (pandas, polars, or any narwhals-compatible frame).
+    groups:
+        Column name (or list of column names) for the grouping / random-effect
+        factors.
+    method:
+        Estimation method — ``"REML"`` (default) or ``"ML"``.
+    random:
+        Additional random-effects structure forwarded to
+        :func:`interlace.fit` (e.g. a list of random-slope specs).
+    theta0:
+        Optional starting values for the variance-component parameter vector.
+        When ``None``, each optimizer uses its own default starting point.
 
     Returns
     -------
     AllFitResult
         Contains per-optimizer results, convergence flags, pairwise diffs,
         and a ``possible_issue`` flag.
+
+    Examples
+    --------
+    >>> af = interlace.allFit("y ~ x", df, groups="g")
+    >>> af.possible_issue
+    False
     """
     import numpy as np
 

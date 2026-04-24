@@ -40,6 +40,27 @@ class OLSResult:
 
     Attributes match the statsmodels OLS interface so that this is a
     drop-in replacement.
+
+    Attributes
+    ----------
+    params : pd.Series
+        Estimated regression coefficients, indexed by term name.
+    resid : np.ndarray
+        Residuals ``y - X @ params``, shape ``(n,)``.
+    fittedvalues : np.ndarray
+        In-sample fitted values ``X @ params``, shape ``(n,)``.
+    normalized_cov_params : np.ndarray
+        ``(X'X)^{-1}``, shape ``(p, p)``.  Multiply by ``scale`` to obtain
+        the OLS covariance matrix.
+    model : _OLSModelInfo
+        Container for the design matrix, response vector, term names,
+        formula string, and original data frame.
+
+    Examples
+    --------
+    >>> result = interlace.ols("y ~ x", df)
+    >>> result.params
+    >>> result.hc3_bse()
     """
 
     def __init__(
@@ -129,6 +150,12 @@ def ols(formula: str, data: Any) -> OLSResult:
     -------
     OLSResult
         Drop-in replacement for statsmodels OLS results.
+
+    Examples
+    --------
+    >>> import interlace
+    >>> result = interlace.ols("y ~ x1 + x2", df)
+    >>> result.params
     """
     nw_data = nw.from_native(data, eager_only=True)
 

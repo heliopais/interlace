@@ -59,6 +59,11 @@ def isSingular(result: CrossedLMEResult, tol: float = 1e-4) -> bool:
     -------
     bool
         ``True`` if any variance component is at the boundary.
+
+    Examples
+    --------
+    >>> interlace.isSingular(result)
+    False
     """
     theta = result.theta
     theta_idx = 0

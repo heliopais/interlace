@@ -40,6 +40,11 @@ class EmmResult(pd.DataFrame):
         of fixed-effect coefficients that gives one EMM.
     _emm_specs : list[str]
         The specs factor column names.
+
+    Examples
+    --------
+    >>> emm = interlace.emmeans(result, specs="treatment")
+    >>> emm[["treatment", "estimate", "SE"]]
     """
 
     # Required by pandas to preserve subclass through operations
@@ -84,6 +89,11 @@ def emmeans(
 
         ``<specs columns>``, ``estimate``, ``SE``, ``df``,
         ``lower``, ``upper``, ``t.ratio``, ``p.value``.
+
+    Examples
+    --------
+    >>> emm = interlace.emmeans(result, specs="treatment")
+    >>> emm
     """
     import pandas as _pd
 
@@ -482,6 +492,11 @@ def contrast(
     ValueError
         If *method* is a string other than ``'pairwise'`` or ``'trt.vs.ctrl'``,
         or if *adjust* is not a recognised method.
+
+    Examples
+    --------
+    >>> emm = interlace.emmeans(result, specs="treatment")
+    >>> interlace.contrast(emm, method="pairwise")
     """
     if not isinstance(emm, EmmResult) or not hasattr(emm, "_emm_model"):
         raise TypeError(
@@ -586,5 +601,10 @@ def pairs(emm: EmmResult, adjust: str = "tukey") -> Any:
     -------
     pandas.DataFrame
         Columns: ``["contrast", "estimate", "SE", "df", "t.ratio", "p.value"]``.
+
+    Examples
+    --------
+    >>> emm = interlace.emmeans(result, specs="treatment")
+    >>> interlace.pairs(emm)
     """
     return contrast(emm, method="pairwise", adjust=adjust)

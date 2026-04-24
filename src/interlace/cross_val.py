@@ -27,6 +27,12 @@ class CVResult:
         Optional list of per-fold dicts (returned when ``return_models=True``).
         Each dict contains ``"model"`` (fitted result), ``"train_groups"``,
         ``"test_groups"``, ``"y_true"``, and ``"y_pred"``.
+
+    Examples
+    --------
+    >>> cv = interlace.cross_val("y ~ x", df, groups="g")
+    >>> cv.mean
+    >>> cv.std
     """
 
     scores: np.ndarray
@@ -97,6 +103,14 @@ def cross_val(
     Returns
     -------
     CVResult
+        Container with ``.scores`` (per-fold array), ``.mean``, and ``.std``
+        properties.  When ``return_models=True``, ``.fold_results`` holds
+        per-fold dicts with ``"model"``, ``"y_true"``, ``"y_pred"``.
+
+    Examples
+    --------
+    >>> cv = interlace.cross_val("y ~ x", df, groups="g", cv="logo")
+    >>> cv.mean
     """
     if cv not in ("logo", "kfold"):
         raise ValueError(f"cv must be 'logo' or 'kfold'; got {cv!r}")

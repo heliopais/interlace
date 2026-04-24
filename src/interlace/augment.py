@@ -26,6 +26,11 @@ def hlm_augment(model: Any, level: int = 1, include_influence: bool = True) -> A
     Returns
     -------
     Native DataFrame in the same type as the model's input data.
+
+    Examples
+    --------
+    >>> aug = interlace.hlm_augment(result)
+    >>> aug.columns  # original data + .resid + .fitted + cooksd + ...
     """
     _ = level  # reserved for future multi-level support
     res_df = hlm_resid(model, type="conditional", full_data=True)

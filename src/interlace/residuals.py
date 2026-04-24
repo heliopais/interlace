@@ -68,6 +68,11 @@ def hlm_resid(
     Returns
     -------
     Native DataFrame in the same type as the model's input data.
+
+    Examples
+    --------
+    >>> resid_df = interlace.hlm_resid(result, type="conditional")
+    >>> resid_df[[".resid", ".fitted"]].head()
     """
     native_frame = model.model.data.frame
 

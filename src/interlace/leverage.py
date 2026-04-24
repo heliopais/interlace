@@ -34,6 +34,29 @@ def crossed_structures(
     Builds the per-primary-group Z_i matrices using the full joint random-effects
     structure so that V_i = Z_i D Z_i' + σ²I is correct for random intercepts
     and slopes.
+
+    Parameters
+    ----------
+    model:
+        A fitted ``CrossedLMEResult`` object.
+
+    Returns
+    -------
+    tuple
+        ``(groups, group_labels, exog_re_li, D)`` where
+
+        - **groups** (*np.ndarray*, shape (n,)) — primary-group label for each
+          observation.
+        - **group_labels** (*list*) — sorted unique levels of the primary
+          grouping factor.
+        - **exog_re_li** (*list of np.ndarray*) — per-group Z_i design matrices
+          for random effects.
+        - **D** (*np.ndarray*) — block-diagonal covariance matrix for the joint
+          random-effects vector.
+
+    Examples
+    --------
+    >>> groups, labels, Zi_list, D = interlace.crossed_structures(result)
     """
     native_frame = model.model.data.frame
     nw_data = nw.from_native(native_frame, eager_only=True)
@@ -100,7 +123,30 @@ def crossed_structures(
 
 
 def statsmodels_structures(model: Any) -> tuple[Any, Any, Any, Any, Any]:
-    """Extract leverage structures from a statsmodels MixedLMResults object."""
+    """Extract leverage structures from a statsmodels MixedLMResults object.
+
+    Parameters
+    ----------
+    model:
+        A fitted statsmodels ``MixedLMResults`` object.
+
+    Returns
+    -------
+    tuple
+        ``(groups, group_labels, exog_re_li, D, cov_fe)`` where
+
+        - **groups** — primary-group label array for each observation.
+        - **group_labels** — sorted unique group levels.
+        - **exog_re_li** (*list of np.ndarray*) — per-group random-effects
+          design matrices.
+        - **D** (*np.ndarray*) — random-effects covariance matrix.
+        - **cov_fe** (*np.ndarray*) — fixed-effects covariance matrix
+          ``(X'Ω⁻¹X)⁻¹``.
+
+    Examples
+    --------
+    >>> groups, labels, Zi_list, D, cov_fe = interlace.statsmodels_structures(model)
+    """
     cov_fe = model.cov_params().iloc[: model.k_fe, : model.k_fe].values
     D = model.cov_re.values
     groups = model.model.groups
@@ -125,6 +171,11 @@ def leverage(model: Any, level: int = 1) -> Any:  # noqa: ARG001
     Native DataFrame (pandas, polars, …) matching the model input type.
         Columns: ``overall`` (H1+H2), ``fixef`` (H1), ``ranef`` (H2),
         ``ranef.uc`` (unconfounded H2, Nobre & Singer).
+
+    Examples
+    --------
+    >>> lev = interlace.leverage(result)
+    >>> lev["overall"].mean()
     """
     native_frame = model.model.data.frame
     X = model.model.exog

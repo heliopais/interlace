@@ -123,6 +123,11 @@ def VarCorr(result: CrossedLMEResult) -> VarCorrResult:  # noqa: N802  (match R 
         Object with an :meth:`~VarCorrResult.as_dataframe` method returning
         columns ``grp``, ``var1``, ``var2``, ``vcov``, ``sdcor`` — matching
         ``as.data.frame(VarCorr(fit))`` in R.
+
+    Examples
+    --------
+    >>> vc = interlace.VarCorr(result)
+    >>> vc.as_dataframe()
     """
     return VarCorrResult(result)
 

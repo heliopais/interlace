@@ -105,6 +105,11 @@ def quantreg_ker_se(
     ------
     ValueError
         If the bandwidth is too large for the given sample size and tau.
+
+    Examples
+    --------
+    >>> qr = interlace.quantreg("y ~ x", df, tau=0.5)
+    >>> se = interlace.quantreg_ker_se(qr.resid, qr._X, tau=0.5)
     """
     residuals = np.asarray(residuals, dtype=float)
     X = np.asarray(X, dtype=float)
@@ -162,6 +167,12 @@ class QuantRegResult:
         ``X @ beta``.
     tau : float
         Quantile level used for fitting.
+
+    Examples
+    --------
+    >>> qr = interlace.quantreg("y ~ x", df, tau=0.5)
+    >>> qr.params
+    >>> qr.ker_se()
     """
 
     def __init__(
@@ -239,6 +250,13 @@ def quantreg(formula: str, data: Any, tau: float = 0.5) -> QuantRegResult:
     Returns
     -------
     QuantRegResult
+        Contains ``.params`` (named coefficients), ``.resid``, ``.fittedvalues``,
+        and ``.tau``.  Call ``.ker_se()`` for kernel standard errors.
+
+    Examples
+    --------
+    >>> qr = interlace.quantreg("y ~ x1 + x2", df, tau=0.75)
+    >>> qr.params
     """
     nw_data = nw.from_native(data, eager_only=True)
 

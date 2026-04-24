@@ -33,6 +33,12 @@ class BootResult:
     estimates:
         Array of shape ``(B, p)`` where ``B`` is the number of bootstrap
         replicates and ``p`` is the length of the statistic vector.
+
+    Examples
+    --------
+    >>> boot = result.bootMer(B=100, seed=42)
+    >>> boot.estimates.shape  # (100, p + 1 + n_theta)
+    >>> boot.ci(level=0.95)
     """
 
     estimates: np.ndarray
@@ -104,6 +110,11 @@ def simulate(
     -------
     np.ndarray of shape ``(n, nsim)`` — each column is one simulated
     response vector.
+
+    Examples
+    --------
+    >>> y_sim = interlace.simulate(result, nsim=10, seed=42)
+    >>> y_sim.shape  # (n, 10)
     """
     from interlace.profiled_reml import make_lambda
 
@@ -209,6 +220,11 @@ def bootMer(
     -------
     BootResult
         ``.estimates`` has shape ``(B, p)``.
+
+    Examples
+    --------
+    >>> boot = interlace.bootMer(result, B=200, seed=42)
+    >>> boot.ci(level=0.95)
     """
     from interlace import fit as _fit
 

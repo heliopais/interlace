@@ -27,6 +27,16 @@ def plot_resid(resid_df: Any, type: str = "resid_vs_fitted") -> ggplot:  # noqa:
         DataFrame with ``.resid`` and ``.fitted`` columns.
     type:
         ``"resid_vs_fitted"`` or ``"qq"``.
+
+    Returns
+    -------
+    plotnine.ggplot
+        A plotnine plot object that can be displayed or saved.
+
+    Examples
+    --------
+    >>> resid_df = interlace.hlm_resid(result, type="conditional")
+    >>> interlace.plot_resid(resid_df)
     """
     if type == "resid_vs_fitted":
         return (
@@ -61,6 +71,16 @@ def plot_influence(influence_df: Any, diag: str = "cooksd") -> ggplot:
         DataFrame with at least one influence column.
     diag:
         Column to plot on the y-axis (default ``"cooksd"``).
+
+    Returns
+    -------
+    plotnine.ggplot
+        A plotnine plot object that can be displayed or saved.
+
+    Examples
+    --------
+    >>> infl = interlace.hlm_influence(result)
+    >>> interlace.plot_influence(infl, diag="cooksd")
     """
     df = influence_df.copy()
     if "index" not in df.columns:
@@ -94,6 +114,16 @@ def dotplot_diag(
     name:
         Column to use for outlier labels.  Defaults to the first non-metric
         column in *influence_df*.
+
+    Returns
+    -------
+    plotnine.ggplot
+        A plotnine plot object that can be displayed or saved.
+
+    Examples
+    --------
+    >>> infl = interlace.hlm_influence(result)
+    >>> interlace.dotplot_diag(infl, diag="cooksd", cutoff=0.5)
     """
     _metric_cols = {"cooksd", "mdffits", "covtrace", "covratio"}
     df = influence_df.copy()

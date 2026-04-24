@@ -311,6 +311,11 @@ def hlm_influence(
     Native DataFrame (pandas, polars, …) in the same type as the model input.
         Columns: ``cooksd``, ``mdffits``, ``covtrace``, ``covratio``,
         ``rvc.<name>`` for each variance component.
+
+    Examples
+    --------
+    >>> infl = interlace.hlm_influence(result)
+    >>> infl["cooksd"]
     """
     if optimizer not in ("lbfgsb", "bobyqa"):
         msg = f"optimizer must be 'lbfgsb' or 'bobyqa', got {optimizer!r}"
@@ -567,7 +572,25 @@ def hlm_influence(
 
 
 def cooks_distance(model: Any, optimizer: str = "lbfgsb") -> np.ndarray:
-    """Return Cook's distance for each observation."""
+    """Return Cook's distance for each observation.
+
+    Parameters
+    ----------
+    model:
+        A ``CrossedLMEResult`` or statsmodels ``MixedLMResults`` object.
+    optimizer:
+        Optimizer used for case-deletion refits.  See :func:`hlm_influence`.
+
+    Returns
+    -------
+    np.ndarray of shape (n,)
+        Cook's distance for each of the *n* observations.
+
+    Examples
+    --------
+    >>> cd = interlace.cooks_distance(result)
+    >>> cd.max()
+    """
     result = hlm_influence(model, level=1, optimizer=optimizer)
     # Support both pandas (.values) and polars (.to_numpy()) result frames
     col = result["cooksd"]
@@ -575,7 +598,25 @@ def cooks_distance(model: Any, optimizer: str = "lbfgsb") -> np.ndarray:
 
 
 def mdffits(model: Any, optimizer: str = "lbfgsb") -> np.ndarray:
-    """Return MDFFITS for each observation."""
+    """Return MDFFITS for each observation.
+
+    Parameters
+    ----------
+    model:
+        A ``CrossedLMEResult`` or statsmodels ``MixedLMResults`` object.
+    optimizer:
+        Optimizer used for case-deletion refits.  See :func:`hlm_influence`.
+
+    Returns
+    -------
+    np.ndarray of shape (n,)
+        MDFFITS value for each of the *n* observations.
+
+    Examples
+    --------
+    >>> mdf = interlace.mdffits(result)
+    >>> mdf.max()
+    """
     result = hlm_influence(model, level=1, optimizer=optimizer)
     col = result["mdffits"]
     return np.asarray(col.to_numpy() if hasattr(col, "to_numpy") else col.values)
@@ -604,6 +645,12 @@ def n_influential(
     Returns
     -------
     int
+        Number of observations exceeding the threshold.
+
+    Examples
+    --------
+    >>> interlace.n_influential(result)
+    >>> interlace.n_influential(result, threshold=0.1)
     """
     n = model.nobs if hasattr(model, "nobs") else model.model.nobs
     if threshold is None:
@@ -832,6 +879,11 @@ def lmer_influence_measures(
     Leverage flagging uses ``hat_overall`` (H1+H2) for single-RE models and
     ``hat_fixef`` (H1 only) for crossed multi-RE models, exactly as R does
     when HLMdiag cannot compute overall leverage for crossed random effects.
+
+    Examples
+    --------
+    >>> measures = interlace.lmer_influence_measures(result)
+    >>> measures["cooks"]
     """
     from interlace.leverage import leverage as _leverage
 
@@ -932,6 +984,10 @@ def ols_dfbetas_qr(model: Any) -> np.ndarray:
     ----------
     Belsley, Kuh & Welsch (1980). *Regression Diagnostics*. Wiley.
     R's ``stats::dfbetas.lm`` / ``stats::influence.measures``.
+
+    Examples
+    --------
+    >>> dfb = interlace.ols_dfbetas_qr(ols_result)
     """
     X = np.asarray(model.model.exog)
     e = np.asarray(model.resid)
@@ -1001,6 +1057,10 @@ def ols_influence_measures(model: Any) -> dict[str, np.ndarray]:
     ----------
     Belsley, Kuh & Welsch (1980). *Regression Diagnostics*. Wiley.
     R ``stats::influence.measures``.
+
+    Examples
+    --------
+    >>> measures = interlace.ols_influence_measures(ols_result)
     """
     X = np.asarray(model.model.exog)
     e = np.asarray(model.resid)
