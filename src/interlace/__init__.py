@@ -15,6 +15,8 @@ from interlace.allfit import AllFitResult, allFit
 from interlace.anova import anova
 from interlace.anova_type import Anova, anova_type2, anova_type3
 from interlace.augment import hlm_augment
+from interlace.clmm import CLMMResult
+from interlace.clmm import fit_clmm as clmm
 from interlace.convergence import isSingular
 from interlace.correlation import AR1, CompoundSymmetry
 from interlace.coxme import CoxmeResult
@@ -136,6 +138,9 @@ __all__ = [
     # Cox frailty
     "coxme",
     "CoxmeResult",
+    # Cumulative link mixed model
+    "clmm",
+    "CLMMResult",
 ]
 
 

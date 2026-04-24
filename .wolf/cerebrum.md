@@ -38,7 +38,12 @@
 - [2026-04-24] The full sparse Newton step for the inner Cox solve is LESS reliable than the diagonal approximation. The augmented (p+q)x(p+q) system is poorly conditioned when p << q (e.g., 2 covariates + 50 groups), causing the optimizer to converge to worse points. Stick with diagonal inner step + full-system Schur complement SEs.
 - [2026-04-24] In fit(), when a correlation structure is present, the post-estimation code MUST whiten (y, X, Z) before computing cross-products for beta/BLUPs. The optimizer's theta is defined on the whitened system; using it with raw cross-products gives wrong BLUPs (corr=0.98 vs R instead of 1.0). Residuals/fitted values use the original (unwhitened) data: resid = y - X*beta - Z*b.
 
+- [2026-04-24] CLMM (cumulative link mixed model): the design matrix X must be built WITH an intercept (`~ rhs`) then the Intercept column dropped. Using `~ 0 + rhs` gives ALL dummy levels for the first factor instead of treatment contrasts. The thresholds absorb the intercept role.
+- [2026-04-24] CLMM threshold parameterisation: use increments (alpha_1 free, alpha_k = alpha_1 + Σ exp(log_delta_j)) to enforce strict ordering during unconstrained optimization.
+- [2026-04-24] CLMM SEs MUST include theta (variance parameter) uncertainty. Conditioning on theta gives SEs that are consistently ~4-6% too narrow. The fix: numerical Hessian of the full profiled Laplace LL w.r.t. (alpha, beta, theta), then extract the (alpha, beta) block from the inverse. This gives <0.1% parity with R's ordinal::clmm.
+
 ## Decision Log
 
 <!-- Significant technical decisions with rationale. Why X was chosen over Y. -->
 - [2026-04-24] Cox frailty (coxme) uses penalized partial likelihood + Laplace IPL (matching R's coxme package), not EM or full Bayesian MCMC. Chose PPL because: (1) same algorithmic structure as GLMM PIRLS, enabling code reuse; (2) matches the R reference implementation; (3) fast convergence for shared frailty. The diagonal Hessian approximation in the inner Newton step trades some convergence speed for O(n) per-iteration cost.
+- [2026-04-24] CLMM uses a separate module (clmm.py) rather than shoehorning into GLMMFamily/glmm_laplace. Rationale: ordinal models have threshold parameters, no intercept, and different PIRLS working quantities (score/Hessian from cumulative probabilities, not mean/variance). Shares Lambda/sparse Z infrastructure from profiled_reml and the Schur complement solve pattern from glmm_laplace.
