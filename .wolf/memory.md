@@ -1,0 +1,513 @@
+# Memory
+
+> Chronological action log. Hooks and AI append to this file automatically.
+> Old sessions are consolidated by the daemon weekly.
+
+| 16:00 | Fixed BLUP/residual whitening bug in fit() for correlation structures | src/interlace/__init__.py | AR1 BLUP MAE 0.083→0.000001 | ~4000 |
+| 16:15 | Tightened AR1 parity tolerances 50x (FE 0.05→1e-4, rho 0.05→1e-4, loglik 0.1→1e-6, BLUP 0.99→0.9999) | tests/test_parity_ar1.py, tests/test_parity_cs.py | 17/17 pass | ~2000 |
+| 16:20 | Added AIC parity tests for both AR1 and CS | tests/test_parity_ar1.py, tests/test_parity_cs.py | AIC matches to 1e-6 | ~500 |
+
+| 2026-04-24 | Implemented CompoundSymmetry correlation structure | src/interlace/correlation.py, src/interlace/__init__.py, tests/test_cs.py | 11 tests pass, full check green | ~2500 |
+
+| 2026-04-24 | Implemented AR(1) residual correlation (interlace-1i5) | correlation.py, profiled_reml.py, __init__.py, result.py, test_ar1.py | 14 new tests, all 1228 pass, make check green | ~8k tok |
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|---------|
+| 2026-04-23 | Added lme4 parity tests for profile CIs (dyestuff+sleepstudy theta-scale) | tests/test_profile_ci.py, tests/fixtures/gen_profile_ci.R, tests/fixtures/lme4_profile_ci_*.json | 8 new parity tests pass, boundary case verified | ~500 |
+| 2026-04-23 | Implemented Wald CIs: confint(method='wald') for fixed effects | src/interlace/result.py | 4 new Wald CI tests pass, method dispatch updated | ~200 |
+| 2026-04-23 | Closed interlace-if9 epic: all 3 acceptance criteria met | - | 26/26 profile CI tests pass, 1214 full suite pass | ~0 |
+
+| Time | Action | Files | Outcome | ~Tokens |
+|------|--------|-------|---------|---------|
+| 2026-04-23 | Implemented HurdlePoissonFamily and all GLMM dispatch points | glmm_family.py, glmm_laplace.py, __init__.py, test_glmm_laplace.py | 18/18 tests pass, make check green (1156 passed) | ~3000 |
+
+| Time | Description | File(s) | Outcome | ~Tokens |
+|------|-------------|---------|---------|---------|
+| 2026-04-23 | Created JSS replication script (interlace-w5h.1) | paper/replication.py | All sections reproduce; 2 PDFs generated | ~800 |
+
+| Time | Description | Files | Outcome | ~Tokens |
+|------|-------------|-------|---------|---------|
+| 2026-04-22 | Fixed _clamp_mu and _glm_start to handle ZI family names | src/interlace/glmm_laplace.py | ZINB2/ZIP mu init no longer hits -inf | ~200 |
+| 2026-04-22 | Added ZINB2 GLMM integration tests (7 tests) | tests/test_glmm_laplace.py | All 1139 tests pass | ~500 |
+
+## Session: 2026-04-22 19:35
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 19:37 | Edited src/interlace/glmm_laplace.py | modified _zi_pirls_weights() | ~1089 |
+| 19:37 | Edited src/interlace/glmm_laplace.py | 15→19 lines | ~300 |
+| 19:37 | Edited src/interlace/glmm_laplace.py | 11→16 lines | ~192 |
+| 19:38 | Edited tests/test_glmm_laplace.py | modified test_converged() | ~524 |
+| 19:39 | Session end: 4 writes across 2 files (glmm_laplace.py, test_glmm_laplace.py) | 1 reads | ~17529 tok |
+| 19:40 | Implemented ZI-adjusted PIRLS weights (_zi_pirls_weights) | src/interlace/glmm_laplace.py | Intercept diff 0.34→0.047 vs glmmTMB | ~1500 |
+| 19:41 | Tightened ZINB2 integration tests to 0.10 abs tolerance | tests/test_glmm_laplace.py | All 1138 tests pass | ~300 |
+| 19:42 | Closed interlace-a4m (ZINB GLMM) | -- | Complete | ~50 |
+| 19:42 | Session end: 4 writes across 2 files (glmm_laplace.py, test_glmm_laplace.py) | 1 reads | ~17529 tok |
+| 19:44 | Edited src/interlace/glmm_laplace.py | 9→12 lines | ~148 |
+| 19:47 | Session end: 5 writes across 2 files (glmm_laplace.py, test_glmm_laplace.py) | 1 reads | ~17729 tok |
+| 19:48 | Session end: 5 writes across 2 files (glmm_laplace.py, test_glmm_laplace.py) | 1 reads | ~17729 tok |
+| 19:48 | Session end: 5 writes across 2 files (glmm_laplace.py, test_glmm_laplace.py) | 1 reads | ~17729 tok |
+| 19:50 | Session end: 5 writes across 2 files (glmm_laplace.py, test_glmm_laplace.py) | 1 reads | ~17729 tok |
+| 19:50 | Edited src/interlace/glmm_laplace.py | modified range() | ~244 |
+| 19:51 | Edited src/interlace/glmm_laplace.py | 7→10 lines | ~112 |
+| 20:00 | Edited src/interlace/glmm_laplace.py | inline fix | ~20 |
+| 20:04 | Edited src/interlace/glmm_laplace.py | inline fix | ~12 |
+| 20:05 | Edited tests/test_glmm_laplace.py | modified test_converged() | ~559 |
+| 20:06 | Session end: 10 writes across 2 files (glmm_laplace.py, test_glmm_laplace.py) | 2 reads | ~22252 tok |
+| 20:25 | Session end: 10 writes across 2 files (glmm_laplace.py, test_glmm_laplace.py) | 2 reads | ~22252 tok |
+| 20:25 | Session end: 10 writes across 2 files (glmm_laplace.py, test_glmm_laplace.py) | 2 reads | ~22252 tok |
+| 20:25 | Set up paper/ directory with JSS LaTeX template | paper/* (jss.cls, jss.bst, interlace.tex, refs.bib, etc.) | Compiles to 9-page PDF | ~3000 |
+| 20:26 | Created paper/ref.bib | — | ~2541 |
+
+## Session: 2026-04-22 20:30
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 20:31 | Created paper/interlace.tex | — | ~9298 |
+| 20:33 | Edited paper/interlace.tex | 2→2 lines | ~15 |
+| 20:33 | Edited paper/interlace.tex | 5→6 lines | ~106 |
+| 20:33 | Edited paper/interlace.tex | inline fix | ~38 |
+| 20:34 | Edited paper/interlace.tex | 4→4 lines | ~35 |
+| 20:34 | Edited paper/interlace.tex | inline fix | ~3 |
+| 20:34 | Edited paper/interlace.tex | inline fix | ~5 |
+| 20:34 | Edited paper/interlace.tex | 2→2 lines | ~14 |
+| 20:35 | Edited paper/interlace.tex | 9→8 lines | ~54 |
+| 20:35 | Edited paper/interlace.tex | inline fix | ~2 |
+| 20:35 | Edited paper/interlace.tex | inline fix | ~3 |
+| 20:35 | Edited paper/interlace.tex | inline fix | ~37 |
+| 20:35 | Edited paper/interlace.tex | 1→2 lines | ~14 |
+| 20:35 | Edited paper/interlace.tex | inline fix | ~5 |
+| 20:36 | Edited paper/interlace.tex | inline fix | ~10 |
+| 20:36 | Edited paper/interlace.tex | inline fix | ~35 |
+| 20:37 | Session end: 16 writes across 1 files (interlace.tex) | 0 reads | ~10363 tok |
+| 06:34 | Created paper/validation.py | — | ~2826 |
+| 06:35 | Edited paper/validation.py | 2→5 lines | ~70 |
+| 06:35 | Edited paper/validation.py | modified print() | ~230 |
+| 06:35 | Edited paper/validation.py | get() → float() | ~88 |
+| 06:35 | Edited paper/validation.py | get() → float() | ~84 |
+| 06:35 | Edited tests/test_lmm_weights.py | modified test_double_weight_equals_duplicated_obs() | ~475 |
+| 06:36 | Edited paper/validation.py | modified iterrows() | ~112 |
+| 06:36 | Session end: 23 writes across 3 files (interlace.tex, validation.py, test_lmm_weights.py) | 1 reads | ~14248 tok |
+| 06:36 | Edited paper/validation.py | modified _normalize_name() | ~262 |
+| 06:36 | Edited paper/validation.py | modified _lookup_re() | ~366 |
+| 06:37 | Edited paper/validation.py | 5→4 lines | ~43 |
+| 06:37 | Edited paper/validation.py | 5→4 lines | ~41 |
+| 06:37 | Edited paper/validation.py | modified max_fe_diff() | ~47 |
+| 06:37 | Edited paper/validation.py | 1→3 lines | ~52 |
+| 06:38 | Edited paper/validation.py | modified _normalize_name() | ~105 |
+| 06:39 | Session end: 30 writes across 3 files (interlace.tex, validation.py, test_lmm_weights.py) | 1 reads | ~15164 tok |
+| 09:40 | Edited paper/interlace.tex | expanded (+79 lines) | ~1575 |
+| 09:41 | Edited paper/interlace.tex | expanded (+171 lines) | ~1509 |
+| 09:41 | Session end: 32 writes across 3 files (interlace.tex, validation.py, test_lmm_weights.py) | 2 reads | ~27748 tok |
+| 09:41 | Edited paper/interlace.tex | inline fix | ~24 |
+| 09:42 | Edited paper/interlace.tex | removed 3 lines | ~6 |
+| 09:42 | Edited paper/interlace.tex | modified of() | ~578 |
+| 09:43 | Session end: 35 writes across 3 files (interlace.tex, validation.py, test_lmm_weights.py) | 2 reads | ~30894 tok |
+| 09:43 | Session end: 35 writes across 3 files (interlace.tex, validation.py, test_lmm_weights.py) | 2 reads | ~30894 tok |
+
+## Session: 2026-04-23 10:23
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 10:29 | Edited src/interlace/result.py | modified matrix() | ~817 |
+| 10:29 | Edited src/interlace/__init__.py | modified in() | ~161 |
+| 10:29 | Edited src/interlace/__init__.py | 5→9 lines | ~57 |
+| 10:29 | Edited src/interlace/glmm_laplace.py | expanded (+55 lines) | ~641 |
+| 10:29 | Edited src/interlace/glmm_laplace.py | expanded (+20 lines) | ~276 |
+| 10:29 | Edited src/interlace/ols.py | expanded (+21 lines) | ~250 |
+| 10:29 | Edited src/interlace/leverage.py | expanded (+23 lines) | ~277 |
+| 10:29 | Edited src/interlace/ols.py | expanded (+6 lines) | ~65 |
+| 10:29 | Edited src/interlace/glmm_family.py | modified V() | ~297 |
+| 10:29 | Edited src/interlace/leverage.py | expanded (+23 lines) | ~225 |
+| 10:29 | Edited src/interlace/plotting.py | expanded (+10 lines) | ~86 |
+| 10:29 | Edited src/interlace/allfit.py | expanded (+6 lines) | ~66 |
+| 10:29 | Edited src/interlace/plotting.py | expanded (+10 lines) | ~98 |
+| 10:29 | Edited src/interlace/glmm_family.py | modified V() | ~169 |
+| 10:29 | Edited src/interlace/plotting.py | expanded (+10 lines) | ~112 |
+| 10:29 | Edited src/interlace/cross_val.py | expanded (+6 lines) | ~102 |
+| 10:29 | Edited src/interlace/leverage.py | 6→11 lines | ~94 |
+| 10:29 | Edited src/interlace/emmeans.py | 3→8 lines | ~59 |
+| 10:29 | Edited src/interlace/convergence.py | 5→10 lines | ~51 |
+| 10:29 | Edited src/interlace/augment.py | 4→9 lines | ~68 |
+| 10:29 | Edited src/interlace/glmm_family.py | expanded (+9 lines) | ~110 |
+| 10:29 | Edited src/interlace/influence.py | 6→11 lines | ~94 |
+| 10:29 | Edited src/interlace/residuals.py | 4→9 lines | ~68 |
+| 10:29 | Edited src/interlace/glmm_family.py | expanded (+7 lines) | ~101 |
+| 10:29 | Edited src/interlace/quantreg.py | 13→18 lines | ~144 |
+| 10:29 | Edited src/interlace/influence.py | modified cooks_distance() | ~155 |
+| 10:29 | Edited src/interlace/allfit.py | expanded (+19 lines) | ~270 |
+| 10:29 | Edited src/interlace/cross_val.py | expanded (+8 lines) | ~108 |
+| 10:29 | Edited src/interlace/glmm_family.py | expanded (+8 lines) | ~88 |
+| 10:29 | Edited src/interlace/quantreg.py | expanded (+6 lines) | ~53 |
+| 10:29 | Edited src/interlace/influence.py | modified mdffits() | ~149 |
+| 10:29 | Edited src/interlace/emmeans.py | 8→13 lines | ~95 |
+| 10:29 | Edited src/interlace/quantreg.py | expanded (+7 lines) | ~88 |
+| 10:29 | Edited src/interlace/glmm_family.py | expanded (+7 lines) | ~98 |
+| 10:29 | Edited src/interlace/influence.py | expanded (+6 lines) | ~82 |
+| 10:29 | Edited src/interlace/simulate.py | modified ci() | ~56 |
+| 10:29 | Edited src/interlace/emmeans.py | 6→11 lines | ~90 |
+| 10:30 | Edited src/interlace/emmeans.py | 6→11 lines | ~88 |
+| 10:30 | Edited src/interlace/simulate.py | removed 9 lines | ~11 |
+| 10:30 | Edited src/interlace/simulate.py | expanded (+6 lines) | ~100 |
+| 10:30 | Edited src/interlace/influence.py | 5→10 lines | ~116 |
+| 10:30 | Edited src/interlace/simulate.py | 5→10 lines | ~69 |
+| 10:30 | Edited src/interlace/simulate.py | 5→10 lines | ~58 |
+| 10:30 | Edited src/interlace/influence.py | 6→10 lines | ~80 |
+| 10:30 | Edited src/interlace/summary.py | 7→12 lines | ~97 |
+| 10:30 | Edited src/interlace/influence.py | 10→14 lines | ~111 |
+| 10:32 | Session end: 46 writes across 17 files (result.py, __init__.py, glmm_laplace.py, ols.py, leverage.py) | 19 reads | ~33904 tok |
+
+## Session: 2026-04-23 11:29
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 12:43 | Edited paper/refs.bib | inline fix | ~20 |
+| 12:43 | Edited paper/refs.bib | inline fix | ~20 |
+| 12:43 | Edited paper/refs.bib | inline fix | ~24 |
+| 12:43 | Edited paper/refs.bib | inline fix | ~18 |
+| 12:44 | Edited paper/interlace.tex | inline fix | ~8 |
+| 12:44 | Session end: 5 writes across 2 files (refs.bib, interlace.tex) | 2 reads | ~12371 tok |
+| 13:51 | Session end: 5 writes across 2 files (refs.bib, interlace.tex) | 2 reads | ~12371 tok |
+| 13:55 | Edited paper/interlace.tex | 22→24 lines | ~395 |
+| 13:55 | Edited paper/interlace.tex | 5→6 lines | ~31 |
+| 13:55 | Edited paper/interlace.tex | 5→6 lines | ~43 |
+| 13:56 | Edited paper/interlace.tex | 6→6 lines | ~99 |
+| 13:56 | Edited paper/interlace.tex | 8→8 lines | ~132 |
+| 13:56 | Edited paper/interlace.tex | 3→3 lines | ~52 |
+| 13:57 | Edited paper/interlace.tex | 7→10 lines | ~130 |
+| 13:57 | Edited paper/interlace.tex | 3→3 lines | ~48 |
+| 13:57 | Edited paper/interlace.tex | 4→4 lines | ~54 |
+| 13:58 | Edited paper/interlace.tex | 3→3 lines | ~43 |
+| 13:58 | Edited paper/interlace.tex | 10→13 lines | ~143 |
+| 13:58 | Session end: 16 writes across 2 files (refs.bib, interlace.tex) | 2 reads | ~13625 tok |
+| 14:04 | Session end: 16 writes across 2 files (refs.bib, interlace.tex) | 2 reads | ~13625 tok |
+
+## Session: 2026-04-23 14:04
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 14:14 | Created paper/replication.py | — | ~3987 |
+| 14:16 | Edited paper/replication.py | anova() → anova_type3() | ~71 |
+| 14:17 | Edited paper/replication.py | 10→13 lines | ~178 |
+| 14:17 | Edited paper/replication.py | expanded (+16 lines) | ~392 |
+| 14:19 | Session end: 4 writes across 1 files (replication.py) | 12 reads | ~40038 tok |
+| 14:23 | Edited paper/interlace.tex | 8→8 lines | ~52 |
+| 14:23 | Edited paper/interlace.tex | 14 → 2 | ~9 |
+| 14:23 | Edited paper/interlace.tex | 2→4 lines | ~61 |
+| 14:23 | Edited paper/interlace.tex | anova() → anova_type3() | ~120 |
+| 14:24 | Edited paper/replication.py | 3→3 lines | ~56 |
+| 14:24 | Edited paper/replication.py | 14 → 2 | ~8 |
+| 14:24 | Edited paper/replication.py | "    Days: Sum Sq=30031.17" → "    Days: df1=1, df2=18.7" | ~17 |
+| 14:24 | Session end: 11 writes across 2 files (replication.py, interlace.tex) | 12 reads | ~40379 tok |
+
+## Session: 2026-04-23 15:54
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-04-23 15:57
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 16:25 | Edited paper/replication.py | "Manuscript tolerances: FE" → "Manuscript tolerances: LM" | ~25 |
+| 16:25 | Edited pyproject.toml | 2→3 lines | ~24 |
+| 16:25 | Session end: 2 writes across 2 files (replication.py, pyproject.toml) | 3 reads | ~17341 tok |
+
+## Session: 2026-04-23 16:26
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-04-23 16:52
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 16:53 | Edited ../../../.claude/CLAUDE.md | expanded (+57 lines) | ~494 |
+| 16:54 | Session end: 1 writes across 1 files (CLAUDE.md) | 2 reads | ~5526 tok |
+| 16:54 | Edited tests/test_glmm_laplace.py | modified test_result_has_family() | ~2396 |
+| 16:54 | Edited src/interlace/glmm_family.py | modified __init__() | ~641 |
+| 16:54 | Edited src/interlace/glmm_family.py | 22→24 lines | ~198 |
+| 16:55 | Edited src/interlace/glmm_laplace.py | 6→7 lines | ~42 |
+| 16:55 | Edited src/interlace/glmm_laplace.py | modified in() | ~65 |
+| 16:55 | Edited src/interlace/glmm_laplace.py | expanded (+24 lines) | ~279 |
+| 16:55 | Edited src/interlace/glmm_laplace.py | modified in() | ~60 |
+| 16:55 | Edited src/interlace/glmm_laplace.py | 1→3 lines | ~31 |
+| 16:55 | Edited src/interlace/glmm_laplace.py | modified isinstance() | ~71 |
+| 16:56 | Edited src/interlace/glmm_laplace.py | modified isinstance() | ~591 |
+| 16:56 | Edited src/interlace/__init__.py | 8→9 lines | ~61 |
+| 16:56 | Edited src/interlace/__init__.py | 2→3 lines | ~18 |
+| 16:56 | Edited tests/test_glmm_laplace.py | modified test_loglik_pi_zero_is_truncated_poisson() | ~34 |
+| 16:58 | Session end: 14 writes across 5 files (CLAUDE.md, test_glmm_laplace.py, glmm_family.py, glmm_laplace.py, __init__.py) | 3 reads | ~26990 tok |
+
+## Session: 2026-04-23 17:04
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 17:09 | Edited tests/test_glmm_laplace.py | modified _simulate_gamma_glmm() | ~2671 |
+| 17:10 | Edited src/interlace/glmm_family.py | modified is() | ~660 |
+| 17:11 | Edited src/interlace/glmm_family.py | 24→26 lines | ~212 |
+| 17:11 | Edited src/interlace/glmm_laplace.py | modified in() | ~74 |
+| 17:11 | Edited src/interlace/glmm_laplace.py | modified in() | ~74 |
+| 17:11 | Edited src/interlace/glmm_laplace.py | expanded (+16 lines) | ~203 |
+| 17:11 | Edited src/interlace/__init__.py | 9→10 lines | ~66 |
+| 17:11 | Edited src/interlace/__init__.py | 2→3 lines | ~20 |
+| 17:11 | Edited src/interlace/glmm_family.py | 2→3 lines | ~48 |
+| 17:12 | Edited src/interlace/glmm_family.py | 3→3 lines | ~37 |
+| 17:12 | Edited tests/test_glmm_laplace.py | modified test_inverse_link_converges() | ~285 |
+| 17:14 | Edited tests/test_glmer_api.py | "gamma" → "tweedie" | ~10 |
+| 17:14 | Edited tests/test_glmm_family.py | "gamma" → "tweedie" | ~11 |
+| 17:16 | Session end: 13 writes across 6 files (test_glmm_laplace.py, glmm_family.py, glmm_laplace.py, __init__.py, test_glmer_api.py) | 6 reads | ~38033 tok |
+| 18:24 | Session end: 13 writes across 6 files (test_glmm_laplace.py, glmm_family.py, glmm_laplace.py, __init__.py, test_glmer_api.py) | 6 reads | ~38033 tok |
+| 18:25 | Session end: 13 writes across 6 files (test_glmm_laplace.py, glmm_family.py, glmm_laplace.py, __init__.py, test_glmer_api.py) | 6 reads | ~38033 tok |
+| 20:58 | Edited tests/test_glmm_laplace.py | modified _simulate_nb1_glmm() | ~2670 |
+| 20:59 | Edited src/interlace/glmm_family.py | modified __init__() | ~908 |
+| 21:00 | Edited src/interlace/glmm_family.py | modified dev_resids() | ~328 |
+| 21:00 | Edited src/interlace/glmm_family.py | 25→27 lines | ~231 |
+| 21:00 | Edited src/interlace/glmm_laplace.py | modified in() | ~82 |
+| 21:00 | Edited src/interlace/glmm_laplace.py | modified in() | ~83 |
+| 21:01 | Edited src/interlace/glmm_laplace.py | expanded (+18 lines) | ~235 |
+| 21:01 | Edited src/interlace/__init__.py | 10→11 lines | ~74 |
+| 21:01 | Edited src/interlace/__init__.py | 2→3 lines | ~23 |
+| 21:02 | Edited tests/test_glmm_laplace.py | modified test_dev_resids_finite() | ~169 |
+| 21:04 | Session end: 23 writes across 6 files (test_glmm_laplace.py, glmm_family.py, glmm_laplace.py, __init__.py, test_glmer_api.py) | 6 reads | ~46507 tok |
+
+## Session: 2026-04-23 21:05
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 21:08 | Created tests/fixtures/gen_profile_ci.R | — | ~795 |
+| 21:11 | Created tests/fixtures/gen_profile_ci.R | — | ~1161 |
+| 21:12 | Created tests/fixtures/gen_profile_ci.R | — | ~1018 |
+| 21:14 | Edited tests/test_profile_ci.py | modified test_confint_default_is_profile() | ~2062 |
+| 21:14 | Edited src/interlace/result.py | modified confint() | ~504 |
+| 21:16 | Edited tests/test_profile_ci.py | modified test_sleepstudy_theta1_boundary() | ~136 |
+| 21:16 | Edited tests/test_profile_ci.py | 6→11 lines | ~125 |
+| 21:17 | Session end: 7 writes across 3 files (gen_profile_ci.R, test_profile_ci.py, result.py) | 8 reads | ~16477 tok |
+
+## Session: 2026-04-24 07:02
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 07:24 | Created tests/test_ar1.py | — | ~3040 |
+| 07:24 | Created src/interlace/correlation.py | — | ~2541 |
+| 07:25 | Edited src/interlace/profiled_reml.py | added 1 import(s) | ~106 |
+| 07:25 | Edited src/interlace/profiled_reml.py | 16→17 lines | ~167 |
+| 07:26 | Edited src/interlace/profiled_reml.py | modified fit_reml() | ~2290 |
+| 07:27 | Edited src/interlace/profiled_reml.py | modified _fit_reml_with_correlation() | ~1826 |
+| 07:27 | Edited src/interlace/profiled_reml.py | modified fit_ml() | ~102 |
+| 07:27 | Edited src/interlace/profiled_reml.py | expanded (+9 lines) | ~143 |
+| 07:28 | Edited src/interlace/profiled_reml.py | modified _fit_ml_with_correlation() | ~1485 |
+| 07:28 | Edited src/interlace/__init__.py | modified fit() | ~101 |
+| 07:28 | Edited src/interlace/__init__.py | modified isinstance() | ~277 |
+| 07:29 | Edited src/interlace/result.py | modified matrices() | ~92 |
+| 07:29 | Edited src/interlace/__init__.py | 3→4 lines | ~29 |
+| 07:29 | Edited src/interlace/__init__.py | 8→9 lines | ~68 |
+| 07:29 | Edited src/interlace/__init__.py | added 1 import(s) | ~24 |
+| 07:29 | Edited src/interlace/__init__.py | 2→4 lines | ~20 |
+| 07:29 | Edited tests/test_ar1.py | arange() → setup() | ~104 |
+| 07:29 | Edited src/interlace/correlation.py | inline fix | ~24 |
+| 07:31 | Edited src/interlace/correlation.py | modified n_corr_params() | ~89 |
+| 07:32 | Edited src/interlace/__init__.py | inline fix | ~12 |
+| 07:34 | Session end: 20 writes across 5 files (test_ar1.py, correlation.py, profiled_reml.py, __init__.py, result.py) | 4 reads | ~38056 tok |
+| 07:36 | Session end: 20 writes across 5 files (test_ar1.py, correlation.py, profiled_reml.py, __init__.py, result.py) | 4 reads | ~38056 tok |
+| 08:02 | Session end: 20 writes across 5 files (test_ar1.py, correlation.py, profiled_reml.py, __init__.py, result.py) | 4 reads | ~38056 tok |
+
+## Session: 2026-04-24 08:06
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 08:08 | Created tests/test_cs.py | — | ~2542 |
+| 08:09 | Edited src/interlace/correlation.py | modified __init__() | ~1275 |
+| 08:09 | Edited src/interlace/__init__.py | inline fix | ~16 |
+| 08:09 | Edited src/interlace/__init__.py | 3→4 lines | ~19 |
+| 08:10 | Edited tests/test_cs.py | modified test_whiten_recovers_identity_covariance() | ~416 |
+| 08:11 | Edited tests/test_cs.py | modified test_cs_aic_close_to_iid() | ~263 |
+| 08:12 | Edited src/interlace/correlation.py | modified log_det_R() | ~160 |
+| 08:12 | Edited src/interlace/correlation.py | modified unconstrained_bounds() | ~319 |
+| 08:13 | Edited src/interlace/profiled_reml.py | modified obj_bounded() | ~357 |
+| 08:13 | Edited src/interlace/profiled_reml.py | 3→4 lines | ~52 |
+| 08:13 | Edited tests/test_cs.py | modified test_cs_on_iid_data_rho_near_zero() | ~206 |
+| 08:15 | Session end: 11 writes across 4 files (test_cs.py, correlation.py, __init__.py, profiled_reml.py) | 4 reads | ~31732 tok |
+| 08:53 | Session end: 11 writes across 4 files (test_cs.py, correlation.py, __init__.py, profiled_reml.py) | 5 reads | ~31732 tok |
+| 08:57 | Session end: 11 writes across 4 files (test_cs.py, correlation.py, __init__.py, profiled_reml.py) | 5 reads | ~31732 tok |
+
+## Session: 2026-04-24 09:00
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 09:17 | Created tests/test_coxme.py | — | ~3256 |
+| 09:20 | Created src/interlace/coxme.py | — | ~8763 |
+| 09:20 | Edited src/interlace/__init__.py | added 2 import(s) | ~38 |
+| 09:20 | Edited src/interlace/__init__.py | 4→7 lines | ~33 |
+| 09:23 | Edited src/interlace/coxme.py | 3→6 lines | ~120 |
+| 09:27 | Edited src/interlace/coxme.py | 1→4 lines | ~29 |
+| 09:27 | Edited src/interlace/coxme.py | removed 42 lines | ~71 |
+| 09:27 | Edited src/interlace/coxme.py | modified range() | ~353 |
+| 09:28 | Edited src/interlace/coxme.py | modified _build_sigma_inv_diag() | ~505 |
+| 09:28 | Edited src/interlace/coxme.py | reduced (-25 lines) | ~143 |
+| 09:28 | Edited src/interlace/coxme.py | 3→1 lines | ~23 |
+| 09:28 | Edited src/interlace/coxme.py | 8→9 lines | ~67 |
+| 09:29 | Edited src/interlace/coxme.py | 17→20 lines | ~148 |
+| 09:29 | Edited src/interlace/coxme.py | 3→3 lines | ~35 |
+| 09:29 | Edited src/interlace/coxme.py | 4→4 lines | ~42 |
+| 09:29 | Edited src/interlace/coxme.py | inline fix | ~10 |
+| 09:33 | Session end: 16 writes across 3 files (test_coxme.py, coxme.py, __init__.py) | 4 reads | ~43812 tok |
+| 09:38 | Created tests/_diag_coxme.py | — | ~559 |
+| 09:40 | Edited src/interlace/coxme.py | modified _build_sigma_inv() | ~1995 |
+| 09:40 | Edited src/interlace/coxme.py | 1→5 lines | ~30 |
+| 09:41 | Edited src/interlace/coxme.py | expanded (+16 lines) | ~336 |
+| 09:41 | Edited src/interlace/coxme.py | 8→8 lines | ~75 |
+| 09:46 | Edited src/interlace/coxme.py | modified _build_sigma_inv() | ~2177 |
+| 09:46 | Edited src/interlace/coxme.py | 40→40 lines | ~324 |
+| 09:49 | Edited src/interlace/coxme.py | modified objective() | ~369 |
+| 09:49 | Edited src/interlace/coxme.py | inline fix | ~11 |
+| 09:51 | Edited tests/test_coxme.py | test_frailty_variance_close() → test_frailty_variance_recovers_order_of_magnitude() | ~308 |
+| 09:57 | Edited src/interlace/coxme.py | 2→1 lines | ~10 |
+| 10:00 | Session end: 27 writes across 4 files (test_coxme.py, coxme.py, __init__.py, _diag_coxme.py) | 5 reads | ~64750 tok |
+| 10:09 | Session end: 27 writes across 4 files (test_coxme.py, coxme.py, __init__.py, _diag_coxme.py) | 5 reads | ~64750 tok |
+| 10:11 | Session end: 27 writes across 4 files (test_coxme.py, coxme.py, __init__.py, _diag_coxme.py) | 5 reads | ~64750 tok |
+| 10:42 | Session end: 27 writes across 4 files (test_coxme.py, coxme.py, __init__.py, _diag_coxme.py) | 5 reads | ~64750 tok |
+| 10:43 | Session end: 27 writes across 4 files (test_coxme.py, coxme.py, __init__.py, _diag_coxme.py) | 6 reads | ~64750 tok |
+| 10:46 | Session end: 27 writes across 4 files (test_coxme.py, coxme.py, __init__.py, _diag_coxme.py) | 6 reads | ~64750 tok |
+
+## Session: 2026-04-24 10:53
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 11:14 | Created tests/fixtures/gen_ar1_parity.R | — | ~710 |
+| 11:15 | Created tests/fixtures/gen_cs_parity.R | — | ~714 |
+| 11:18 | Created tests/fixtures/gen_cs_parity.R | — | ~1108 |
+| 11:19 | Created tests/test_parity_ar1.py | — | ~1122 |
+| 11:19 | Created tests/test_parity_cs.py | — | ~1478 |
+| 11:21 | Created tests/test_parity_ar1.py | — | ~1211 |
+| 11:22 | Created tests/test_parity_cs.py | — | ~1470 |
+
+## Session: 2026-04-24 11:31
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-04-24 11:31
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-04-24 11:39
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 11:46 | Edited src/interlace/__init__.py | expanded (+19 lines) | ~256 |
+| 11:46 | Edited src/interlace/__init__.py | expanded (+7 lines) | ~193 |
+| 11:51 | Created tests/test_parity_ar1.py | — | ~1387 |
+| 11:52 | Created tests/test_parity_cs.py | — | ~1691 |
+
+## Session: 2026-04-24 11:52
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 11:53 | Edited src/interlace/__init__.py | 3→5 lines | ~41 |
+| 11:53 | Edited src/interlace/__init__.py | 19→19 lines | ~228 |
+| 11:54 | Session end: 2 writes across 1 files (__init__.py) | 1 reads | ~5699 tok |
+| 11:56 | Session end: 2 writes across 1 files (__init__.py) | 1 reads | ~5699 tok |
+| 12:04 | Session end: 2 writes across 1 files (__init__.py) | 1 reads | ~5699 tok |
+| 12:05 | Session end: 2 writes across 1 files (__init__.py) | 3 reads | ~30609 tok |
+| 12:06 | Session end: 2 writes across 1 files (__init__.py) | 3 reads | ~30611 tok |
+| 12:09 | Created tests/fixtures/gen_clmm_parity.R | — | ~866 |
+| 12:10 | Created tests/test_clmm.py | — | ~2081 |
+| 12:14 | Created src/interlace/clmm.py | — | ~10487 |
+| 12:14 | Edited src/interlace/__init__.py | added 2 import(s) | ~48 |
+| 12:14 | Edited src/interlace/__init__.py | 4→7 lines | ~33 |
+| 12:20 | Edited src/interlace/clmm.py | 4→4 lines | ~58 |
+| 12:20 | Edited src/interlace/clmm.py | 2→2 lines | ~22 |
+| 12:21 | Edited src/interlace/clmm.py | expanded (+6 lines) | ~146 |
+| 12:22 | Edited tests/test_clmm.py | modified test_fixed_effects() | ~264 |
+| 12:22 | Edited tests/test_clmm.py | modified test_fixed_effects() | ~109 |
+| 12:23 | Edited src/interlace/clmm.py | modified _neg_ll_joint() | ~831 |
+| 12:23 | Edited src/interlace/clmm.py | 2→2 lines | ~25 |
+| 12:24 | Edited tests/test_clmm.py | modified test_threshold_se() | ~173 |
+| 12:24 | Edited tests/test_clmm.py | modified test_blups_correlation() | ~168 |
+| 12:25 | Edited src/interlace/clmm.py | 4→3 lines | ~30 |
+| 12:25 | Edited src/interlace/clmm.py | 4→3 lines | ~24 |
+| 12:25 | Edited src/interlace/clmm.py | 5→3 lines | ~32 |
+| 12:25 | Edited src/interlace/clmm.py | 2→2 lines | ~31 |
+| 12:25 | Edited tests/test_clmm.py | inline fix | ~23 |
+| 12:25 | Edited tests/test_clmm.py | "Threshold SE {name}: pyth" → "Threshold SE {name}: py={" | ~25 |
+| 12:26 | Edited src/interlace/clmm.py | 2→1 lines | ~10 |
+| 12:26 | Edited src/interlace/clmm.py | inline fix | ~3 |
+| 12:26 | Edited src/interlace/clmm.py | modified _cloglog_cdf() | ~180 |
+| 12:26 | Edited src/interlace/clmm.py | inline fix | ~6 |
+| 12:27 | Edited src/interlace/clmm.py | inline fix | ~8 |
+| 12:27 | Edited src/interlace/clmm.py | modified _probit_pdf() | ~79 |
+| 12:32 | Session end: 28 writes across 4 files (__init__.py, gen_clmm_parity.R, test_clmm.py, clmm.py) | 9 reads | ~58400 tok |
+| 12:35 | Edited src/interlace/clmm.py | modified _neg_ll_natural() | ~900 |
+| 12:39 | Edited src/interlace/clmm.py | modified j() | ~1799 |
+| 12:40 | Edited src/interlace/clmm.py | modified _neg_ll_full() | ~1001 |
+| 12:41 | Edited tests/test_clmm.py | modified test_fixed_effect_se() | ~259 |
+| 12:43 | Session end: 32 writes across 4 files (__init__.py, gen_clmm_parity.R, test_clmm.py, clmm.py) | 9 reads | ~62452 tok |
+| 13:11 | Session end: 32 writes across 4 files (__init__.py, gen_clmm_parity.R, test_clmm.py, clmm.py) | 10 reads | ~62452 tok |
+| 13:12 | Session end: 32 writes across 4 files (__init__.py, gen_clmm_parity.R, test_clmm.py, clmm.py) | 10 reads | ~62452 tok |
+| 13:13 | Session end: 32 writes across 4 files (__init__.py, gen_clmm_parity.R, test_clmm.py, clmm.py) | 10 reads | ~62452 tok |
+
+## Session: 2026-04-24 13:17
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 13:25 | Edited tests/test_clmm.py | modified test_bad_link_raises() | ~2051 |
+| 13:26 | Edited src/interlace/clmm.py | modified name() | ~1500 |
+| 13:26 | Edited src/interlace/clmm.py | 17→18 lines | ~144 |
+| 13:27 | Edited src/interlace/clmm.py | inline fix | ~25 |
+| 13:27 | Edited src/interlace/clmm.py | 2→2 lines | ~37 |
+| 13:30 | Added predict() and confint() to CLMMResult, verified crossed RE | src/interlace/clmm.py, tests/test_clmm.py | 35/35 pass, CI green | ~2k tok |
+| 13:30 | Session end: 5 writes across 2 files (test_clmm.py, clmm.py) | 4 reads | ~18928 tok |
+| 13:32 | Session end: 5 writes across 2 files (test_clmm.py, clmm.py) | 4 reads | ~18928 tok |
+
+## Session: 2026-04-24 13:33
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 13:48 | Created tests/test_kr_vcov.py | — | ~3196 |
+| 13:49 | Created src/interlace/kr_vcov.py | — | ~1596 |
+| 13:49 | Edited tests/test_kr_vcov.py | inline fix | ~21 |
+| 13:49 | Edited tests/test_kr_vcov.py | modified _dC_i_at() | ~113 |
+| 13:53 | Session end: 4 writes across 2 files (test_kr_vcov.py, kr_vcov.py) | 5 reads | ~28292 tok |
+| 13:58 | Created tests/fixtures/gen_kr_parity.R | — | ~965 |
+| 14:01 | Created tests/test_kr_parity.py | — | ~2399 |
+| 14:02 | Edited tests/test_kr_parity.py | modified test_full_kr_adjustment_matches_r() | ~349 |
+| 14:03 | Edited tests/test_kr_parity.py | modified test_r_kr_reference_stored() | ~226 |
+| 14:07 | Session end: 8 writes across 4 files (test_kr_vcov.py, kr_vcov.py, gen_kr_parity.R, test_kr_parity.py) | 6 reads | ~33318 tok |
+| 14:35 | Session end: 8 writes across 4 files (test_kr_vcov.py, kr_vcov.py, gen_kr_parity.R, test_kr_parity.py) | 6 reads | ~33318 tok |
+
+## Session: 2026-04-24 14:48
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 15:12 | Created tests/test_kenward_roger.py | — | ~1411 |
+| 15:18 | Created src/interlace/kenward_roger.py | — | ~2315 |
+| 15:27 | Created src/interlace/kenward_roger.py | — | ~1919 |
+| 15:28 | Edited tests/test_kenward_roger.py | modified test_kr_vcov_adj_matches_r() | ~259 |
+| 15:28 | Edited tests/test_kenward_roger.py | modified test_kr_vcov_adj_matches_r() | ~259 |
+| 15:28 | Edited tests/test_kenward_roger.py | modified test_c_adj_symmetric() | ~421 |
+| 15:31 | Edited src/interlace/kenward_roger.py | added 1 condition(s) | ~76 |
+
+## Session 2026-04-24 — Kenward-Roger DFs (interlace-sbo)
+
+| Time | Action | Files | Outcome | ~Tokens |
+|------|--------|-------|---------|---------|
+| 14:00 | Read kr_vcov.py, satterthwaite.py, test_kr_parity.py, gen_kr_parity.R, result.py, fixtures | src/interlace/kr_vcov.py, satterthwaite.py, tests/ | Understood existing KR derivatives + Satterthwaite code | ~3000 |
+| 14:15 | Wrote failing test test_kenward_roger.py | tests/test_kenward_roger.py | 11 tests targeting R parity | ~800 |
+| 14:20 | First impl: KR bias correction via dC C⁻¹ dC in vc param | src/interlace/kenward_roger.py | Bias correction 10,000x too large | ~1500 |
+| 14:30 | Debugged: bias correction formula wrong (X'PV_rPX = 0) | — | Understood KR correction is ~zero for moderate samples | ~2000 |
+| 14:35 | Tried full KR moment-matching formula (rho, m) | — | Gives wrong DFs for q=1 (6.4 vs 14) | ~1000 |
+| 14:40 | Discovery: KR DFs = Satterthwaite in un-profiled vc param | — | ν = 2C²/(g'Wg) matches R within 0.1% | ~1500 |
+| 14:45 | Final impl: vc-parameterized Satterthwaite + C_adj = C | src/interlace/kenward_roger.py | All 11 tests pass at 1% tolerance | ~1200 |
+| 14:50 | Tightened tolerances, added KR≠Satt test, fixed mypy | tests/test_kenward_roger.py, kenward_roger.py | make check: 1357 passed, 0 failed | ~500 |
+| 15:36 | Session end: 7 writes across 2 files (test_kenward_roger.py, kenward_roger.py) | 8 reads | ~35036 tok |
+| 15:39 | Created tests/test_kr_api.py | — | ~1050 |
+| 15:39 | Edited src/interlace/result.py | 2→5 lines | ~72 |
+| 15:39 | Edited src/interlace/__init__.py | 2→3 lines | ~28 |
+| 15:39 | Edited src/interlace/__init__.py | modified in() | ~94 |
+| 15:39 | Edited src/interlace/__init__.py | expanded (+8 lines) | ~131 |
+| 15:39 | Edited src/interlace/__init__.py | 3→4 lines | ~30 |
+| 15:39 | Edited src/interlace/__init__.py | 2→3 lines | ~25 |
+| 15:43 | Session end: 14 writes across 5 files (test_kenward_roger.py, kenward_roger.py, test_kr_api.py, result.py, __init__.py) | 10 reads | ~44728 tok |
+| 16:01 | Session end: 14 writes across 5 files (test_kenward_roger.py, kenward_roger.py, test_kr_api.py, result.py, __init__.py) | 10 reads | ~44728 tok |

@@ -201,6 +201,9 @@ class CrossedLMEResult:
     # Correlation structure parameters (e.g. {"rho": 0.7} for AR(1))
     correlation_params: dict[str, float] = field(default_factory=dict)
 
+    # DF method used for inference ("satterthwaite" or "kenward-roger")
+    df_method: str = "satterthwaite"
+
     # ------------------------------------------------------------------
     # statsmodels-compatible aliases
     # ------------------------------------------------------------------

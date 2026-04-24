@@ -155,6 +155,7 @@ def fit(
     weights: np.ndarray | None = None,
     offset: np.ndarray | None = None,
     correlation: Any | None = None,
+    df_method: str = "satterthwaite",
 ) -> CrossedLMEResult:
     """Fit a linear mixed model with crossed random effects via profiled REML.
 
@@ -222,6 +223,11 @@ def fit(
     """
     if method not in ("REML", "ML"):
         raise ValueError(f"method must be 'REML' or 'ML'; got '{method}'")
+    _valid_df_methods = ("satterthwaite", "kenward-roger")
+    if df_method not in _valid_df_methods:
+        raise ValueError(
+            f"df_method must be one of {_valid_df_methods}; got '{df_method}'"
+        )
     if random is None and groups is None:
         raise ValueError("Either 'groups' or 'random' must be provided.")
 
@@ -409,7 +415,15 @@ def fit(
         _n_levels=n_levels_list,
     )
 
-    fe_df_arr = satterthwaite_dfs(_partial_result)
+    if df_method == "kenward-roger":
+        from interlace.kenward_roger import kenward_roger as _kr
+
+        _C_adj, fe_df_arr = _kr(_partial_result)
+        fe_cov = _C_adj
+        fe_bse_arr = np.sqrt(np.diag(_C_adj))
+        fe_bse = _pd.Series(fe_bse_arr, index=term_names)
+    else:
+        fe_df_arr = satterthwaite_dfs(_partial_result)
     t_scores = beta / fe_bse_arr
     fe_pvalues_arr = 2.0 * (1.0 - stats.t.cdf(np.abs(t_scores), df=fe_df_arr))
 
@@ -501,6 +515,7 @@ def fit(
         "method": method,
         "optimizer": optimizer,
         "correlation": correlation,
+        "df_method": df_method,
     }
 
     result = CrossedLMEResult(
@@ -534,6 +549,7 @@ def fit(
         _A11=reml._A11,
         _W=reml._W,
         correlation_params=reml.correlation_params,
+        df_method=df_method,
     )
 
     if isSingular(result):

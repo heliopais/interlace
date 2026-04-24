@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-04-24T12:03:41.120Z
-> Files: 691 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-04-24T13:39:42.489Z
+> Files: 694 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ../../../.claude/
 
@@ -790,7 +790,7 @@
 
 ## src/interlace/
 
-- `__init__.py` — interlace: REML estimation for linear mixed models with crossed random intercepts. (~5473 tok)
+- `__init__.py` — interlace: REML estimation for linear mixed models with crossed random intercepts. (~5648 tok)
 - `allfit.py` — allFit(): refit a model with all available optimizers and compare convergence. (~1726 tok)
 - `augment.py` — Combined residuals + influence diagnostics DataFrame. (~458 tok)
 - `clmm.py` — Cumulative link mixed model (CLMM) — proportional odds with random effects. Includes predict() and confint(). (~12500 tok)
@@ -802,6 +802,7 @@
 - `glmm_family.py` — GLMMFamily protocol and concrete family implementations for GLMM support. (~7529 tok)
 - `glmm_laplace.py` — GLMM estimation via Laplace approximation (PIRLS). (~17381 tok)
 - `influence.py` — Influence diagnostics for fitted linear mixed models via exact deletion. (~11777 tok)
+- `kenward_roger.py` — KR-adjusted covariance and DFs via Satterthwaite in un-profiled vc parameterization. (~2100 tok)
 - `kr_vcov.py` — Kenward-Roger variance-covariance matrix derivatives. (~1596 tok)
 - `leverage.py` — Leverage diagnostics for fitted linear mixed models. (~2334 tok)
 - `ols.py` — OLS fitting with formulaic design matrices and HC3 robust standard errors. (~1604 tok)
@@ -809,7 +810,7 @@
 - `profiled_reml.py` — Profiled REML estimation for linear mixed models with crossed random effects. (~14121 tok)
 - `quantreg.py` — Quantile regression: LP-based coefficient fitting + kernel SE. (~2609 tok)
 - `residuals.py` — Residual extraction for fitted linear mixed models. (~1607 tok)
-- `result.py` — CrossedLMEResult and ModelInfo dataclasses. (~6052 tok)
+- `result.py` — CrossedLMEResult and ModelInfo dataclasses. (~6084 tok)
 - `simulate.py` — Parametric simulation and bootstrap for CrossedLMEResult. (~2441 tok)
 - `summary.py` — summary() and VarCorr() for CrossedLMEResult. (~2789 tok)
 
@@ -823,6 +824,8 @@
 - `test_glmer_api.py` — Tests for the public interlace.glmer() API. (~1488 tok)
 - `test_glmm_family.py` — Tests for GLMMFamily protocol and concrete family implementations. (~11295 tok)
 - `test_glmm_laplace.py` — Tests for GLMM Laplace approximation (glmm_laplace.py). (~11321 tok)
+- `test_kenward_roger.py` — Tests for Kenward-Roger adjusted covariance and denominator DFs. (~1619 tok)
+- `test_kr_api.py` — Tests for exposing KR DFs via df_method parameter in fit() and summary(). (~1050 tok)
 - `test_kr_parity.py` — Parity tests: KR variance-covariance derivatives vs R's pbkrtest/lmerTest. (~2312 tok)
 - `test_kr_vcov.py` — Tests for Kenward-Roger variance-covariance second derivatives. (~3281 tok)
 - `test_lmm_weights.py` — Tests for observation-level weights in LMM fit(). (~1842 tok)

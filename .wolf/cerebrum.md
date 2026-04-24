@@ -20,10 +20,15 @@
 
 - When a residual correlation structure (AR1, CS) is present, ALL post-estimation quantities (beta, BLUPs, residuals, fe_cov) must be computed from whitened data (y_w, X_w, Z_w). The theta values from the optimizer are defined relative to the whitened cross-products — using them with unwhitened data gives subtly wrong results (variance components still match but BLUPs and residuals diverge).
 
+- Kenward-Roger DFs match R's lmerTest when computed as Satterthwaite in the **un-profiled variance-component parameterization** (σ²_1, ..., σ²_k, σ²_resid). The profiled theta parameterization (used by standard Satterthwaite) gives dramatically different slope DFs (~906 vs 104) because σ²_resid is profiled out. The KR bias correction (vcovAdj) is negligible (<1e-5 relative) for moderate samples because the REML projection matrix P annihilates X from both sides (X'PV_rPX = 0).
+
 ## Do-Not-Repeat
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
 <!-- Format: [YYYY-MM-DD] Description of what went wrong and what to do instead. -->
+
+- [2026-04-24] KR bias correction: do NOT use Σ W_rs * dC_r C⁻¹ dC_s — this gives a correction ~10,000x too large. The KR97 formula involves X'PV_rPX which vanishes because X'P = 0. The correction is zero/negligible; just use C_adj = fe_cov.
+- [2026-04-24] KR DFs: do NOT use the full moment-matching formula (rho, m = 4+3/(rho-1)) for per-coefficient t-tests. lmerTest uses Satterthwaite ν = 2C_jj²/(g'Wg) in the un-profiled vc parameterization, which gives the correct answer. The full KR formula is for multi-DF F-tests (anova, q>1).
 
 - [2026-04-22] When adding a new GLMMFamily variant (e.g., ZI), update ALL family-name dispatch points: `_clamp_mu`, `_glm_start`, `_conditional_loglik`, `_zi_pirls_weights` (PIRLS loop, final log|A|, SE computation, profiled objective), and any `family.name == ...` checks.
 - [2026-04-22] `np.empty_like(y)` inherits y's dtype. For integer count data, this creates int64 arrays that silently truncate float log-likelihood values. Always use `np.empty_like(y, dtype=np.float64)` when allocating arrays for log-likelihood computations.
