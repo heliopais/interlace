@@ -857,8 +857,9 @@ def _fit_reml_with_correlation(
 
     # Joint initial params and bounds
     params0 = np.concatenate([theta0, rho_raw0])
-    # RE theta bounds + unconstrained bounds for rho_raw
-    bounds_joint = list(bounds) + [(None, None)] * n_corr
+    # RE theta bounds + correlation-specific bounds on rho_raw
+    corr_bounds = correlation.unconstrained_bounds()
+    bounds_joint = list(bounds) + corr_bounds
 
     lower_bounds_joint = np.array(
         [lo if lo is not None else -np.inf for lo, _ in bounds_joint]
@@ -1342,7 +1343,8 @@ def _fit_ml_with_correlation(
         return float(val + log_det_r)
 
     params0 = np.concatenate([theta0, rho_raw0])
-    bounds_joint = list(bounds) + [(None, None)] * n_corr
+    corr_bounds = correlation.unconstrained_bounds()
+    bounds_joint = list(bounds) + corr_bounds
     lower_bounds_joint = np.array(
         [lo if lo is not None else -np.inf for lo, _ in bounds_joint]
     )
