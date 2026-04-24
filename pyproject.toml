@@ -27,6 +27,7 @@ Issues = "https://github.com/heliopais/interlace/issues"
 [project.optional-dependencies]
 bobyqa = ["Py-BOBYQA>=1.4"]
 cholmod = ["scikit-sparse>=0.4"]
+smooth = ["scikit-misc>=0.4"]
 
 [dependency-groups]
 dev = [
@@ -41,6 +42,7 @@ dev = [
     "pytest-cov>=7.1.0",
     "nbconvert>=7.17.1",
     "ipykernel>=7.2.0",
+    "llm-tldr>=0.1",
 ]
 docs = [
     "sphinx>=8.0",
