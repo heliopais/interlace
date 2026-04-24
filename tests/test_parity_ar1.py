@@ -13,13 +13,16 @@ AR(1) + random intercept is fully identifiable (temporal autocorrelation is
 structurally distinct from between-group variation), so all parameters can
 be compared directly.
 
-Acceptance criteria:
-  - Fixed effects abs_diff < 0.05
-  - Variance components rel_diff < 5%
-  - AR(1) rho abs_diff < 0.05
-  - REML log-likelihood abs_diff < 0.1
-  - BLUP correlation > 0.99
-  - Conditional residual correlation > 0.98
+Acceptance criteria (tight -- AR(1) is fully identifiable):
+  - Fixed effects abs_diff < 1e-4
+  - Variance components rel_diff < 0.1%
+  - AR(1) rho abs_diff < 1e-4
+  - REML log-likelihood abs_diff < 1e-6
+  - AIC abs_diff < 1e-6
+  - BLUP correlation > 0.9999
+  - BLUP MAE < 1e-3
+  - Conditional residual correlation > 0.9999
+  - Conditional residual MAE < 1e-3
 """
 
 from __future__ import annotations
@@ -66,8 +69,8 @@ def test_fixed_effects_match(il_result, r_results):
     name_map = {"(Intercept)": "Intercept", "x": "x"}
     for r_name, il_name in name_map.items():
         diff = abs(il_result.fe_params[il_name] - r_fe[r_name])
-        assert diff < 0.05, (
-            f"Fixed effect '{il_name}' abs_diff={diff:.4f} "
+        assert diff < 1e-4, (
+            f"Fixed effect '{il_name}' abs_diff={diff:.2e} "
             f"(interlace={il_result.fe_params[il_name]:.6f}, R={r_fe[r_name]:.6f})"
         )
 
@@ -77,29 +80,28 @@ def test_ar1_rho_match(il_result, r_results):
     r_rho = r_results["rho"]
     il_rho = il_result.correlation_params["rho"]
     diff = abs(il_rho - r_rho)
-    assert diff < 0.05, (
-        f"AR(1) rho abs_diff={diff:.4f} "
-        f"(interlace={il_rho:.4f}, R={r_rho:.4f})"
+    assert diff < 1e-4, (
+        f"AR(1) rho abs_diff={diff:.2e} (interlace={il_rho:.6f}, R={r_rho:.6f})"
     )
 
 
 def test_random_intercept_variance(il_result, r_results):
-    """Random intercept variance should match within 5% rel_diff."""
+    """Random intercept variance should match within 0.1% rel_diff."""
     r_var = r_results["var_intercept"]
     il_var = float(il_result.variance_components["group"])
     rel_diff = abs(il_var - r_var) / r_var
-    assert rel_diff < 0.05, (
-        f"Random intercept variance rel_diff={rel_diff:.2%} "
+    assert rel_diff < 1e-3, (
+        f"Random intercept variance rel_diff={rel_diff:.2e} "
         f"(interlace={il_var:.6f}, R={r_var:.6f})"
     )
 
 
 def test_residual_variance(il_result, r_results):
-    """Residual variance should match within 5% rel_diff."""
+    """Residual variance should match within 0.1% rel_diff."""
     r_var = r_results["var_residual"]
     rel_diff = abs(il_result.scale - r_var) / r_var
-    assert rel_diff < 0.05, (
-        f"Residual variance rel_diff={rel_diff:.2%} "
+    assert rel_diff < 1e-3, (
+        f"Residual variance rel_diff={rel_diff:.2e} "
         f"(interlace={il_result.scale:.6f}, R={r_var:.6f})"
     )
 
@@ -109,25 +111,38 @@ def test_reml_loglik_match(il_result, r_results):
     r_ll = r_results["loglik"]
     il_ll = il_result.llf
     diff = abs(il_ll - r_ll)
-    assert diff < 0.1, (
-        f"REML loglik abs_diff={diff:.6f} "
-        f"(interlace={il_ll:.4f}, R={r_ll:.4f})"
+    assert diff < 1e-6, (
+        f"REML loglik abs_diff={diff:.2e} (interlace={il_ll:.6f}, R={r_ll:.6f})"
+    )
+
+
+def test_aic_match(il_result, r_results):
+    """AIC should match closely."""
+    r_aic = r_results["aic"]
+    il_aic = il_result.aic
+    diff = abs(il_aic - r_aic)
+    assert diff < 1e-6, (
+        f"AIC abs_diff={diff:.2e} (interlace={il_aic:.6f}, R={r_aic:.6f})"
     )
 
 
 def test_blups_correlated(il_result, r_results):
-    """Random intercept BLUPs should be highly correlated with R's."""
+    """Random intercept BLUPs should near-exactly match R's."""
     r_blups = r_results["blups"]
     labels = sorted(r_blups.keys())
     r_arr = np.array([r_blups[g] for g in labels])
     il_re = il_result.random_effects["group"]
     il_arr = il_re.loc[labels].to_numpy().ravel()
     corr = np.corrcoef(r_arr, il_arr)[0, 1]
-    assert corr > 0.99, f"BLUP correlation={corr:.4f} < 0.99"
+    mae = np.mean(np.abs(r_arr - il_arr))
+    assert corr > 0.9999, f"BLUP correlation={corr:.6f} < 0.9999"
+    assert mae < 1e-3, f"BLUP MAE={mae:.6f} >= 1e-3"
 
 
 def test_residuals_correlated(il_result, r_results):
-    """Conditional residuals should be highly correlated with R's."""
+    """Conditional residuals should near-exactly match R's."""
     r_resid = np.array(r_results["resid_cond"])
     corr = np.corrcoef(il_result.resid, r_resid)[0, 1]
-    assert corr > 0.98, f"Residual correlation={corr:.6f} < 0.98"
+    mae = np.mean(np.abs(il_result.resid - r_resid))
+    assert corr > 0.9999, f"Residual correlation={corr:.6f} < 0.9999"
+    assert mae < 1e-3, f"Residual MAE={mae:.6f} >= 1e-3"

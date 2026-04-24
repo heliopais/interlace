@@ -18,6 +18,8 @@
 - Cox PH has no intercept (absorbed into baseline hazard). When building the design matrix, use `~ 0 + rhs` with formulaic. The `Surv(time, event) ~ ...` LHS syntax is parsed separately from the RHS design matrix.
 - The coxme module reuses the Lambda parameterisation and sparse Z infrastructure from profiled_reml. The penalty term is -0.5*||Λ⁻¹b||² (same structure as GLMM PIRLS), but working weights come from the Breslow partial likelihood instead of a GLM family.
 
+- When a residual correlation structure (AR1, CS) is present, ALL post-estimation quantities (beta, BLUPs, residuals, fe_cov) must be computed from whitened data (y_w, X_w, Z_w). The theta values from the optimizer are defined relative to the whitened cross-products — using them with unwhitened data gives subtly wrong results (variance components still match but BLUPs and residuals diverge).
+
 ## Do-Not-Repeat
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
@@ -34,6 +36,7 @@
 - [2026-04-24] The Laplace IPL for Cox frailty MUST include the prior normalisation term 0.5*log|Σ⁻¹|. Without it, the optimizer dramatically overestimates frailty variance because the objective doesn't penalise unnecessary model complexity. This was the first bug caught by the parameter-recovery test.
 - [2026-04-24] For 1D theta optimization (shared frailty), use `minimize_scalar` (Brent's method), NOT `L-BFGS-B`. L-BFGS-B with numerical gradients can get stuck at the initial value (theta=1.0) because the finite-difference step is unreliable for this objective. Brent's method is derivative-free and 4x faster (14s vs 58s).
 - [2026-04-24] The full sparse Newton step for the inner Cox solve is LESS reliable than the diagonal approximation. The augmented (p+q)x(p+q) system is poorly conditioned when p << q (e.g., 2 covariates + 50 groups), causing the optimizer to converge to worse points. Stick with diagonal inner step + full-system Schur complement SEs.
+- [2026-04-24] In fit(), when a correlation structure is present, the post-estimation code MUST whiten (y, X, Z) before computing cross-products for beta/BLUPs. The optimizer's theta is defined on the whitened system; using it with raw cross-products gives wrong BLUPs (corr=0.98 vs R instead of 1.0). Residuals/fitted values use the original (unwhitened) data: resid = y - X*beta - Z*b.
 
 ## Decision Log
 

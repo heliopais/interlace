@@ -16,11 +16,15 @@ NOTE ON IDENTIFIABILITY:
     [sigma_int^2 + sigma_e^2*rho]*J is invariant along a 1-D manifold.
     nlme absorbs CS into the random intercept (rho -> 0).
 
-    This test therefore compares IDENTIFIABLE quantities:
+    This test therefore compares IDENTIFIABLE quantities (tight tolerances):
       - Fixed effects (determined by V, always unique)
       - REML log-likelihood (function of V, always unique)
       - Marginal ICC = (var_int + var_resid*rho) / (var_int + var_resid)
-      - Conditional residuals
+      - Total marginal variance
+
+    And NON-IDENTIFIABLE quantities (loose tolerances):
+      - BLUPs (high correlation expected, not exact match)
+      - Conditional residuals (ditto)
 
     The R fixture also includes a gls() fit (no random effects, CS only)
     which estimates rho without identifiability issues -- this is used as
@@ -84,8 +88,8 @@ def test_fixed_effects_match(il_result, r_results):
     name_map = {"(Intercept)": "Intercept", "x": "x"}
     for r_name, il_name in name_map.items():
         diff = abs(il_result.fe_params[il_name] - r_fe[r_name])
-        assert diff < 0.05, (
-            f"Fixed effect '{il_name}' abs_diff={diff:.4f} "
+        assert diff < 1e-4, (
+            f"Fixed effect '{il_name}' abs_diff={diff:.2e} "
             f"(interlace={il_result.fe_params[il_name]:.6f}, R={r_fe[r_name]:.6f})"
         )
 
@@ -95,9 +99,18 @@ def test_reml_loglik_match(il_result, r_results):
     r_ll = r_results["lme"]["loglik"]
     il_ll = il_result.llf
     diff = abs(il_ll - r_ll)
-    assert diff < 0.5, (
-        f"REML loglik abs_diff={diff:.4f} "
-        f"(interlace={il_ll:.4f}, R={r_ll:.4f})"
+    assert diff < 1e-6, (
+        f"REML loglik abs_diff={diff:.2e} (interlace={il_ll:.6f}, R={r_ll:.6f})"
+    )
+
+
+def test_aic_match(il_result, r_results):
+    """AIC is identifiable (function of loglik and nparams)."""
+    r_aic = r_results["lme"]["aic"]
+    il_aic = il_result.aic
+    diff = abs(il_aic - r_aic)
+    assert diff < 1e-6, (
+        f"AIC abs_diff={diff:.2e} (interlace={il_aic:.6f}, R={r_aic:.6f})"
     )
 
 
@@ -110,9 +123,8 @@ def test_marginal_icc_match(il_result, r_results):
     r_icc = r_results["gls"]["rho"]  # gls rho = marginal ICC
     il_icc = _marginal_icc(il_result)
     diff = abs(il_icc - r_icc)
-    assert diff < 0.05, (
-        f"Marginal ICC abs_diff={diff:.4f} "
-        f"(interlace={il_icc:.4f}, R_gls={r_icc:.4f})"
+    assert diff < 1e-4, (
+        f"Marginal ICC abs_diff={diff:.2e} (interlace={il_icc:.6f}, R_gls={r_icc:.6f})"
     )
 
 
@@ -122,14 +134,19 @@ def test_total_marginal_variance(il_result, r_results):
     il_var_int = float(il_result.variance_components["group"])
     il_total = il_var_int + il_result.scale
     rel_diff = abs(il_total - r_total) / r_total
-    assert rel_diff < 0.05, (
-        f"Total marginal variance rel_diff={rel_diff:.2%} "
+    assert rel_diff < 1e-3, (
+        f"Total marginal variance rel_diff={rel_diff:.2e} "
         f"(interlace={il_total:.6f}, R={r_total:.6f})"
     )
 
 
 def test_blups_correlated(il_result, r_results):
-    """Random intercept BLUPs should be highly correlated with R's."""
+    """Random intercept BLUPs should be highly correlated with R's.
+
+    Tolerance is looser than AR(1) because the variance decomposition
+    (var_int vs CS rho) is non-identifiable, so BLUP magnitudes may differ
+    even when the marginal model is identical.
+    """
     r_blups = r_results["lme"]["blups"]
     labels = sorted(r_blups.keys())
     r_arr = np.array([r_blups[g] for g in labels])
@@ -140,7 +157,10 @@ def test_blups_correlated(il_result, r_results):
 
 
 def test_residuals_correlated(il_result, r_results):
-    """Conditional residuals should be highly correlated with R's."""
+    """Conditional residuals should be highly correlated with R's.
+
+    Looser tolerance for the same non-identifiability reason as BLUPs.
+    """
     r_resid = np.array(r_results["lme"]["resid_cond"])
     corr = np.corrcoef(il_result.resid, r_resid)[0, 1]
     assert corr > 0.98, f"Residual correlation={corr:.6f} < 0.98"

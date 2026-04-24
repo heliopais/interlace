@@ -295,7 +295,26 @@ def fit(
 
     # --- 4. Recover quantities at optimum ---
     Lambda = make_lambda(reml.theta, specs, n_levels_list)
-    cache = _precompute(y, X, Z, weights=weights_arr)
+
+    # When a correlation structure is present, cross-products must be
+    # computed on whitened data so that beta and BLUPs properly account
+    # for the residual correlation structure.
+    _y_w: Any = None
+    _X_w: Any = None
+    _Z_w: Any = None
+    if correlation is not None:
+        rho_hat = np.array([reml.correlation_params["rho"]])
+        if weights_arr is not None:
+            sqW = np.sqrt(weights_arr)
+            _y_pre = sqW * y
+            _X_pre = sqW[:, None] * X
+            _Z_pre = sp.diags(sqW, format="csc") @ Z
+        else:
+            _y_pre, _X_pre, _Z_pre = y, X, Z
+        _y_w, _X_w, _Z_w = correlation.whiten_data(_y_pre, _X_pre, _Z_pre, rho_hat)
+        cache = _precompute(_y_w, _X_w, _Z_w)
+    else:
+        cache = _precompute(y, X, Z, weights=weights_arr)
 
     ZtZ = sp.csc_matrix(cache["ZtZ"])
     ZtX = np.asarray(cache["ZtX"])
@@ -312,12 +331,19 @@ def fit(
     rhs = Xty - lZtX.T @ c1  # X'Ω⁻¹y  (p,)
     beta = la.solve(MX, rhs, assume_a="pos")
 
-    # --- 5. BLUPs: b̂ = Lambda A11⁻¹ Lambda' Z'Wε ---
-    eps = y - X @ beta
-    if weights_arr is not None:
-        Zte = np.asarray(Z.T @ (weights_arr * eps)).squeeze()
+    # --- 5. BLUPs: b̂ = Lambda A11⁻¹ Lambda' Z'ε ---
+    # When a correlation structure is present, BLUPs must be computed from
+    # the whitened system so the residual correlation is properly accounted
+    # for in the conditional modes.
+    if correlation is not None:
+        eps_w = _y_w - _X_w @ beta
+        Zte = np.asarray(_Z_w.T @ eps_w).squeeze()
     else:
-        Zte = np.asarray(Z.T @ eps).squeeze()
+        eps = y - X @ beta
+        if weights_arr is not None:
+            Zte = np.asarray(Z.T @ (weights_arr * eps)).squeeze()
+        else:
+            Zte = np.asarray(Z.T @ eps).squeeze()
     blups = np.asarray(
         Lambda @ _sparse_solve(A11, np.asarray(Lambda.T @ Zte).squeeze())
     ).squeeze()
