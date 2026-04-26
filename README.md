@@ -6,11 +6,9 @@
 
 **[Documentation](https://heliopais.github.io/interlace/)**
 
-Pure-Python profiled REML estimation for linear mixed models with **crossed random intercepts**, validated to match R's `lme4::lmer()`.
+Pure-Python mixed-effects modelling library — linear (LMM), generalised (GLMM), ordinal (CLMM), and survival (Cox frailty) — validated against R's `lme4`, `glmer`, `ordinal`, and `coxme`.
 
 Designed as a drop-in replacement for `statsmodels.MixedLM` in diagnostics pipelines that require crossed grouping factors (e.g. `(1|worker) + (1|company)`), which statsmodels does not support.
-
-**Scope:** interlace fits linear mixed models with crossed random intercepts and random slopes. It does not support generalised outcomes (GLMM) or nested random effects with `/` syntax. For those cases, use R's `lme4` directly or a Python GLMM library.
 
 ## Installation
 
@@ -39,94 +37,85 @@ print(result.scale)              # residual variance σ²
 
 `groups` accepts a single string (one random intercept) or a list (crossed intercepts). The first entry is the primary grouping factor.
 
-## Usage
+## Model types
 
-### Fitting
+### Linear mixed models (LMM)
 
 ```python
 from interlace import fit
 
-result = fit(formula, data, groups, method="REML")
+result = fit(
+    formula="score ~ hours_studied + prior_gpa",
+    data=df,
+    groups=["student_id", "school_id"],
+    method="REML",           # or "ML" for likelihood-ratio tests
+    df_method="satterthwaite", # or "kenward-roger"
+)
 ```
 
-Returns a `CrossedLMEResult` with the following attributes:
+Supports crossed and nested random intercepts, random slopes (`(1 + x | g)`), observation-level weights, AR(1) and compound-symmetry residual correlation structures, and Satterthwaite or Kenward-Roger denominator degrees of freedom.
 
-| Attribute | Description |
-|---|---|
-| `fe_params` | Fixed-effect coefficients (Series) |
-| `fe_bse` | Standard errors |
-| `fe_pvalues` | Wald p-values |
-| `fe_conf_int` | 95% confidence intervals |
-| `random_effects` | Dict of BLUPs per grouping factor |
-| `variance_components` | Dict of variance estimates per grouping factor |
-| `scale` | Residual variance σ² |
-| `fittedvalues` | Conditional fitted values (Xβ + Zû) |
-| `resid` | Conditional residuals |
-| `llf`, `aic`, `bic` | Log-likelihood and information criteria |
-
-### Prediction
+### Generalised linear mixed models (GLMM)
 
 ```python
-# In-sample (uses BLUPs)
-result.predict()
+from interlace import glmer
 
-# New data (unseen group levels shrink to zero)
-result.predict(newdata=df_new)
-
-# Fixed effects only
-result.predict(newdata=df_new, include_re=False)
+result = glmer(
+    formula="incidence / size ~ period",
+    data=df,
+    family="binomial",       # or "poisson", "gaussian", "negativebinomial"
+    groups="herd",
+    weights=df["size"].values,
+)
 ```
 
-### Residuals
+Families: binomial, Poisson, Gaussian, NB1, NB2, Beta, Gamma, zero-inflated Poisson/NB2, hurdle Poisson, zero-one-inflated Beta. Supports Laplace approximation and adaptive Gauss-Hermite quadrature.
+
+### Cumulative link mixed models (CLMM)
 
 ```python
-from interlace import hlm_resid
+from interlace import clmm
+
+result = clmm(
+    formula="rating ~ condition",
+    data=df,
+    groups="subject",
+)
+```
+
+Ordinal regression with random effects, matching R's `ordinal::clmm()`.
+
+### Cox frailty models
+
+```python
+from interlace import coxme
+
+result = coxme(
+    formula="Surv(time, event) ~ treatment + age",
+    data=df,
+    groups="centre",
+)
+```
+
+Cox proportional hazards with Gaussian frailty, matching R's `coxme::coxme()`.
+
+## Diagnostics
+
+```python
+from interlace import hlm_resid, leverage, hlm_influence, hlm_augment
 
 resid_df = hlm_resid(result, type="conditional")  # or "marginal"
-# Returns DataFrame with .resid, .fitted, and original data columns
-```
+lev = leverage(result)                              # hat-matrix diagonal
+infl = hlm_influence(result, level=1)               # Cook's D, MDFFITS, etc.
+aug = hlm_augment(result)                           # data + residuals + influence
 
-### Leverage
-
-```python
-from interlace import leverage
-
-lev = leverage(result)  # array of hat-matrix diagonal values
-```
-
-### Influence diagnostics
-
-```python
-from interlace import hlm_influence, cooks_distance, mdffits, n_influential
-
-infl = hlm_influence(result, level=1)   # Cook's D, MDFFITS, COVTRACE, COVRATIO, RVC per obs
-
-# Scalar summaries
-n = n_influential(result)   # count of high-influence observations
-
-# Note: tau_gap() moved to gpgap.diagnostics.tau_gap() in v0.2.9
-```
-
-### Combined augment
-
-```python
-from interlace import hlm_augment
-
-aug = hlm_augment(result)
-# DataFrame: original data + conditional residuals + influence statistics
-```
-
-### Plotting
-
-```python
+# Plotting (all return plotnine.ggplot objects)
 from interlace import plot_resid, plot_influence, dotplot_diag
 
-plot_resid(resid_df, type="resid_vs_fitted")  # or "qq"
-plot_influence(infl_df, measure="cooks_d")
-dotplot_diag(infl_df, variable="cooks_d", cutoff="internal")
+plot_resid(resid_df, type="resid_vs_fitted")
+plot_influence(infl, measure="cooks_d")
+dotplot_diag(infl, variable="cooks_d", cutoff="internal")
 ```
-
-All plots return `plotnine.ggplot` objects.
 
 ## statsmodels compatibility
 
@@ -134,16 +123,17 @@ All plots return `plotnine.ggplot` objects.
 
 `hlm_resid`, `hlm_influence`, and `hlm_augment` all accept either a `CrossedLMEResult` or a statsmodels `MixedLMResults` object.
 
-## Parity with lme4
+## Parity with R
 
-Results are validated against R's `lme4::lmer()` to the following tolerances:
+Results are validated against R reference implementations to the following tolerances:
 
-| Metric | Tolerance |
-|---|---|
-| Fixed effects | abs diff < 1e-4 |
-| Variance components | rel diff < 5% |
-| BLUP correlation | > 0.99 |
-| Conditional residual correlation | > 0.999 |
+| Model type | R reference | Fixed effects | Variance components |
+|---|---|---|---|
+| LMM | `lme4::lmer()` | abs diff < 1e-4 | rel diff < 5% |
+| GLMM | `lme4::glmer()` | abs diff < 1e-3 | rel diff < 5% |
+| CLMM | `ordinal::clmm()` | abs diff < 1e-3 | rel diff < 5% |
+| Cox frailty | `coxme::coxme()` | abs diff < 1e-3 | rel diff < 10% |
+| AR(1) / CS | `nlme::lme()` | abs diff < 1e-3 | rel diff < 5% |
 
 ## Contributing
 
@@ -151,5 +141,8 @@ Bug reports, documentation fixes, and new features are welcome — see [CONTRIBU
 
 ## Attribution
 
-- **[lme4](https://github.com/lme4/lme4)** — the reference implementation for mixed-effects models in R; interlace targets parity with `lme4::lmer()` and uses its output as the validation benchmark.
+- **[lme4](https://github.com/lme4/lme4)** — the reference implementation for mixed-effects models in R; interlace targets parity with `lme4::lmer()` and `lme4::glmer()`.
+- **[ordinal](https://github.com/runehaubo/ordinal)** — R package for cumulative link models; interlace's `clmm()` targets parity with `ordinal::clmm()`.
+- **[coxme](https://cran.r-project.org/package=coxme)** — R package for Cox models with random effects; interlace's `coxme()` targets parity with `coxme::coxme()`.
+- **[nlme](https://cran.r-project.org/package=nlme)** — R package for linear mixed models with correlation structures; AR(1) and CS validation benchmarks.
 - **[HLMdiag](https://github.com/aloy/HLMdiag)** — the R package whose diagnostics API (`hlm_resid`, `hlm_influence`, `hlm_augment`, `dotplot_diag`) interlace replicates in Python.

@@ -1,4 +1,4 @@
-"""interlace: REML estimation for linear mixed models with crossed random intercepts."""
+"""interlace: mixed-effects models in Python (LMM, GLMM, CLMM, Cox frailty)."""
 
 from __future__ import annotations
 

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "interlace-lme"
 dynamic = ["version"]
-description = "Joint REML estimation for linear mixed models with crossed random intercepts using sparse design matrices"
+description = "Mixed-effects models in Python: LMM, GLMM, CLMM, and Cox frailty with crossed random effects, validated against R"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.13"

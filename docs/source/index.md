@@ -11,15 +11,17 @@
 [![Docs](https://github.com/heliopais/interlace/actions/workflows/docs.yml/badge.svg)](https://github.com/heliopais/interlace/actions/workflows/docs.yml)
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue)](https://github.com/heliopais/interlace/blob/main/LICENSE)
 
-**interlace** is a pure-Python implementation of profiled [restricted maximum likelihood
-(REML)](https://en.wikipedia.org/wiki/Restricted_maximum_likelihood) estimation for linear mixed models with **crossed random effects** — targeting
-parity with R's [`lme4::lmer()`](https://lme4.r-lib.org/reference/lmer.html) and
-designed as a drop-in replacement for
+**interlace** is a pure-Python mixed-effects modelling library — targeting
+parity with R's [`lme4`](https://lme4.r-lib.org/),
+[`ordinal`](https://github.com/runehaubo/ordinal),
+[`coxme`](https://cran.r-project.org/package=coxme), and
+[`nlme`](https://cran.r-project.org/package=nlme), and designed as a drop-in
+replacement for
 [`statsmodels.MixedLM`](https://www.statsmodels.org/stable/generated/statsmodels.regression.mixed_linear_model.MixedLM.html)
-in production pipelines. It also supports **generalised linear mixed models** (GLMMs)
-via Laplace approximation, matching R's
-[`lme4::glmer()`](https://lme4.r-lib.org/reference/glmer.html) for binomial and
-Poisson families.
+in production pipelines.
+
+It supports **linear** (LMM), **generalised** (GLMM), **cumulative link** (CLMM),
+and **Cox frailty** mixed models with crossed or nested random effects.
 
 ## Why interlace?
 
@@ -36,13 +38,15 @@ and sparse Cholesky machinery as R's [`lme4::lmer()`](https://lme4.r-lib.org/ref
 
 ## Key features
 
-- Fit models with multiple crossed grouping factors, e.g. `(1|subject) + (1|item)`
-- Random slopes via lme4-style notation: `(1 + x | g)` and `(1 + x || g)`
-- **GLMMs** via Laplace approximation: binomial (logistic), Poisson, and custom families
+- **LMM** — crossed / nested random intercepts and slopes, REML or ML, Satterthwaite or Kenward-Roger DFs
+- **GLMM** — Laplace or adaptive Gauss-Hermite quadrature; 10+ families including binomial, Poisson, NB1/NB2, Beta, Gamma, zero-inflated, hurdle, and ZOIB
+- **CLMM** — ordinal regression with random effects, matching R's `ordinal::clmm()`
+- **Cox frailty** — Cox PH with Gaussian frailty, matching R's `coxme::coxme()`
+- **Correlation structures** — AR(1) and compound symmetry for longitudinal data
 - Sparse throughout — Z is never materialised as a dense matrix
 - Full suite of diagnostics: residuals, leverage, Cook's D, MDFFITS, influence plots
 - Compatible result object exposing the same attributes as `statsmodels.MixedLMResults`
-- Validated against R's [`lme4::lmer()`](https://lme4.r-lib.org/reference/lmer.html) and [`lme4::glmer()`](https://lme4.r-lib.org/reference/glmer.html) to tight tolerances
+- Validated against R reference implementations to tight tolerances
 
 ## Get started
 
@@ -60,7 +64,7 @@ Install interlace and fit your first crossed random-intercepts model.
 :link: glmm-quickstart
 :link-type: doc
 
-Fit binomial and Poisson GLMMs with `glmer()`.
+Fit GLMMs with `glmer()` — binomial, Poisson, NB, Beta, and more.
 :::
 
 :::{grid-item-card} Examples
