@@ -2,7 +2,7 @@
 
 The primary entry point for fitting linear mixed models with crossed random effects.
 Accepts both random intercepts (via `groups`) and random slopes (via `random`).
-Works with any pandas DataFrame.
+Works with any narwhals-compatible DataFrame (pandas, polars, etc.).
 
 ```{eval-rst}
 .. autofunction:: interlace.fit
@@ -18,6 +18,11 @@ Works with any pandas DataFrame.
 | `random` | `list[str]` | lme4-style random-effect specs, e.g. `["(1 + x \| g)"]` |
 | `method` | `"REML"` or `"ML"` | Estimator. Use `"ML"` for model comparison via LRT |
 | `optimizer` | `"lbfgsb"` or `"bobyqa"` | Optimizer. `"bobyqa"` gives better R/lme4 parity |
+| `weights` | `ndarray` | Observation-level prior weights, shape (n,) |
+| `offset` | `ndarray` | Known term added to the linear predictor (not estimated) |
+| `correlation` | `AR1 \| CompoundSymmetry` | Residual correlation structure for longitudinal data |
+| `df_method` | `str` | `"satterthwaite"` (default) or `"kenward-roger"` for denominator DFs |
+| `theta0` | `ndarray` | Initial variance parameters; defaults to ones |
 
 ## Examples
 
@@ -70,5 +75,10 @@ p_value  = scipy.stats.chi2.sf(lrt_stat, df=1)
 
 - {doc}`result` — attributes on the returned `CrossedLMEResult`
 - {doc}`predict` — generating predictions from a fitted model
+- {doc}`correlation` — AR(1) and compound symmetry for longitudinal data
+- {doc}`kenward_roger` — Kenward-Roger denominator degrees of freedom
+- {doc}`glmer` — generalised linear mixed models (non-normal outcomes)
+- {doc}`clmm` — ordinal regression with random effects
+- {doc}`coxme` — Cox frailty models
 - [Random Slopes Guide](../random-slopes.md) — when and how to use `random=`
 - [Model Comparison Guide](../model-comparison.md) — LRT workflow with `method="ML"`

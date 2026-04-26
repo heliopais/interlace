@@ -245,5 +245,7 @@ approach and is generally accurate when cluster sizes are not very small.
 ## Next steps
 
 - See {doc}`api/glmer` for the full API reference and all parameters
+- See {doc}`api/glmm_families` for all available families (NB1, Beta, Gamma, ZIP, ZINB2, Hurdle, ZOIB)
+- See {doc}`api/clmm` for ordinal regression with random effects
 - See {doc}`quickstart` for linear mixed models
 - See {doc}`api/fit` for the `fit()` API reference

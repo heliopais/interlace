@@ -1,5 +1,177 @@
 # Changelog
 
+## v0.3.0
+
+### `clmm()` — cumulative link mixed models (ordinal regression)
+
+New function for ordinal outcomes with random effects, targeting parity
+with R's `ordinal::clmm()`. Supports logit, probit, and complementary
+log-log link functions.
+
+```python
+import interlace
+
+result = interlace.clmm(
+    formula="rating ~ temp + contact",
+    data=df,
+    groups="judge",
+    link="logit",
+)
+
+print(result.thresholds)          # threshold estimates
+print(result.fe_params)           # fixed-effect coefficients
+probs = result.predict(newdata=df_new, type="prob")  # P(Y=k)
+ci = result.confint()             # CIs for thresholds and FEs
+```
+
+`CLMMResult` exposes `thresholds`, `threshold_bse`, `fe_params`, `fe_bse`,
+`random_effects`, `variance_components`, `predict()`, `confint()`, and
+`summary()`. Standard errors are computed from the full observed information
+matrix (not conditioning on theta), matching R's `ordinal::clmm` to < 0.1%.
+
+See the [clmm API reference](api/clmm.md).
+
+### `coxme()` — Cox proportional hazards with Gaussian frailty
+
+New function for survival data with random effects, targeting parity with
+R's `coxme::coxme()`. Uses penalised partial likelihood with Laplace-
+approximated integrated partial likelihood.
+
+```python
+result = interlace.coxme(
+    formula="Surv(time, status) ~ age + treatment",
+    data=df,
+    groups="centre",
+)
+
+print(result.fe_params)           # log hazard ratios
+print(result.concordance)         # Harrell's C-statistic
+print(result.baseline_hazard)     # Breslow estimate
+hr = result.predict(type="risk")  # hazard ratios
+```
+
+`CoxmeResult` exposes `fe_params`, `fe_bse`, `fe_pvalues`, `fe_conf_int`,
+`random_effects`, `variance_components`, `concordance`, `baseline_hazard`,
+`predict()`, and `summary()`. Standard errors use the exact Breslow Hessian
+(not diagonal approximation), matching R's `coxme` to < 1%.
+
+Supports crossed frailty via `groups=["centre", "surgeon"]`.
+
+See the [coxme API reference](api/coxme.md).
+
+### Kenward-Roger denominator degrees of freedom
+
+`fit()` gains a `df_method` parameter. Setting `df_method="kenward-roger"`
+computes KR-adjusted denominator DFs, matching R's
+`lmerTest::summary(ddf = "Kenward-Roger")`.
+
+```python
+result = interlace.fit(
+    "score ~ treatment + age",
+    data=df,
+    groups=["subject", "site"],
+    df_method="kenward-roger",
+)
+print(result.fe_df)  # KR denominator DFs
+```
+
+KR DFs operate in the un-profiled variance-component parameterisation
+(including sigma^2_resid as a free parameter), giving more accurate DFs for
+small or unbalanced designs. Currently limited to random-intercept specs.
+
+See the [Kenward-Roger API reference](api/kenward_roger.md).
+
+### Correlation structures — AR(1) and compound symmetry
+
+New `correlation` parameter on `fit()` for modelling within-group residual
+dependence in longitudinal data, matching R's `nlme::corAR1` and
+`nlme::corCompSymm`.
+
+```python
+from interlace import AR1, CompoundSymmetry
+
+# AR(1) — correlation decays with time gap
+result = interlace.fit(
+    "y ~ time + treatment",
+    data=df,
+    groups="subject",
+    correlation=AR1(time="time"),
+)
+print(result.correlation_params)  # {'rho': 0.72}
+
+# Compound symmetry — equal correlation within groups
+result = interlace.fit(
+    ...,
+    correlation=CompoundSymmetry(time="time"),
+)
+```
+
+The correlation parameter (rho) is estimated jointly with the variance
+parameters. All post-estimation quantities (beta, BLUPs, residuals) are
+computed from whitened data.
+
+See the [correlation API reference](api/correlation.md).
+
+### Extended GLMM families
+
+Seven new families for `glmer()`, covering a much wider range of response
+distributions:
+
+| Family class | Use case |
+|---|---|
+| `NegativeBinomial1Family(alpha=)` | Overdispersed counts (linear variance) |
+| `BetaFamily(phi=)` | Continuous proportions in (0, 1) |
+| `GammaFamily(link=)` | Positive continuous data (log or inverse link) |
+| `ZeroInflatedPoissonFamily(pi=)` | Counts with excess zeros |
+| `ZeroInflatedNB2Family(pi=, theta=)` | Overdispersed counts with excess zeros |
+| `HurdlePoissonFamily()` | Counts with structural zeros |
+| `ZeroOneInflatedBetaFamily(pi0=, pi1=, phi=)` | Proportions with exact 0s and 1s |
+
+```python
+from interlace import BetaFamily, GammaFamily
+
+result = interlace.glmer(
+    "proportion ~ x1 + x2",
+    data=df,
+    family=BetaFamily(phi=5.0),
+    groups="site",
+)
+```
+
+See the [GLMM families API reference](api/glmm_families.md).
+
+### Observation-level weights for LMM
+
+`fit()` now accepts a `weights` parameter — each observation's contribution
+to the log-likelihood is scaled by its weight. Equivalent to pre-multiplying
+all data by `sqrt(diag(weights))`.
+
+```python
+result = interlace.fit(
+    "y ~ x", data=df, groups="g",
+    weights=df["precision"].values,
+)
+```
+
+### Offset vector for LMM and GLMM
+
+`fit()` and `glmer()` both accept an `offset` parameter — a known term
+added to the linear predictor that is not estimated.
+
+```python
+import numpy as np
+
+result = interlace.glmer(
+    "count ~ x",
+    data=df,
+    family="poisson",
+    groups="g",
+    offset=np.log(df["exposure"].values),
+)
+```
+
+---
+
 ## v0.2.9 — 2026-04-03
 
 ### `glmer()` — generalised linear mixed models via Laplace approximation

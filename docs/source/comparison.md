@@ -16,7 +16,10 @@ that most often determine library choice.
 | Nested random effects | ✓ *(v0.2.4+)* | ✓ | ✗ | ✓ |
 | Random slopes | ✓ *(v0.2.1+)* | ✓ | ✗ | ✓ |
 | Correlated random effects | ✓ *(v0.2.1+)* | ✓ | ✗ | ✓ |
-| Generalised LMM (Poisson, binomial) | ✓ (`glmer`) | ✗² | ✗ | ✓ (`glmer`) |
+| Generalised LMM (10+ families) | ✓ (`glmer`) | ✗² | ✗ | ✓ (`glmer`) |
+| Ordinal mixed models (CLMM) | ✓ (`clmm`) | ✗ | ✗ | Via `ordinal` |
+| Cox frailty (survival) | ✓ (`coxme`) | ✗ | ✗ | Via `coxme` |
+| Residual correlation (AR1, CS) | ✓ *(v0.3.0+)* | ✗ | ✗ | Via `nlme` |
 | **Estimation** | | | | |
 | REML (default) | ✓ | ✓ | ✗ (Swamy-Arora⁵) | ✓ |
 | ML (for LRT / model comparison) | ✓ | ✓ | ✗ | ✓ |
@@ -45,6 +48,8 @@ that most often determine library choice.
 | Variance components | ✓ | ✓ | ✗ (θ only) | ✓ |
 | BLUPs / conditional modes | ✓ | ✓ | ✗ | ✓ |
 | Estimated marginal means (`emmeans`) | ✓ *(v0.2.8+)* | ✗ | ✗ | Via `emmeans` |
+| Satterthwaite DFs | ✓ | ✗ | ✗ | Via `lmerTest` |
+| Kenward-Roger DFs | ✓ *(v0.3.0+)* | ✗ | ✗ | Via `lmerTest`/`pbkrtest` |
 | AIC / BIC | ✓ | ✓ | ✓ | ✓ |
 | **Numerical parity with lme4** | ✓³ | ✗ | ✗ | — |
 | **Language** | Python | Python | Python | R |
@@ -128,7 +133,8 @@ See [For R / lme4 users](why-r.md#diagnostics) for the function-by-function mapp
 
 `interlace` supports random slopes (v0.2.1+) and nested random effects (v0.2.4+)
 via the `random=` parameter using lme4-style `(term | group)` notation.
-For generalised outcomes (Poisson, binomial), use `interlace.glmer()` or R's `lme4::glmer()`.
+For generalised outcomes, use `interlace.glmer()`. For ordinal outcomes, use
+`interlace.clmm()`. For survival data, use `interlace.coxme()`.
 
 ---
 
@@ -143,7 +149,10 @@ For generalised outcomes (Poisson, binomial), use `interlace.glmer()` or R's `lm
 | One-way entity RE with panel (entity × time) data | **linearmodels** |
 | Need IV/2SLS, SUR, or IV3SLS alongside RE | **linearmodels** |
 | Need clustered or Driscoll-Kraay HAC SEs | **linearmodels** |
-| GLMM (Poisson, binomial) in Python | **interlace** (`glmer()`) |
+| GLMM (Poisson, binomial, Beta, ...) in Python | **interlace** (`glmer()`) |
+| Ordinal regression with random effects in Python | **interlace** (`clmm()`) |
+| Survival with frailty in Python | **interlace** (`coxme()`) |
+| Longitudinal data with AR(1)/CS correlation | **interlace** (`fit(correlation=...)`) |
 | Full lme4 feature set | lme4 (R) |
 
 ---
