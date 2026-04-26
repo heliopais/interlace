@@ -27,15 +27,29 @@ least squares (PIRLS) — targeting parity with R's
 
 ## Supported families
 
+### String shorthand
+
 | Family | Link function | Use case |
 |--------|--------------|----------|
 | `"binomial"` | logit | Binary outcomes, proportions (pass trial counts via `weights`) |
 | `"poisson"` | log | Count data (events, errors, frequencies) |
 | `"gaussian"` | identity | Continuous outcomes (equivalent to `fit()` with identity link) |
-| `"negativebinomial"` | log | Overdispersed count data (variance = mu + mu²/theta) |
+| `"negativebinomial"` | log | Overdispersed count data (variance = mu + mu^2/theta) |
 
-Custom families can be passed as any object implementing the `GLMMFamily`
-protocol (see below).
+### Extended families (pass instances)
+
+| Family class | Link | Use case |
+|-------------|------|----------|
+| `NegativeBinomial1Family(alpha=)` | log | Overdispersed counts (linear variance) |
+| `BetaFamily(phi=)` | logit | Continuous proportions in (0, 1) |
+| `GammaFamily(link=)` | log / inverse | Positive continuous data |
+| `ZeroInflatedPoissonFamily(pi=)` | log | Counts with excess zeros |
+| `ZeroInflatedNB2Family(pi=, theta=)` | log | Overdispersed counts with excess zeros |
+| `HurdlePoissonFamily()` | log | Counts with structural zeros |
+| `ZeroOneInflatedBetaFamily(pi0=, pi1=, phi=)` | logit | Proportions with exact 0s and 1s |
+
+See {doc}`glmm_families` for constructor parameters, examples, and the
+`GLMMFamily` protocol for building custom families.
 
 ## Examples
 
