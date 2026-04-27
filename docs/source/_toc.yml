@@ -19,6 +19,7 @@ subtrees:
 - caption: Guides
   entries:
   - file: random-slopes
+  - file: longitudinal
   - file: model-comparison
   - file: cross-validation
   - file: variance-inference
