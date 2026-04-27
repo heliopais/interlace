@@ -53,8 +53,8 @@ and sparse Cholesky machinery as R's [`lme4::lmer()`](https://lme4.r-lib.org/ref
 ::::{grid} 1 2 3 3
 :gutter: 3
 
-:::{grid-item-card} Installation & quickstart
-:link: installation
+:::{grid-item-card} LMM quickstart
+:link: quickstart
 :link-type: doc
 
 Install interlace and fit your first crossed random-intercepts model.
@@ -67,11 +67,25 @@ Install interlace and fit your first crossed random-intercepts model.
 Fit GLMMs with `glmer()` — binomial, Poisson, NB, Beta, and more.
 :::
 
-:::{grid-item-card} Examples
-:link: examples
+:::{grid-item-card} CLMM quickstart
+:link: clmm-quickstart
 :link-type: doc
 
-Worked notebooks: simulation, diagnostics, and comparison with lme4.
+Ordinal regression with random effects via `clmm()`.
+:::
+
+:::{grid-item-card} Cox frailty quickstart
+:link: coxme-quickstart
+:link-type: doc
+
+Survival models with shared frailty via `coxme()`.
+:::
+
+:::{grid-item-card} Longitudinal data
+:link: longitudinal
+:link-type: doc
+
+AR(1) and compound symmetry correlation structures for repeated measures.
 :::
 
 :::{grid-item-card} API reference
@@ -79,12 +93,5 @@ Worked notebooks: simulation, diagnostics, and comparison with lme4.
 :link-type: doc
 
 Full documentation for every public function and result object.
-:::
-
-:::{grid-item-card} Background
-:link: why-python
-:link-type: doc
-
-Why interlace exists, and how it compares to statsmodels and lme4.
 :::
 ::::
