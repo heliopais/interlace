@@ -2,8 +2,9 @@
 
 `statsmodels` is an excellent statistical library. Its `MixedLM` class handles many
 mixed-model use cases well — random intercepts, random slopes, and nested designs.
-This page explains the one structural gap that `interlace` was built to fill:
-**crossed random effects**.
+This page explains the structural gap that motivated `interlace` — **crossed random
+effects** — and how the library has since grown into a comprehensive mixed-effects
+toolkit covering LMM, GLMM, ordinal, and survival models.
 
 ## Nested vs. crossed grouping factors
 
@@ -123,18 +124,25 @@ and variance components to within 5% (relative) on standard benchmarks. See
 [Contributing](contributing.md#validation-against-lme4) for the full tolerance table
 and the test suite that enforces it.
 
-## What interlace does not cover
+## Beyond crossed random effects
 
-`interlace` targets **crossed random effects** for linear (Gaussian) outcomes.
-If your model needs any of the following, `statsmodels.MixedLM` or another library
-is the right choice:
+`interlace` started as a crossed-RE implementation but now covers a much wider
+scope. Here is what it supports as of v0.3.0:
 
-- Generalised linear mixed models (Poisson, binomial outcomes)
-- Nested designs with many levels of hierarchy
+| Model type | Function | R equivalent |
+|---|---|---|
+| Linear mixed models (LMM) | `interlace.fit()` | `lme4::lmer()` |
+| Generalised LMM (GLMM) | `interlace.glmer()` | `lme4::glmer()` |
+| Ordinal mixed models (CLMM) | `interlace.clmm()` | `ordinal::clmm()` |
+| Cox frailty (survival) | `interlace.coxme()` | `coxme::coxme()` |
 
-Random slopes (`(1 + x | g)` and `(1 + x || g)`) are supported as of v0.2.1 via
-the `random=` parameter. See the [Random Slopes Guide](random-slopes.md) for syntax
-and examples.
+Additional capabilities:
+
+- **Random slopes** — `(1 + x | g)` and `(1 + x || g)` via the `random=` parameter *(v0.2.1+)*. See the [Random Slopes Guide](random-slopes.md).
+- **Nested designs** — `(1 | g1/g2)` shorthand *(v0.2.4+)*
+- **Correlation structures** — AR(1) and compound symmetry for longitudinal data *(v0.3.0+)*. See {doc}`api/correlation`.
+- **10+ GLMM families** — binomial, Poisson, NB1, NB2, Beta, Gamma, zero-inflated, hurdle, ZOIB. See the [GLMM quickstart](glmm-quickstart.md).
+- **Satterthwaite and Kenward-Roger DFs** for small-sample inference
 
 For a full feature comparison table, see [Comparison](comparison.md).
 For a full mapping of lme4 formula syntax, see [For R / lme4 users](why-r.md).
