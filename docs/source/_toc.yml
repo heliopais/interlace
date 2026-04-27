@@ -11,6 +11,7 @@ subtrees:
   - file: installation
   - file: quickstart
   - file: glmm-quickstart
+  - file: clmm-quickstart
   - file: examples.ipynb
   - file: interpreting-results.ipynb
   - file: diagnostics.ipynb
