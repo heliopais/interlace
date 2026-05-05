@@ -182,7 +182,15 @@ def _build_reference_grid(
             other_defaults[col] = pd_frame[col].mode().iloc[0]
 
     if at is not None:
-        other_defaults.update(at)
+        for k, v in at.items():
+            if k in specs_list:
+                # Override the grid values for this spec instead of adding to
+                # other_defaults — a list literal in other_defaults would overwrite
+                # each row's spec value with the list object (unhashable in pandas).
+                idx = specs_list.index(k)
+                level_lists[idx] = list(v) if isinstance(v, (list, tuple)) else [v]
+            else:
+                other_defaults[k] = v
 
     # Cross specs levels
     rows: list[dict[str, Any]] = []

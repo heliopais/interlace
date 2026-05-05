@@ -211,6 +211,22 @@ class TestEmmeansTwoFactor:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(scope="module")
+def continuous_specs_result():
+    """y ~ Days + (1|Subject); Days is a continuous predictor used as specs."""
+    rng = np.random.default_rng(7)
+    n_subjects = 18
+    days = [0, 2, 4, 6, 8]
+    rows = []
+    for subj in range(n_subjects):
+        u = rng.normal(0, 1.5)
+        for d in days:
+            y = 250 + 10 * d + u + rng.normal(0, 25)
+            rows.append({"Subject": str(subj), "Days": float(d), "Reaction": y})
+    df = pd.DataFrame(rows)
+    return interlace.fit("Reaction ~ Days", data=df, groups="Subject")
+
+
 class TestEmmeansAt:
     def test_at_changes_estimate(self, one_way_result):
         """Setting x to a non-mean value shifts estimates by beta_x * delta."""
@@ -224,4 +240,29 @@ class TestEmmeansAt:
         # All shifts should have the same sign
         assert (shifts > 0).all() or (shifts < 0).all(), (
             f"Shifts not consistent: {shifts.tolist()}"
+        )
+
+    def test_at_list_for_spec_column_row_count(self, continuous_specs_result):
+        """at={specs_col: [v1, v2, v3]} should produce exactly 3 rows."""
+        out = interlace.emmeans(
+            continuous_specs_result, "Days", at={"Days": [0.0, 4.0, 8.0]}
+        )
+        assert len(out) == 3, f"Expected 3 rows, got {len(out)}"
+
+    def test_at_list_for_spec_column_values(self, continuous_specs_result):
+        """at={specs_col: [v1, v2, v3]} rows have exactly those Days values."""
+        out = interlace.emmeans(
+            continuous_specs_result, "Days", at={"Days": [0.0, 4.0, 8.0]}
+        )
+        assert set(out["Days"]) == {0.0, 4.0, 8.0}, (
+            f"Days values: {sorted(out['Days'].tolist())}"
+        )
+
+    def test_at_list_for_spec_column_ordering(self, continuous_specs_result):
+        """Estimates increase with Days (slope ≈ 10)."""
+        out = interlace.emmeans(
+            continuous_specs_result, "Days", at={"Days": [0.0, 4.0, 8.0]}
+        ).sort_values("Days")
+        assert (
+            out["estimate"].iloc[0] < out["estimate"].iloc[1] < out["estimate"].iloc[2]
         )
