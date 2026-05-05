@@ -28,6 +28,8 @@ subtrees:
   entries:
   - file: case-study-politeness.ipynb
   - file: case-study-glmm.ipynb
+  - file: case-study-ordinal.ipynb
+  - file: case-study-survival.ipynb
 - caption: Reference
   entries:
   - file: faq
