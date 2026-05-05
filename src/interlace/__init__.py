@@ -54,6 +54,7 @@ from interlace.influence import (
 from interlace.leverage import crossed_structures, leverage, statsmodels_structures
 from interlace.ols import OLSResult, ols
 from interlace.plotting import dotplot_diag, plot_influence, plot_resid
+from interlace.profile_ci import profile_confint
 from interlace.profiled_reml import (
     _build_A11,
     _precompute,
@@ -85,6 +86,7 @@ __all__ = [
     "contrast",
     "pairs",
     "EmmResult",
+    "profile_confint",
     "isSingular",
     "CrossedLMEResult",
     # Residuals

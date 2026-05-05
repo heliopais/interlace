@@ -103,7 +103,7 @@ class TestProfileConfintStructure:
 
     def test_estimate_column_matches_ml_theta(self, single_re_result) -> None:
         """Estimate should be the ML theta, not REML theta."""
-        ci = profile_confint(single_re_result)
+        ci = profile_confint(single_re_result, scale="theta")
         # Fit with ML directly to get reference
         y = single_re_result.model.endog
         X = single_re_result.model.exog
@@ -185,15 +185,15 @@ class TestProfileConfintLRTInvariant:
                 )
 
     def test_single_re_lrt_invariant(self, single_re_result) -> None:
-        ci = profile_confint(single_re_result, level=0.95)
+        ci = profile_confint(single_re_result, level=0.95, scale="theta")
         self._check_lrt_at_boundary(single_re_result, ci, level=0.95)
 
     def test_dyestuff_lrt_invariant(self, dyestuff_result) -> None:
-        ci = profile_confint(dyestuff_result, level=0.95)
+        ci = profile_confint(dyestuff_result, level=0.95, scale="theta")
         self._check_lrt_at_boundary(dyestuff_result, ci, level=0.95)
 
     def test_two_re_lrt_invariant(self, two_re_result) -> None:
-        ci = profile_confint(two_re_result, level=0.95)
+        ci = profile_confint(two_re_result, level=0.95, scale="theta")
         self._check_lrt_at_boundary(two_re_result, ci, level=0.95)
 
     def test_bounds_bracket_mle(self, single_re_result) -> None:
@@ -211,7 +211,7 @@ class TestProfileConfintLRTInvariant:
         )
         theta_hat = ml_fit.theta
 
-        ci = profile_confint(single_re_result, level=0.95)
+        ci = profile_confint(single_re_result, level=0.95, scale="theta")
         lo_col = [c for c in ci.columns if "%" in str(c)][0]
         hi_col = [c for c in ci.columns if "%" in str(c)][1]
 
@@ -269,7 +269,7 @@ class TestProfileConfintLme4Parity:
     def dyestuff_ci(self):
         data = pd.read_csv(FIXTURES / "lme4_dyestuff_data.csv")
         result = interlace.fit("Yield ~ 1", data=data, groups="Batch")
-        return profile_confint(result)
+        return profile_confint(result, scale="theta")
 
     @pytest.fixture(scope="class")
     def sleepstudy_ci(self):
@@ -277,7 +277,7 @@ class TestProfileConfintLme4Parity:
         result = interlace.fit(
             "Reaction ~ Days", data=data, random=["(1 + Days | Subject)"]
         )
-        return profile_confint(result)
+        return profile_confint(result, scale="theta")
 
     def test_dyestuff_theta_lower(self, dyestuff_ci, dyestuff_ref) -> None:
         r_lo = dyestuff_ref["ci95_theta_scale"]["Batch.(Intercept)"]["lower"]
@@ -390,3 +390,175 @@ class TestConfintWald:
             exp_hi = float(fe[name] + 1.96 * se[name])
             np.testing.assert_allclose(ci.loc[name, lo_col], exp_lo, rtol=1e-4)
             np.testing.assert_allclose(ci.loc[name, hi_col], exp_hi, rtol=1e-4)
+
+
+# ---------------------------------------------------------------------------
+# Tests: natural scale (default)
+# ---------------------------------------------------------------------------
+
+
+class TestNaturalScaleDefault:
+    def test_natural_scale_is_default(self, single_re_result) -> None:
+        """Default output uses SD (natural) scale, not Cholesky theta."""
+        ci = profile_confint(single_re_result)
+        # Natural-scale labels contain '|' (GROUP separator), not '.L['
+        assert all("|" in str(idx) for idx in ci.index), (
+            f"Expected natural-scale labels with '|', got: {list(ci.index)}"
+        )
+
+    def test_theta_scale_opt_in(self, single_re_result) -> None:
+        """scale='theta' gives Cholesky-factor scale output."""
+        ci = profile_confint(single_re_result, scale="theta")
+        assert all("|" not in str(idx) for idx in ci.index), (
+            f"Expected theta-scale labels without '|', got: {list(ci.index)}"
+        )
+
+    def test_natural_sd_estimate_single_re(self, single_re_result) -> None:
+        """For a single intercept RE: SD_hat = theta * sigma_ml."""
+        y = single_re_result.model.endog
+        X = single_re_result.model.exog
+        Z = single_re_result._Z
+        specs = single_re_result._random_specs
+        n_levels = single_re_result._n_levels
+        ml_fit = fit_ml(y, X, Z, q_sizes=[], specs=specs, n_levels=n_levels)
+        sigma_ml = float(np.sqrt(ml_fit.sigma2))
+        expected_sd = float(ml_fit.theta[0]) * sigma_ml
+
+        ci = profile_confint(single_re_result)
+        np.testing.assert_allclose(ci["estimate"].values[0], expected_sd, rtol=1e-5)
+
+    def test_natural_scale_row_count_unchanged(
+        self, single_re_result, two_re_result
+    ) -> None:
+        """Natural scale has the same number of rows as theta scale."""
+        for result in (single_re_result, two_re_result):
+            ci_nat = profile_confint(result)
+            ci_theta = profile_confint(result, scale="theta")
+            assert len(ci_nat) == len(ci_theta), (
+                f"Row count mismatch: natural={len(ci_nat)}, theta={len(ci_theta)}"
+            )
+
+    def test_natural_level_99_wider_than_95(self, single_re_result) -> None:
+        """Monotone transform preserves interval ordering."""
+        ci95 = profile_confint(single_re_result, level=0.95)
+        ci99 = profile_confint(single_re_result, level=0.99)
+        lo95 = [c for c in ci95.columns if "%" in str(c)][0]
+        hi95 = [c for c in ci95.columns if "%" in str(c)][1]
+        lo99 = [c for c in ci99.columns if "%" in str(c)][0]
+        hi99 = [c for c in ci99.columns if "%" in str(c)][1]
+        assert ci99[lo99].values[0] <= ci95[lo95].values[0]
+        assert ci99[hi99].values[0] >= ci95[hi95].values[0]
+
+
+class TestNaturalScaleLme4Parity:
+    """Natural-scale CIs should match lme4 reference values to <5% rel error."""
+
+    @pytest.fixture(scope="class")
+    def dyestuff_ref(self):
+        import json
+
+        return json.loads((FIXTURES / "lme4_profile_ci_dyestuff.json").read_text())
+
+    @pytest.fixture(scope="class")
+    def sleepstudy_ref(self):
+        import json
+
+        return json.loads((FIXTURES / "lme4_profile_ci_sleepstudy.json").read_text())
+
+    @pytest.fixture(scope="class")
+    def dyestuff_ci_nat(self):
+        data = pd.read_csv(FIXTURES / "lme4_dyestuff_data.csv")
+        result = interlace.fit("Yield ~ 1", data=data, groups="Batch")
+        return profile_confint(result)  # default: natural scale
+
+    @pytest.fixture(scope="class")
+    def sleepstudy_ci_nat(self):
+        data = pd.read_csv(FIXTURES / "lme4_sleepstudy_data.csv")
+        result = interlace.fit(
+            "Reaction ~ Days", data=data, random=["(1 + Days | Subject)"]
+        )
+        return profile_confint(result)  # default: natural scale
+
+    def test_dyestuff_sd_label(self, dyestuff_ci_nat) -> None:
+        assert "sd_(Intercept)|Batch" in dyestuff_ci_nat.index
+
+    def test_dyestuff_sd_lower_matches_lme4(
+        self, dyestuff_ci_nat, dyestuff_ref
+    ) -> None:
+        r_lo = dyestuff_ref["ci95_sd_scale"]["lower"]["sd_(Intercept)|Batch"]
+        lo_col = [c for c in dyestuff_ci_nat.columns if "%" in str(c)][0]
+        our_lo = dyestuff_ci_nat.loc["sd_(Intercept)|Batch", lo_col]
+        assert abs(our_lo - r_lo) / r_lo < 0.05, (
+            f"dyestuff SD lower: ours={our_lo:.4f}, R={r_lo:.4f}"
+        )
+
+    def test_dyestuff_sd_upper_matches_lme4(
+        self, dyestuff_ci_nat, dyestuff_ref
+    ) -> None:
+        r_hi = dyestuff_ref["ci95_sd_scale"]["upper"]["sd_(Intercept)|Batch"]
+        hi_col = [c for c in dyestuff_ci_nat.columns if "%" in str(c)][1]
+        our_hi = dyestuff_ci_nat.loc["sd_(Intercept)|Batch", hi_col]
+        assert abs(our_hi - r_hi) / r_hi < 0.05, (
+            f"dyestuff SD upper: ours={our_hi:.4f}, R={r_hi:.4f}"
+        )
+
+    def test_sleepstudy_sd_intercept_label(self, sleepstudy_ci_nat) -> None:
+        assert "sd_(Intercept)|Subject" in sleepstudy_ci_nat.index
+
+    def test_sleepstudy_sd_intercept_lower(
+        self, sleepstudy_ci_nat, sleepstudy_ref
+    ) -> None:
+        r_lo = sleepstudy_ref["ci95_sd_scale"]["lower"]["sd_(Intercept)|Subject"]
+        lo_col = [c for c in sleepstudy_ci_nat.columns if "%" in str(c)][0]
+        our_lo = sleepstudy_ci_nat.loc["sd_(Intercept)|Subject", lo_col]
+        assert abs(our_lo - r_lo) / r_lo < 0.05, (
+            f"sleepstudy SD(I) lower: ours={our_lo:.4f}, R={r_lo:.4f}"
+        )
+
+    def test_sleepstudy_sd_intercept_upper(
+        self, sleepstudy_ci_nat, sleepstudy_ref
+    ) -> None:
+        r_hi = sleepstudy_ref["ci95_sd_scale"]["upper"]["sd_(Intercept)|Subject"]
+        hi_col = [c for c in sleepstudy_ci_nat.columns if "%" in str(c)][1]
+        our_hi = sleepstudy_ci_nat.loc["sd_(Intercept)|Subject", hi_col]
+        assert abs(our_hi - r_hi) / r_hi < 0.05, (
+            f"sleepstudy SD(I) upper: ours={our_hi:.4f}, R={r_hi:.4f}"
+        )
+
+    def test_sleepstudy_cor_label(self, sleepstudy_ci_nat) -> None:
+        assert "cor_Days.(Intercept)|Subject" in sleepstudy_ci_nat.index
+
+    def test_sleepstudy_cor_lower_is_negative(self, sleepstudy_ci_nat) -> None:
+        """Off-diagonal theta can go negative → correlation CI lower < 0."""
+        lo_col = [c for c in sleepstudy_ci_nat.columns if "%" in str(c)][0]
+        our_lo = sleepstudy_ci_nat.loc["cor_Days.(Intercept)|Subject", lo_col]
+        assert our_lo < 0.0, (
+            f"Correlation lower CI should be negative, got {our_lo:.4f}"
+        )
+
+    def test_sleepstudy_cor_lower_matches_lme4(
+        self, sleepstudy_ci_nat, sleepstudy_ref
+    ) -> None:
+        r_lo = sleepstudy_ref["ci95_sd_scale"]["lower"]["cor_Days.(Intercept)|Subject"]
+        lo_col = [c for c in sleepstudy_ci_nat.columns if "%" in str(c)][0]
+        our_lo = sleepstudy_ci_nat.loc["cor_Days.(Intercept)|Subject", lo_col]
+        # 20% tolerance: approximate transform vs full 2D profile in lme4
+        assert abs(our_lo - r_lo) / max(abs(r_lo), 0.01) < 0.20, (
+            f"sleepstudy cor lower: ours={our_lo:.4f}, R={r_lo:.4f}"
+        )
+
+    def test_sleepstudy_sd_days_lower(self, sleepstudy_ci_nat, sleepstudy_ref) -> None:
+        r_lo = sleepstudy_ref["ci95_sd_scale"]["lower"]["sd_Days|Subject"]
+        lo_col = [c for c in sleepstudy_ci_nat.columns if "%" in str(c)][0]
+        our_lo = sleepstudy_ci_nat.loc["sd_Days|Subject", lo_col]
+        assert abs(our_lo - r_lo) / r_lo < 0.05, (
+            f"sleepstudy SD(Days) lower: ours={our_lo:.4f}, R={r_lo:.4f}"
+        )
+
+    def test_sleepstudy_sd_days_upper(self, sleepstudy_ci_nat, sleepstudy_ref) -> None:
+        r_hi = sleepstudy_ref["ci95_sd_scale"]["upper"]["sd_Days|Subject"]
+        hi_col = [c for c in sleepstudy_ci_nat.columns if "%" in str(c)][1]
+        our_hi = sleepstudy_ci_nat.loc["sd_Days|Subject", hi_col]
+        assert abs(our_hi - r_hi) / r_hi < 0.05, (
+            f"sleepstudy SD(Days) upper: ours={our_hi:.4f}, R={r_hi:.4f}"
+        )

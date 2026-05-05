@@ -1025,6 +1025,60 @@ def profile_loglik(
     return float(constant - deviance / 2.0)
 
 
+def _sigma2_at_theta(
+    theta: np.ndarray,
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    _cache: dict[str, Any] | None = None,
+    *,
+    specs: Any | None = None,
+    n_levels: list[int] | None = None,
+) -> float:
+    """Return the ML-profiled residual variance sigma² at the given theta.
+
+    Used by profile_confint to transform CI endpoints from theta scale to
+    the natural SD scale: sd_b = theta_diag * sqrt(sigma2_at_theta(theta_boundary)).
+    sigma² = y'P(theta)y / n, where beta is profiled out at each theta.
+    """
+    if _cache is None:
+        _cache = _precompute(y, X, Z)
+
+    ZtZ = sp.csc_matrix(_cache["ZtZ"])
+    ZtX = np.asarray(_cache["ZtX"])
+    Zty = np.asarray(_cache["Zty"])
+    XtX = np.asarray(_cache["XtX"])
+    Xty = np.asarray(_cache["Xty"])
+    yty = float(_cache["yty"])  # noqa: PGH003
+
+    n, p = X.shape
+
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
+        Lambda = make_lambda(theta, specs, n_levels)  # type: ignore[arg-type]
+        A11 = _build_A11(ZtZ, Lambda)
+        lZty = np.asarray(Lambda.T @ Zty).squeeze()
+        lZtX = np.asarray(Lambda.T @ ZtX)
+    else:
+        _q_sizes: list[int] = n_levels if specs is not None else []  # type: ignore[assignment]
+        lambda_diag = make_lambda_diag(theta, _q_sizes)
+        A11 = _build_A11(ZtZ, lambda_diag)
+        lZty = lambda_diag * Zty
+        lZtX = lambda_diag[:, None] * ZtX
+
+    c1 = _sparse_solve(A11, lZty)
+    C_X = _sparse_solve(A11, lZtX)
+    MX = XtX - lZtX.T @ C_X
+    rhs = Xty - lZtX.T @ c1
+
+    try:
+        beta_hat = la.solve(MX, rhs, assume_a="pos")
+    except la.LinAlgError:
+        return float("inf")
+
+    yPy = float(yty - lZty @ c1 - rhs @ beta_hat)
+    return float(max(yPy, 0.0) / int(n))
+
+
 def ml_objective(
     theta: np.ndarray,
     y: np.ndarray,
