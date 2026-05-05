@@ -23,9 +23,11 @@ subtrees:
   - file: model-comparison
   - file: cross-validation
   - file: variance-inference
+  - file: simulation
 - caption: Case Studies
   entries:
   - file: case-study-politeness.ipynb
+  - file: case-study-glmm.ipynb
 - caption: Reference
   entries:
   - file: faq
