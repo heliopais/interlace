@@ -16,24 +16,27 @@ make check        # lint + typecheck + test (full CI gate)
 
 This project follows strict TDD. Before writing any implementation code:
 
-1. Pick a task from `bd ready`
+1. Pick an open issue from the [issue tracker](https://github.com/heliopais/interlace/issues)
 2. Write a failing test in `tests/` that captures the acceptance criteria
 3. Run `make test` — confirm it fails for the right reason
 4. Write the minimum implementation to make it pass
-5. Run `make check` before closing the task
+5. Run `make check` before submitting a pull request
 
 Never write implementation code without a corresponding failing test driving it.
 
 ```{mermaid}
 flowchart TD
-    A[Pick task from bd ready] --> B[Write failing test]
+    A[Pick an open issue] --> B[Write failing test]
     B --> C{make test\nfails?}
     C -- No --> B
     C -- Yes --> D[Write minimum implementation]
     D --> E{make check\npasses?}
     E -- No --> D
-    E -- Yes --> F[Close task]
+    E -- Yes --> F[Open pull request]
 ```
+
+> **Internal contributors** use [`bd`](https://github.com/heliopais/beads) (the beads issue tracker)
+> to manage tasks: `bd ready` lists unblocked issues, `bd update <id> --claim` claims one.
 
 ## Validation against lme4
 
