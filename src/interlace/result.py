@@ -80,20 +80,33 @@ class CrossedLMEResult:
     ----------
     fe_params : pd.Series
         Fixed-effect coefficient estimates, indexed by predictor name.
+        Always a ``pd.Series`` regardless of the input backend — polars
+        Series have no named-index concept and downstream code relies on
+        ``.index`` for parameter lookup.
     fe_bse : pd.Series
-        Standard errors of the fixed-effect estimates.
+        Standard errors of the fixed-effect estimates.  Always ``pd.Series``.
     fe_pvalues : pd.Series
         Two-sided p-values for fixed-effect coefficients (t-distribution,
-        Satterthwaite degrees of freedom).
+        Satterthwaite degrees of freedom).  Always ``pd.Series``.
     fe_conf_int : pd.DataFrame
         95 % confidence intervals for fixed effects; columns ``"lower"``
-        and ``"upper"``.
+        and ``"upper"``.  Always ``pd.DataFrame``.
     fe_df : pd.Series
         Satterthwaite denominator degrees of freedom for each fixed effect.
+        Always ``pd.Series``.
     random_effects : dict[str, Any]
         Predicted random intercepts (BLUPs) keyed by grouping-factor name.
         Each value is a ``pd.Series`` (intercept-only) or ``pd.DataFrame``
-        (random slopes).
+        (random slopes).  Always pandas regardless of input backend.
+
+    Notes
+    -----
+    **Backend behaviour**: interlace accepts any narwhals-compatible frame
+    (pandas, polars, …) as input.  Augmented and diagnostic frames
+    (:func:`~interlace.hlm_augment`, :func:`~interlace.hlm_resid`,
+    :func:`~interlace.hlm_influence`, :func:`~interlace.hlm_leverage`)
+    are returned in the same native type as the input.  Fit-result
+    attributes listed above are always pandas objects.
     variance_components : dict[str, Any]
         Estimated variance components keyed by grouping-factor name.
     theta : np.ndarray

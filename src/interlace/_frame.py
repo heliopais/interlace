@@ -1,8 +1,12 @@
 """Internal helpers for narwhals-based DataFrame boundary conversion.
 
 All public interlace functions accept any narwhals-compatible frame
-(pandas, polars, etc.) as input and return results in the same native type.
-These helpers centralise that conversion logic.
+(pandas, polars, etc.) as input.  Augmented and diagnostic frames
+(augment, residuals, leverage, influence) are returned in the same
+native type as the input.  Fit-result attributes (fe_params, fe_bse,
+fe_pvalues, fe_df, fe_conf_int, random_effects) are always pandas
+objects: polars Series have no named-index concept, and the
+statsmodels-compatible API requires pd.Series with parameter-name indices.
 """
 
 from __future__ import annotations
