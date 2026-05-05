@@ -40,4 +40,34 @@ subtrees:
   - file: contributing
 - caption: API Reference
   entries:
-  - glob: api/*
+  - file: api/index
+  - file: api/fit
+  - file: api/glmer
+  - file: api/clmm
+  - file: api/coxme
+  - file: api/ols
+  - file: api/quantreg
+  - file: api/correlation
+  - file: api/glmm_families
+  - file: api/result
+  - file: api/summary
+  - file: api/varcorr
+  - file: api/predict
+  - file: api/emmeans
+  - file: api/contrast
+  - file: api/anova
+  - file: api/anova_table
+  - file: api/anova_type
+  - file: api/kenward_roger
+  - file: api/profile_ci
+  - file: api/convergence
+  - file: api/allfit
+  - file: api/cross_val
+  - file: api/residuals
+  - file: api/augment
+  - file: api/leverage
+  - file: api/influence
+  - file: api/lmer_influence
+  - file: api/gradient
+  - file: api/plotting
+  - file: api/simulate
