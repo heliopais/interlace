@@ -137,7 +137,7 @@ Results are validated against R reference implementations to the following toler
 
 ## Contributing
 
-Bug reports, documentation fixes, and new features are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started. To open an issue or ask a question, use the [GitHub issue tracker](https://github.com/heliopais/interlace/issues).
+Bug reports, documentation fixes, and new features are welcome — see [CONTRIBUTING.md](docs/source/contributing.md) for how to get started. To open an issue or ask a question, use the [GitHub issue tracker](https://github.com/heliopais/interlace/issues).
 
 ## Attribution
 

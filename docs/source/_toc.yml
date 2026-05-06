@@ -53,7 +53,6 @@ subtrees:
   - file: api/glmm_families
   - file: api/result
   - file: api/summary
-  - file: api/varcorr
   - file: api/predict
   - file: api/emmeans
   - file: api/contrast

@@ -271,4 +271,4 @@ random slopes.
 - [For Python / statsmodels users](why-python.md) — code-level comparison and when to use `interlace` vs `statsmodels`
 - [For R / lme4 users](why-r.md) — formula syntax mapping and shared references
 - [Quickstart](quickstart.md) — fit your first crossed random-intercepts model
-- [Interpreting results](interpreting-results.md) — what to do with the output once the model is fitted
+- [Interpreting results](interpreting-results.ipynb) — what to do with the output once the model is fitted

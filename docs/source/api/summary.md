@@ -65,8 +65,15 @@ print(vc.as_dataframe())
 For random-slope models, off-diagonal entries show the correlation between
 the intercept and slope random effects.
 
+## VarCorrResult
+
+```{eval-rst}
+.. autoclass:: interlace.summary.VarCorrResult
+   :members:
+   :undoc-members:
+```
+
 ## See also
 
 - {doc}`result` — `CrossedLMEResult` attributes
 - {doc}`fit` — fitting the model
-- {doc}`varcorr` — additional VarCorr documentation
