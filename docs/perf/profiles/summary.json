@@ -1,0 +1,86 @@
+{
+  "env": {
+    "python": "3.14.2",
+    "numpy": "2.4.3",
+    "scipy": "1.17.1",
+    "interlace": "unknown",
+    "cholmod_available": true
+  },
+  "runs": [
+    {
+      "dataset": "sleepstudy",
+      "config": "auto",
+      "n_reps": 5,
+      "times_s": [
+        0.18762087495997548,
+        0.11168720806017518,
+        0.14700029091909528,
+        0.11803058302029967,
+        0.12438508286140859
+      ],
+      "median_s": 0.12438508286140859,
+      "min_s": 0.11168720806017518,
+      "call_counts": {
+        "interlace.profiled_reml.reml_objective": 92,
+        "interlace.glmm_laplace._pirls": 0,
+        "interlace.glmm_laplace._laplace_objective": 0,
+        "interlace.glmm_laplace._laplace_objective_profiled": 0,
+        "scipy.sparse.linalg.spsolve": 65,
+        "scipy.sparse.linalg.splu": 25
+      },
+      "cholmod_available": true,
+      "prof": "docs/perf/profiles/sleepstudy__auto.prof",
+      "top_txt": "docs/perf/profiles/sleepstudy__auto_top.txt"
+    },
+    {
+      "dataset": "sleepstudy",
+      "config": "superlu",
+      "n_reps": 5,
+      "times_s": [
+        0.16292716702446342,
+        0.15173545898869634,
+        0.1379727500025183,
+        0.18201841693371534,
+        0.18276995909400284
+      ],
+      "median_s": 0.16292716702446342,
+      "min_s": 0.1379727500025183,
+      "call_counts": {
+        "interlace.profiled_reml.reml_objective": 92,
+        "interlace.glmm_laplace._pirls": 0,
+        "interlace.glmm_laplace._laplace_objective": 0,
+        "interlace.glmm_laplace._laplace_objective_profiled": 0,
+        "scipy.sparse.linalg.spsolve": 249,
+        "scipy.sparse.linalg.splu": 117
+      },
+      "cholmod_available": false,
+      "prof": "docs/perf/profiles/sleepstudy__superlu.prof",
+      "top_txt": "docs/perf/profiles/sleepstudy__superlu_top.txt"
+    },
+    {
+      "dataset": "cbpp",
+      "config": "auto",
+      "n_reps": 5,
+      "times_s": [
+        0.5340949590317905,
+        1.312271500006318,
+        1.1428284170106053,
+        0.6824318750295788,
+        0.5423707079607993
+      ],
+      "median_s": 0.6824318750295788,
+      "min_s": 0.5340949590317905,
+      "call_counts": {
+        "interlace.profiled_reml.reml_objective": 0,
+        "interlace.glmm_laplace._pirls": 19,
+        "interlace.glmm_laplace._laplace_objective": 19,
+        "interlace.glmm_laplace._laplace_objective_profiled": 403,
+        "scipy.sparse.linalg.spsolve": 1220,
+        "scipy.sparse.linalg.splu": 422
+      },
+      "cholmod_available": true,
+      "prof": "docs/perf/profiles/cbpp__auto.prof",
+      "top_txt": "docs/perf/profiles/cbpp__auto_top.txt"
+    }
+  ]
+}
