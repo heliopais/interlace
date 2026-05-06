@@ -20,6 +20,7 @@ import pytest
 
 from interlace.profiled_reml import (
     _build_A11,
+    _init_chol_factor,
     _precompute,
     _try_cholmod,
     fit_ml,
@@ -181,13 +182,16 @@ def test_reml_objective_cholmod_matches_superlu(single_re_data):
     cache_su = _precompute(d["y"], d["X"], d["Z"])
     val_su = reml_objective(theta, d["y"], d["X"], d["Z"], d["q_sizes"], cache_su)
 
-    # CHOLMOD path (chol_factor populated by fit_reml mechanism)
+    # CHOLMOD path (chol_factor populated via the same dispatcher fit_reml uses,
+    # which handles both old (<0.5) and new (>=0.5) sksparse APIs).
     cache_ch = _precompute(d["y"], d["X"], d["Z"])
     cholmod = _try_cholmod()
     lambda_diag = make_lambda_diag(theta, d["q_sizes"])
     A11_0 = _build_A11(cache_ch["ZtZ"], lambda_diag)
-    chol_factor = cholmod.cholesky(A11_0)
-    cache_ch["chol_factor"] = chol_factor
+    factor, api = _init_chol_factor(cholmod, A11_0)
+    assert factor is not None, "expected a working CHOLMOD factor"
+    cache_ch["chol_factor"] = factor
+    cache_ch["chol_api"] = api
 
     val_ch = reml_objective(theta, d["y"], d["X"], d["Z"], d["q_sizes"], cache_ch)
 

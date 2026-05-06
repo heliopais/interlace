@@ -53,3 +53,32 @@ jobs:
       - name: Run pandas-free tests
         run: |
           .venv-no-pandas/bin/python -m pytest tests/test_polars_only.py -v
+
+  cholmod:
+    # Exercise the CHOLMOD path against scikit-sparse >= 0.5 to guard against
+    # upstream API breaks (regression for GitHub #11: sksparse 0.5 changed
+    # cholmod.cholesky() to return a tuple, which broke v0.2.5).
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install system CHOLMOD (SuiteSparse)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsuitesparse-dev
+
+      - name: Install with scikit-sparse
+        run: |
+          uv venv .venv-cholmod
+          uv pip install --python .venv-cholmod/bin/python \
+            ".[cholmod]" pandas pytest "scikit-sparse>=0.5"
+
+      - name: Run cholmod tests
+        run: |
+          .venv-cholmod/bin/python -m pytest tests/test_cholmod.py -v
