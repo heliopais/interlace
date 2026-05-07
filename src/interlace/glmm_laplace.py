@@ -1625,7 +1625,16 @@ def fit_glmm(
                 lambda_builder,
             ),
             method="Nelder-Mead",
-            options={"xatol": 1e-7, "fatol": 1e-7, "maxiter": 2000, "adaptive": True},
+            # Tolerances aligned with lme4 stage-2 Nelder_Mead defaults
+            # (R/optimizer.R:27-32, FtolAbs=1e-5, per-dim xt=xst*5e-4=1e-5,
+            # fixed simplex algorithm).  maxiter is a defensive cap; lme4's
+            # equivalent (maxfun=10000) is even larger.
+            options={
+                "xatol": 1e-5,
+                "fatol": 1e-5,
+                "maxiter": 2000,
+                "adaptive": False,
+            },
         )
         # Accept phase 2 if it improved the objective
         phase1_ll = -(obj(theta_hat) if callable(obj) else np.inf)
