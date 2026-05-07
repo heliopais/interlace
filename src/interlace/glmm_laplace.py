@@ -43,6 +43,7 @@ from interlace.glmm_family import (
     resolve_family,
 )
 from interlace.profiled_reml import (
+    LambdaBuilder,
     _build_theta_bounds,
     make_lambda,
     n_theta_for_spec,
@@ -795,6 +796,7 @@ def _pirls(
     beta0: np.ndarray | None = None,
     offset: np.ndarray | None = None,
     phi: np.ndarray | None = None,
+    lambda_builder: LambdaBuilder | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, bool]:
     """Run PIRLS to find conditional modes (u_hat, beta_hat).
 
@@ -824,7 +826,11 @@ def _pirls(
     n, p = X.shape
     q = Z.shape[1]
 
-    Lambda = make_lambda(theta, specs, n_levels)
+    Lambda = (
+        lambda_builder.update(theta)
+        if lambda_builder is not None
+        else make_lambda(theta, specs, n_levels)
+    )
 
     u = np.zeros(q) if u0 is None else u0.copy()
     # Initialize beta from a GLM fit (no random effects) when not warm-starting.
@@ -983,6 +989,7 @@ def _laplace_objective(
     warm: dict[str, np.ndarray | None],
     offset: np.ndarray | None = None,
     phi: np.ndarray | None = None,
+    lambda_builder: LambdaBuilder | None = None,
 ) -> float:
     """Negative Laplace log-likelihood (to minimize over theta)."""
     beta, u, _mu, ll, _conv = _pirls(
@@ -998,6 +1005,7 @@ def _laplace_objective(
         beta0=warm.get("beta"),
         offset=offset,
         phi=phi,
+        lambda_builder=lambda_builder,
     )
     # Warm-start next call
     warm["u"] = u
@@ -1020,6 +1028,7 @@ def _laplace_objective_profiled(
     weights: np.ndarray,
     warm: dict[str, np.ndarray | None],
     offset: np.ndarray | None = None,
+    lambda_builder: LambdaBuilder | None = None,
 ) -> float:
     """Negative Laplace log-likelihood optimising (theta, beta) jointly.
 
@@ -1032,7 +1041,11 @@ def _laplace_objective_profiled(
 
     n = len(y)
     q = Z.shape[1]
-    Lambda = make_lambda(theta, specs, n_levels)
+    Lambda = (
+        lambda_builder.update(theta)
+        if lambda_builder is not None
+        else make_lambda(theta, specs, n_levels)
+    )
     Z_star = Z @ Lambda
     _off = offset if offset is not None else np.zeros(n)
 
@@ -1418,6 +1431,10 @@ def fit_glmm(
     # --- Optimize ---
     warm: dict[str, np.ndarray | None] = {"u": None, "beta": None}
 
+    # Cache the structural sparse pattern of Lambda_theta once.  Reused by
+    # _pirls and _laplace_objective_profiled across all optimiser evals.
+    lambda_builder = LambdaBuilder(specs, n_levels_list)
+
     # Precompute group indices for AGQ
     if nAGQ > 1:
         group_codes = group_array(specs[0], nw_data)
@@ -1447,6 +1464,7 @@ def fit_glmm(
                 warm,
                 offset=offset_arr,
                 phi=phi,
+                lambda_builder=lambda_builder,
             )
 
         lower_bounds = np.array(
@@ -1507,6 +1525,7 @@ def fit_glmm(
                 weights_arr,
                 warm,
                 offset=offset_arr,
+                lambda_builder=lambda_builder,
             )
 
         lower_bounds = np.array(
@@ -1559,6 +1578,7 @@ def fit_glmm(
                 weights_arr,
                 warm_phase2,
                 offset_arr,
+                lambda_builder,
             ),
             method="Nelder-Mead",
             options={"xatol": 1e-7, "fatol": 1e-7, "maxiter": 2000, "adaptive": True},

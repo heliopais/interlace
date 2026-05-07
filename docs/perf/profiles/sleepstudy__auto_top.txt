@@ -2,73 +2,73 @@
 
 ## Top 25 by cumulative time
 
-         420349 function calls (419586 primitive calls) in 0.640 seconds
+         298972 function calls (298393 primitive calls) in 0.160 seconds
 
    Ordered by: cumulative time
-   List reduced from 983 to 25 due to restriction <25>
+   List reduced from 994 to 25 due to restriction <25>
 
    ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-        1    0.000    0.000    0.640    0.640 /Users/paishe01/repos/gpg/interlace/docs/perf/profile_fits.py:49(_fit_sleepstudy)
-        1    0.001    0.001    0.640    0.640 /Users/paishe01/repos/gpg/interlace/src/interlace/__init__.py:149(fit)
-      116    0.020    0.000    0.373    0.003 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:345(reml_objective)
-        1    0.000    0.000    0.373    0.373 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:566(fit_reml)
-        1    0.000    0.000    0.353    0.353 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_minimize.py:54(minimize)
-        1    0.000    0.000    0.353    0.353 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_lbfgsb_py.py:294(_minimize_lbfgsb)
-       23    0.000    0.000    0.341    0.015 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_differentiable_functions.py:409(fun_and_grad)
-       92    0.000    0.000    0.340    0.004 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/_lib/_util.py:600(__call__)
-       92    0.001    0.000    0.339    0.004 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:669(obj)
-      125    0.006    0.000    0.277    0.002 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:82(make_lambda)
-       24    0.000    0.000    0.254    0.011 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_differentiable_functions.py:371(_update_grad)
-       23    0.000    0.000    0.254    0.011 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_differentiable_functions.py:35(__call__)
-       23    0.002    0.000    0.254    0.011 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_numdiff.py:278(approx_derivative)
-       23    0.001    0.000    0.249    0.011 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_numdiff.py:663(_dense_difference)
-       69    0.001    0.000    0.247    0.004 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_numdiff.py:871(__call__)
-2696/2443    0.016    0.000    0.211    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:30(__init__)
- 1002/752    0.022    0.000    0.183    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_coo.py:32(__init__)
-        1    0.000    0.000    0.179    0.179 /Users/paishe01/repos/gpg/interlace/src/interlace/satterthwaite.py:40(satterthwaite_dfs)
-      125    0.006    0.000    0.142    0.001 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_construct.py:728(kron)
-      125    0.017    0.000    0.140    0.001 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:314(_build_A11)
-        6    0.000    0.000    0.139    0.023 /Users/paishe01/repos/gpg/interlace/src/interlace/satterthwaite.py:74(_fe_cov_diag)
-     5212    0.011    0.000    0.102    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:1525(_get_index_dtype)
-       47    0.000    0.000    0.095    0.002 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_differentiable_functions.py:360(_update_fun)
-      515    0.000    0.000    0.092    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:919(__matmul__)
-      515    0.001    0.000    0.088    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:788(_matmul_dispatch)
+        1    0.000    0.000    0.160    0.160 /Users/paishe01/repos/gpg/interlace/docs/perf/profile_fits.py:48(_fit_sleepstudy)
+        1    0.000    0.000    0.160    0.160 /Users/paishe01/repos/gpg/interlace/src/interlace/__init__.py:149(fit)
+      116    0.008    0.000    0.129    0.001 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:413(reml_objective)
+        1    0.000    0.000    0.105    0.105 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:638(fit_reml)
+        1    0.000    0.000    0.102    0.102 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_minimize.py:54(minimize)
+        1    0.000    0.000    0.101    0.101 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_lbfgsb_py.py:294(_minimize_lbfgsb)
+       23    0.000    0.000    0.098    0.004 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_differentiable_functions.py:409(fun_and_grad)
+       92    0.000    0.000    0.095    0.001 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/_lib/_util.py:600(__call__)
+       92    0.000    0.000    0.095    0.001 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:746(obj)
+       24    0.000    0.000    0.077    0.003 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_differentiable_functions.py:371(_update_grad)
+       23    0.000    0.000    0.077    0.003 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_differentiable_functions.py:35(__call__)
+       23    0.001    0.000    0.077    0.003 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_numdiff.py:278(approx_derivative)
+       23    0.001    0.000    0.074    0.003 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_numdiff.py:663(_dense_difference)
+       69    0.000    0.000    0.073    0.001 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_numdiff.py:871(__call__)
+2421/2168    0.009    0.000    0.071    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:30(__init__)
+      125    0.001    0.000    0.057    0.000 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:382(_build_A11)
+        1    0.000    0.000    0.043    0.043 /Users/paishe01/repos/gpg/interlace/src/interlace/satterthwaite.py:40(satterthwaite_dfs)
+       24    0.000    0.000    0.035    0.001 /Users/paishe01/repos/gpg/interlace/src/interlace/satterthwaite.py:108(_deviance)
+      515    0.000    0.000    0.035    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:919(__matmul__)
+      515    0.001    0.000    0.033    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:788(_matmul_dispatch)
+      254    0.002    0.000    0.029    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:415(_matmul_sparse)
+     3465    0.004    0.000    0.028    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:1525(_get_index_dtype)
+       47    0.000    0.000    0.023    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/optimize/_differentiable_functions.py:360(_update_fun)
+     3691    0.016    0.000    0.023    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_sputils.py:264(get_index_dtype)
+     2421    0.006    0.000    0.022    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:166(check_format)
 
 
 
 
 ## Top 25 by self (tottime)
 
-         420349 function calls (419586 primitive calls) in 0.640 seconds
+         298972 function calls (298393 primitive calls) in 0.160 seconds
 
    Ordered by: internal time
-   List reduced from 983 to 25 due to restriction <25>
+   List reduced from 994 to 25 due to restriction <25>
 
    ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-     5714    0.069    0.000    0.088    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_sputils.py:264(get_index_dtype)
-       12    0.056    0.005    0.056    0.005 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/pandas/core/arrays/string_.py:197(__init__)
-     1002    0.040    0.000    0.083    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_coo.py:204(_check)
- 1002/752    0.022    0.000    0.183    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_coo.py:32(__init__)
-      116    0.020    0.000    0.373    0.003 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:345(reml_objective)
-     3698    0.018    0.000    0.028    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_data.py:21(__init__)
-     4479    0.018    0.000    0.018    0.000 {method 'reduce' of 'numpy.ufunc' objects}
-      125    0.017    0.000    0.140    0.001 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:314(_build_A11)
-2696/2443    0.016    0.000    0.211    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:30(__init__)
-     3071    0.015    0.000    0.029    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_sputils.py:444(check_shape)
-    13136    0.014    0.000    0.014    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:118(_getnnz)
-     2696    0.014    0.000    0.044    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:166(check_format)
-     2913    0.014    0.000    0.028    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:1118(prune)
-    11453    0.011    0.000    0.011    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/numpy/_core/getlimits.py:412(__init__)
-62694/62542    0.011    0.000    0.011    0.000 {built-in method builtins.len}
-     5212    0.011    0.000    0.102    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:1525(_get_index_dtype)
-      752    0.010    0.000    0.013    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_sputils.py:142(getdata)
-     2629    0.009    0.000    0.014    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_coo.py:167(_getnnz)
-       28    0.009    0.000    0.009    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/pandas/core/generic.py:6191(__getattr__)
-      125    0.008    0.000    0.059    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_construct.py:1313(block_diag)
-    15765    0.008    0.000    0.037    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:365(nnz)
-     8694    0.008    0.000    0.008    0.000 {built-in method numpy.array}
-     3698    0.008    0.000    0.010    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:138(__init__)
-27364/27346    0.007    0.000    0.012    0.000 {built-in method builtins.isinstance}
-     9213    0.007    0.000    0.007    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_sputils.py:477(<genexpr>)
+     3691    0.016    0.000    0.023    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_sputils.py:264(get_index_dtype)
+2421/2168    0.009    0.000    0.071    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:30(__init__)
+      116    0.008    0.000    0.129    0.001 /Users/paishe01/repos/gpg/interlace/src/interlace/profiled_reml.py:413(reml_objective)
+     2638    0.007    0.000    0.015    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:1118(prune)
+     2421    0.006    0.000    0.022    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:166(check_format)
+     2152    0.006    0.000    0.009    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_sputils.py:444(check_shape)
+45140/44988    0.005    0.000    0.005    0.000 {built-in method builtins.len}
+     3465    0.004    0.000    0.028    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:1525(_get_index_dtype)
+     7407    0.004    0.000    0.004    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/numpy/_core/getlimits.py:412(__init__)
+21485/21467    0.004    0.000    0.007    0.000 {built-in method builtins.isinstance}
+    12733    0.004    0.000    0.008    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:365(nnz)
+    12036    0.003    0.000    0.003    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:118(_getnnz)
+     1540    0.002    0.000    0.002    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+     5273    0.002    0.000    0.002    0.000 {built-in method _abc._abc_instancecheck}
+      254    0.002    0.000    0.029    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_compressed.py:415(_matmul_sparse)
+     6673    0.002    0.000    0.002    0.000 {built-in method numpy.array}
+       65    0.002    0.000    0.002    0.000 {built-in method scipy.sparse.linalg._dsolve._superlu.gssv}
+     2687    0.002    0.000    0.003    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:138(__init__)
+      124    0.002    0.000    0.009    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/linalg/_basic.py:99(solve)
+     6454    0.001    0.000    0.002    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_base.py:98(_shape_as_2d)
+11968/11963    0.001    0.000    0.002    0.000 {built-in method numpy.asarray}
+     4597    0.001    0.000    0.002    0.000 <frozen importlib._bootstrap>:648(parent)
+     1497    0.001    0.000    0.002    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/numpy/_core/numeric.py:1975(isscalar)
+     6456    0.001    0.000    0.002    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_sputils.py:472(<genexpr>)
+  266/200    0.001    0.000    0.012    0.000 /Users/paishe01/repos/gpg/interlace/.venv/lib/python3.14/site-packages/scipy/sparse/_coo.py:32(__init__)
 
 

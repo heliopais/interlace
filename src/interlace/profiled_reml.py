@@ -144,6 +144,78 @@ def make_lambda(
     return sp.block_diag(blocks, format="csc")
 
 
+class LambdaBuilder:
+    """Cached-pattern Lambda_theta builder.
+
+    The non-zero pattern of Lambda_theta is determined by ``specs`` and
+    ``n_levels`` alone — not by ``theta``.  Each non-zero entry of Lambda
+    is exactly one component of theta (``make_lambda`` is linear in theta
+    with coefficient 1), so we precompute (indices, indptr) once and a
+    map from data-slot to theta-index, then write theta values into a
+    fresh data array per ``update`` call.
+
+    ~5x cheaper than calling ``make_lambda`` per outer optimiser step.
+    Numerically equivalent to ``make_lambda(theta, specs, n_levels)``.
+    """
+
+    def __init__(
+        self,
+        specs: list[RandomEffectSpec],
+        n_levels: list[int],
+    ) -> None:
+        self.specs = specs
+        self.n_levels = list(n_levels)
+        n_theta = sum(
+            n_theta_for_spec(s.n_terms, s.correlated) for s in specs
+        )
+        if n_theta == 0:
+            raise ValueError("LambdaBuilder requires at least one theta parameter")
+
+        # Build a template Lambda where each theta component is a distinct
+        # positive integer.  The resulting CSC's data array then encodes,
+        # per slot, the (1-indexed) theta component it carries.
+        theta_unit = np.arange(1, n_theta + 1, dtype=float)
+        template = make_lambda(theta_unit, specs, n_levels)
+        template.sort_indices()
+
+        # Verify that every data slot is exactly one theta component
+        # (no products, sums, or sign flips beyond what theta carries).
+        data_int = np.rint(template.data).astype(np.intp)
+        if (
+            not np.allclose(template.data, data_int)
+            or data_int.min() < 1
+            or data_int.max() > n_theta
+        ):
+            msg = (
+                "LambdaBuilder: make_lambda no longer linear-with-coeff-1 in "
+                "theta; recipe needs updating"
+            )
+            raise RuntimeError(msg)
+
+        self._indices = template.indices
+        self._indptr = template.indptr
+        self._shape = template.shape
+        self._theta_map = data_int - 1  # 0-indexed
+        self._n_theta = n_theta
+
+    def update(self, theta: np.ndarray) -> sp.csc_matrix:
+        """Return Lambda_theta as a CSC, sharing cached indices/indptr."""
+        if theta.shape != (self._n_theta,):
+            msg = f"theta shape {theta.shape} != ({self._n_theta},)"
+            raise ValueError(msg)
+        data = theta[self._theta_map]
+        m = sp.csc_matrix(
+            (data, self._indices, self._indptr),
+            shape=self._shape,
+            copy=False,
+        )
+        # scipy's constructor may copy indices for dtype safety; restore
+        # the cached buffers so successive callers see the same arrays.
+        m.indices = self._indices
+        m.indptr = self._indptr
+        return m
+
+
 def make_lambda_diag(theta: np.ndarray, q_sizes: list[int]) -> np.ndarray:
     """Build the diagonal of the Lambda_theta block-diagonal matrix.
 
@@ -399,7 +471,11 @@ def reml_objective(
     # --- Build Lambda and A11 ---
     if specs is not None and not all(s.n_terms == 1 for s in specs):
         # General path: random slopes require full sparse Lambda
-        Lambda = make_lambda(theta, specs, n_levels)  # type: ignore[arg-type]
+        builder = _cache.get("lambda_builder") if _cache is not None else None
+        if builder is not None:
+            Lambda = builder.update(theta)  # type: ignore[union-attr]
+        else:
+            Lambda = make_lambda(theta, specs, n_levels)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, Lambda)
         lZty = np.asarray(Lambda.T @ Zty).squeeze()
         lZtX = np.asarray(Lambda.T @ ZtX)
@@ -647,13 +723,18 @@ def fit_reml(
 
     cache = _precompute(y, X, Z, weights=weights)
 
+    # Cache structural sparse pattern of Lambda_theta when random slopes
+    # are involved.  Only .data changes across theta evaluations.
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
+        cache["lambda_builder"] = LambdaBuilder(specs, n_levels)  # type: ignore[arg-type]
+
     # Cholesky factorisation (once for sparsity analysis + initial numeric factor):
     # sparsity pattern of A11 is fixed across all theta evaluations, so only the
     # numeric refactorisation is needed per call (factor.cholesky reuses the pattern).
     cholmod = _try_cholmod()
     if cholmod is not None:
         if specs is not None and not all(s.n_terms == 1 for s in specs):
-            Lambda0 = make_lambda(theta0, specs, n_levels)  # type: ignore[arg-type]
+            Lambda0 = cache["lambda_builder"].update(theta0)  # type: ignore[union-attr]
             A11_0 = _build_A11(cache["ZtZ"], Lambda0)
         else:
             _q_init = n_levels if specs is not None else q_sizes
@@ -1054,7 +1135,11 @@ def _sigma2_at_theta(
     n, p = X.shape
 
     if specs is not None and not all(s.n_terms == 1 for s in specs):
-        Lambda = make_lambda(theta, specs, n_levels)  # type: ignore[arg-type]
+        builder = _cache.get("lambda_builder") if _cache is not None else None
+        if builder is not None:
+            Lambda = builder.update(theta)
+        else:
+            Lambda = make_lambda(theta, specs, n_levels)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, Lambda)
         lZty = np.asarray(Lambda.T @ Zty).squeeze()
         lZtX = np.asarray(Lambda.T @ ZtX)
@@ -1121,7 +1206,11 @@ def ml_objective(
     n, p = X.shape
 
     if specs is not None and not all(s.n_terms == 1 for s in specs):
-        Lambda = make_lambda(theta, specs, n_levels)  # type: ignore[arg-type]
+        builder = _cache.get("lambda_builder") if _cache is not None else None
+        if builder is not None:
+            Lambda = builder.update(theta)  # type: ignore[union-attr]
+        else:
+            Lambda = make_lambda(theta, specs, n_levels)  # type: ignore[arg-type]
         A11 = _build_A11(ZtZ, Lambda)
         lZty = np.asarray(Lambda.T @ Zty).squeeze()
         lZtX = np.asarray(Lambda.T @ ZtX)
@@ -1238,10 +1327,13 @@ def fit_ml(
 
     cache = _precompute(y, X, Z, weights=weights)
 
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
+        cache["lambda_builder"] = LambdaBuilder(specs, n_levels)  # type: ignore[arg-type]
+
     cholmod = _try_cholmod()
     if cholmod is not None:
         if specs is not None and not all(s.n_terms == 1 for s in specs):
-            Lambda0 = make_lambda(theta0, specs, n_levels)  # type: ignore[arg-type]
+            Lambda0 = cache["lambda_builder"].update(theta0)  # type: ignore[union-attr]
             A11_0 = _build_A11(cache["ZtZ"], Lambda0)
         else:
             _q_init_ml = n_levels if specs is not None else q_sizes
