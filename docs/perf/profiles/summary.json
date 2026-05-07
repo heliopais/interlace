@@ -12,14 +12,14 @@
       "config": "auto",
       "n_reps": 5,
       "times_s": [
-        0.05625154194422066,
-        0.07027775002643466,
-        0.056795583106577396,
-        0.05882087512873113,
-        0.0650265000294894
+        0.10924800019711256,
+        0.09732987498864532,
+        0.1041282918304205,
+        0.09335808292962611,
+        0.08540187519975007
       ],
-      "median_s": 0.05882087512873113,
-      "min_s": 0.05625154194422066,
+      "median_s": 0.09732987498864532,
+      "min_s": 0.08540187519975007,
       "call_counts": {
         "interlace.profiled_reml.reml_objective": 92,
         "interlace.glmm_laplace._pirls": 0,
@@ -37,14 +37,14 @@
       "config": "superlu",
       "n_reps": 5,
       "times_s": [
-        0.09768837504088879,
-        0.0874759592115879,
-        0.1984177918639034,
-        0.10015416704118252,
-        0.06482654111459851
+        0.08457874995656312,
+        0.14355508307926357,
+        0.08211145899258554,
+        0.06832295889034867,
+        0.14190137502737343
       ],
-      "median_s": 0.09768837504088879,
-      "min_s": 0.06482654111459851,
+      "median_s": 0.08457874995656312,
+      "min_s": 0.06832295889034867,
       "call_counts": {
         "interlace.profiled_reml.reml_objective": 92,
         "interlace.glmm_laplace._pirls": 0,
@@ -62,21 +62,21 @@
       "config": "auto",
       "n_reps": 5,
       "times_s": [
-        0.48423733306117356,
-        0.46941083297133446,
-        0.5345184579491615,
-        0.4760205000638962,
-        0.597240790957585
+        0.3930399580858648,
+        0.4230419169180095,
+        0.4354059579782188,
+        0.689515917096287,
+        0.3891186660621315
       ],
-      "median_s": 0.48423733306117356,
-      "min_s": 0.46941083297133446,
+      "median_s": 0.4230419169180095,
+      "min_s": 0.3891186660621315,
       "call_counts": {
         "interlace.profiled_reml.reml_objective": 0,
         "interlace.glmm_laplace._pirls": 19,
         "interlace.glmm_laplace._laplace_objective": 19,
-        "interlace.glmm_laplace._laplace_objective_profiled": 403,
-        "scipy.sparse.linalg.spsolve": 1220,
-        "scipy.sparse.linalg.splu": 422
+        "interlace.glmm_laplace._laplace_objective_profiled": 405,
+        "scipy.sparse.linalg.spsolve": 1225,
+        "scipy.sparse.linalg.splu": 424
       },
       "cholmod_available": true,
       "prof": "docs/perf/profiles/cbpp__auto.prof",

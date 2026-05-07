@@ -337,6 +337,41 @@ _PIRLS_TOL = 1e-8
 _MU_EPS = 1e-10  # clamp mu away from 0 boundary
 
 
+def _scale_columns_csc(Z: sp.csc_matrix, col_factors: np.ndarray) -> sp.csc_matrix:
+    """Right-multiply Z by diag(col_factors) without sparse matmul.
+
+    Equivalent to ``Z @ sp.diags(col_factors, format='csc')``.  For a CSC
+    matrix, slot ``s`` in column ``c`` is multiplied by ``col_factors[c]``.
+    Reuses ``Z.indices`` / ``Z.indptr`` (only ``data`` is freshly allocated).
+    """
+    col_for_slot = np.repeat(np.arange(Z.shape[1]), np.diff(Z.indptr))
+    out = sp.csc_matrix(
+        (Z.data * col_factors[col_for_slot], Z.indices, Z.indptr),
+        shape=Z.shape,
+        copy=False,
+    )
+    out.indices = Z.indices
+    out.indptr = Z.indptr
+    return out
+
+
+def _scale_rows_csc(M: sp.csc_matrix, row_factors: np.ndarray) -> sp.csc_matrix:
+    """Left-multiply M by diag(row_factors) without sparse matmul.
+
+    Equivalent to ``sp.diags(row_factors, format='csc') @ M``.  For a CSC
+    matrix, ``indices`` are row indices, so we just scale ``.data`` by
+    ``row_factors[indices]``.  Reuses ``M.indices`` / ``M.indptr``.
+    """
+    out = sp.csc_matrix(
+        (M.data * row_factors[M.indices], M.indices, M.indptr),
+        shape=M.shape,
+        copy=False,
+    )
+    out.indices = M.indices
+    out.indptr = M.indptr
+    return out
+
+
 def _clamp_mu(mu: np.ndarray, family: GLMMFamily) -> np.ndarray:
     """Clamp mu to valid range for the family."""
     if family.name in ("binomial", "beta"):
@@ -826,11 +861,16 @@ def _pirls(
     n, p = X.shape
     q = Z.shape[1]
 
-    Lambda = (
-        lambda_builder.update(theta)
-        if lambda_builder is not None
-        else make_lambda(theta, specs, n_levels)
-    )
+    if lambda_builder is not None:
+        Lambda = lambda_builder.update(theta)
+        if lambda_builder.is_diagonal:
+            Z_star = _scale_columns_csc(Z, lambda_builder.diag(theta))
+        else:
+            Z_star = (Z @ Lambda).tocsc()
+    else:
+        Lambda = make_lambda(theta, specs, n_levels)
+        Z_star = (Z @ Lambda).tocsc()
+    I_q = sp.eye(q, format="csc")
 
     u = np.zeros(q) if u0 is None else u0.copy()
     # Initialize beta from a GLM fit (no random effects) when not warm-starting.
@@ -881,9 +921,9 @@ def _pirls(
         WX = sqrtW[:, None] * X  # (n, p)
         Wz = sqrtW * z_w  # (n,)
 
-        # Lambda parameterisation: v = Lambda^{-1} u, penalty = v'v
-        Z_star = Z @ Lambda  # (n, q)
-        WZs = sp.diags(sqrtW, format="csc") @ Z_star  # (n, q)
+        # Z_star is fixed across iterations within this PIRLS call (Lambda
+        # depends on theta, not on iter); only the W-scaled version changes.
+        WZs = _scale_rows_csc(Z_star, sqrtW)  # (n, q)
 
         XtWX = WX.T @ WX  # (p, p)
         ZstWX = np.asarray(
@@ -894,7 +934,7 @@ def _pirls(
         ZstWz = np.asarray(WZs.T @ Wz).squeeze()  # (q,)
 
         # A = Z_star'WZ_star + I
-        A = (ZstWZs + sp.eye(q, format="csc")).tocsc()
+        A = (ZstWZs + I_q).tocsc()
 
         # Schur complement solve for beta, then back-substitute for v
         A_inv_ZstWX = np.column_stack(
@@ -958,8 +998,8 @@ def _pirls(
             var_mu = family.variance(mu)
             denom_final = var_mu if phi is None else phi * var_mu
         w = weights * mu_eta_val**2 / denom_final
-    WZs_final = sp.diags(np.sqrt(w), format="csc") @ Z_star
-    A_final = ((WZs_final.T @ WZs_final) + sp.eye(q, format="csc")).tocsc()
+    WZs_final = _scale_rows_csc(Z_star, np.sqrt(w))
+    A_final = ((WZs_final.T @ WZs_final) + I_q).tocsc()
     log_det_A = sparse_chol_logdet(A_final)
 
     # Laplace log-likelihood:
@@ -1041,12 +1081,16 @@ def _laplace_objective_profiled(
 
     n = len(y)
     q = Z.shape[1]
-    Lambda = (
-        lambda_builder.update(theta)
-        if lambda_builder is not None
-        else make_lambda(theta, specs, n_levels)
-    )
-    Z_star = Z @ Lambda
+    if lambda_builder is not None:
+        Lambda = lambda_builder.update(theta)
+        if lambda_builder.is_diagonal:
+            Z_star = _scale_columns_csc(Z, lambda_builder.diag(theta))
+        else:
+            Z_star = (Z @ Lambda).tocsc()
+    else:
+        Lambda = make_lambda(theta, specs, n_levels)
+        Z_star = (Z @ Lambda).tocsc()
+    I_q = sp.eye(q, format="csc")
     _off = offset if offset is not None else np.zeros(n)
 
     # Run PIRLS for u only, with beta fixed
@@ -1074,8 +1118,8 @@ def _laplace_objective_profiled(
             Z_star.T @ (w * (Z_star @ (u / Lambda.diagonal()) + wtres))
         ).squeeze()  # noqa: E501
         sqrtW = np.sqrt(w)
-        WZs = sp.diags(sqrtW, format="csc") @ Z_star
-        A = ((WZs.T @ WZs) + sp.eye(q, format="csc")).tocsc()
+        WZs = _scale_rows_csc(Z_star, sqrtW)
+        A = ((WZs.T @ WZs) + I_q).tocsc()
         v_new = spla.spsolve(A, ZstWr)
         u_new = np.asarray(Lambda @ v_new).squeeze()
 
@@ -1102,8 +1146,8 @@ def _laplace_objective_profiled(
         mu_eta_val = family.mu_eta(eta)
         var_mu = family.variance(mu)
         w = weights * mu_eta_val**2 / var_mu
-    WZs_final = sp.diags(np.sqrt(w), format="csc") @ Z_star
-    A_final = ((WZs_final.T @ WZs_final) + sp.eye(q, format="csc")).tocsc()
+    WZs_final = _scale_rows_csc(Z_star, np.sqrt(w))
+    A_final = ((WZs_final.T @ WZs_final) + I_q).tocsc()
     log_det_A = sparse_chol_logdet(A_final)
 
     ll = cond_ll - 0.5 * penalty - 0.5 * log_det_A

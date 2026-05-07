@@ -133,6 +133,37 @@ class TestLambdaBuilderPatternReuse:
             )
 
 
+class TestLambdaBuilderDiagonal:
+    """Scalar-only specs expose a fast diagonal accessor."""
+
+    def test_is_diagonal_true_for_scalar_specs(self) -> None:
+        builder = LambdaBuilder([_intercept("g1"), _intercept("g2")], [3, 4])
+        assert builder.is_diagonal is True
+
+    def test_is_diagonal_false_for_random_slopes(self) -> None:
+        builder = LambdaBuilder([_slope("g", "x", correlated=True)], [3])
+        assert builder.is_diagonal is False
+
+    def test_is_diagonal_false_for_independent_slopes(self) -> None:
+        # || syntax: variances independent but still p>1
+        builder = LambdaBuilder([_slope("g", "x", correlated=False)], [3])
+        assert builder.is_diagonal is False
+
+    def test_diag_matches_make_lambda(self) -> None:
+        specs = [_intercept("g1"), _intercept("g2")]
+        n_levels = [4, 6]
+        theta = np.array([1.7, 0.3])
+        builder = LambdaBuilder(specs, n_levels)
+        diag_built = builder.diag(theta)
+        diag_full = make_lambda(theta, specs, n_levels).toarray().diagonal()
+        np.testing.assert_array_equal(diag_built, diag_full)
+
+    def test_diag_raises_on_non_diagonal(self) -> None:
+        builder = LambdaBuilder([_slope("g", "x", correlated=True)], [3])
+        with pytest.raises(ValueError):
+            builder.diag(np.array([1.0, 0.5, 0.8]))
+
+
 class TestLambdaBuilderShape:
     def test_total_size(self) -> None:
         specs = [

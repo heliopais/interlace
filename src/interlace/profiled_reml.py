@@ -198,6 +198,20 @@ class LambdaBuilder:
         self._theta_map = data_int - 1  # 0-indexed
         self._n_theta = n_theta
 
+        # Convenience: when every spec is scalar (p_j=1), Lambda is purely
+        # diagonal with values theta_j repeated n_levels[j] times.  Inner-loop
+        # callers can then bypass the sparse matmul Z @ Lambda entirely.
+        self.is_diagonal = all(s.n_terms == 1 for s in specs)
+        self.q: int = template.shape[0]
+
+    def diag(self, theta: np.ndarray) -> np.ndarray:
+        """Return Lambda's diagonal as a flat vector.  Only valid when
+        ``is_diagonal`` is True."""
+        if not self.is_diagonal:
+            msg = "diag() only supported for scalar-only specs"
+            raise ValueError(msg)
+        return np.repeat(theta, self.n_levels)
+
     def update(self, theta: np.ndarray) -> sp.csc_matrix:
         """Return Lambda_theta as a CSC, sharing cached indices/indptr."""
         if theta.shape != (self._n_theta,):
