@@ -30,6 +30,7 @@ import scipy.optimize as opt
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
+from interlace import profiled_reml as _profiled_reml
 from interlace.formula import (
     groups_to_random_effects,
     parse_formula,
@@ -45,6 +46,7 @@ from interlace.glmm_family import (
 from interlace.profiled_reml import (
     LambdaBuilder,
     _build_theta_bounds,
+    _init_chol_factor,
     make_lambda,
     n_theta_for_spec,
     sparse_chol_logdet,
@@ -335,6 +337,62 @@ class _GLMMSummary:
 _PIRLS_MAXITER = 100
 _PIRLS_TOL = 1e-8
 _MU_EPS = 1e-10  # clamp mu away from 0 boundary
+
+
+class _CholmodHandle:
+    """Wrapper around an sksparse.cholmod factor with version-agnostic API.
+
+    Exposes:
+      - ``refactor(A)``: numeric-only refactorisation reusing the symbolic
+        analysis from construction.
+      - ``solve(b)``: solve A x = b using the most recently refactored A.
+      - ``logdet()``: log|A|.
+
+    Created by :func:`_make_cholmod_handle` once per fit; ``refactor``
+    is called per inner objective evaluation.
+    """
+
+    __slots__ = ("factor", "api")
+
+    def __init__(self, factor: Any, api: str) -> None:
+        self.factor = factor
+        self.api = api
+
+    def refactor(self, A: sp.csc_matrix) -> None:
+        if self.api == "new":
+            self.factor.factorize(A)
+        else:
+            self.factor.cholesky(A)
+
+    def solve(self, b: np.ndarray) -> np.ndarray:
+        x = (
+            self.factor.solve(b, "A")
+            if self.api == "new"
+            else self.factor.solve_A(b)
+        )
+        x = np.asarray(x)
+        return x.squeeze() if b.ndim == 1 else x
+
+    def logdet(self) -> float:
+        return float(self.factor.logdet())
+
+
+def _make_cholmod_handle(A0: sp.csc_matrix) -> _CholmodHandle | None:
+    """Try to construct a CHOLMOD factor for the given A0 sparsity pattern.
+
+    A0 should be a representative ``(WZs.T @ WZs) + I_q`` with full
+    pattern (use theta=ones, W=ones).  Returns ``None`` if sksparse is
+    unavailable or the factorisation fails.
+    """
+    # Look up via module attribute so tests can monkeypatch the
+    # profiled_reml._try_cholmod symbol to simulate sksparse absence.
+    cholmod = _profiled_reml._try_cholmod()
+    if cholmod is None:
+        return None
+    factor, api = _init_chol_factor(cholmod, A0)
+    if factor is None or api is None:
+        return None
+    return _CholmodHandle(factor, api)
 
 
 def _scale_columns_csc(Z: sp.csc_matrix, col_factors: np.ndarray) -> sp.csc_matrix:
@@ -832,6 +890,7 @@ def _pirls(
     offset: np.ndarray | None = None,
     phi: np.ndarray | None = None,
     lambda_builder: LambdaBuilder | None = None,
+    cholmod_handle: _CholmodHandle | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, bool]:
     """Run PIRLS to find conditional modes (u_hat, beta_hat).
 
@@ -936,11 +995,18 @@ def _pirls(
         # A = Z_star'WZ_star + I
         A = (ZstWZs + I_q).tocsc()
 
-        # Schur complement solve for beta, then back-substitute for v
-        A_inv_ZstWX = np.column_stack(
-            [spla.spsolve(A, ZstWX[:, j]) for j in range(p)]
-        )  # (q, p)
-        A_inv_ZstWz = spla.spsolve(A, ZstWz)  # (q,)
+        # Schur complement solve for beta, then back-substitute for v.
+        # CHOLMOD reuses the symbolic factor across PIRLS iters and does
+        # multi-RHS in one call; SuperLU falls through to per-column spsolve.
+        if cholmod_handle is not None:
+            cholmod_handle.refactor(A)
+            A_inv_ZstWX = np.asarray(cholmod_handle.solve(ZstWX))  # (q, p)
+            A_inv_ZstWz = cholmod_handle.solve(ZstWz)  # (q,)
+        else:
+            A_inv_ZstWX = np.column_stack(
+                [spla.spsolve(A, ZstWX[:, j]) for j in range(p)]
+            )  # (q, p)
+            A_inv_ZstWz = spla.spsolve(A, ZstWz)  # (q,)
 
         schur = XtWX - ZstWX.T @ A_inv_ZstWX  # (p, p)
         rhs_beta = XtWz - ZstWX.T @ A_inv_ZstWz  # (p,)
@@ -1000,7 +1066,11 @@ def _pirls(
         w = weights * mu_eta_val**2 / denom_final
     WZs_final = _scale_rows_csc(Z_star, np.sqrt(w))
     A_final = ((WZs_final.T @ WZs_final) + I_q).tocsc()
-    log_det_A = sparse_chol_logdet(A_final)
+    if cholmod_handle is not None:
+        cholmod_handle.refactor(A_final)
+        log_det_A = cholmod_handle.logdet()
+    else:
+        log_det_A = sparse_chol_logdet(A_final)
 
     # Laplace log-likelihood:
     # ll = log p(y|u_hat, beta_hat) - 0.5*v'v - 0.5*log|A|
@@ -1030,6 +1100,7 @@ def _laplace_objective(
     offset: np.ndarray | None = None,
     phi: np.ndarray | None = None,
     lambda_builder: LambdaBuilder | None = None,
+    cholmod_handle: _CholmodHandle | None = None,
 ) -> float:
     """Negative Laplace log-likelihood (to minimize over theta)."""
     beta, u, _mu, ll, _conv = _pirls(
@@ -1046,6 +1117,7 @@ def _laplace_objective(
         offset=offset,
         phi=phi,
         lambda_builder=lambda_builder,
+        cholmod_handle=cholmod_handle,
     )
     # Warm-start next call
     warm["u"] = u
@@ -1069,6 +1141,7 @@ def _laplace_objective_profiled(
     warm: dict[str, np.ndarray | None],
     offset: np.ndarray | None = None,
     lambda_builder: LambdaBuilder | None = None,
+    cholmod_handle: _CholmodHandle | None = None,
 ) -> float:
     """Negative Laplace log-likelihood optimising (theta, beta) jointly.
 
@@ -1120,7 +1193,11 @@ def _laplace_objective_profiled(
         sqrtW = np.sqrt(w)
         WZs = _scale_rows_csc(Z_star, sqrtW)
         A = ((WZs.T @ WZs) + I_q).tocsc()
-        v_new = spla.spsolve(A, ZstWr)
+        if cholmod_handle is not None:
+            cholmod_handle.refactor(A)
+            v_new = cholmod_handle.solve(ZstWr)
+        else:
+            v_new = spla.spsolve(A, ZstWr)
         u_new = np.asarray(Lambda @ v_new).squeeze()
 
         delta_u = np.max(np.abs(u_new - u))
@@ -1148,7 +1225,11 @@ def _laplace_objective_profiled(
         w = weights * mu_eta_val**2 / var_mu
     WZs_final = _scale_rows_csc(Z_star, np.sqrt(w))
     A_final = ((WZs_final.T @ WZs_final) + I_q).tocsc()
-    log_det_A = sparse_chol_logdet(A_final)
+    if cholmod_handle is not None:
+        cholmod_handle.refactor(A_final)
+        log_det_A = cholmod_handle.logdet()
+    else:
+        log_det_A = sparse_chol_logdet(A_final)
 
     ll = cond_ll - 0.5 * penalty - 0.5 * log_det_A
 
@@ -1479,6 +1560,17 @@ def fit_glmm(
     # _pirls and _laplace_objective_profiled across all optimiser evals.
     lambda_builder = LambdaBuilder(specs, n_levels_list)
 
+    # Init CHOLMOD factor for inner-loop A solves (when sksparse is
+    # available).  A's pattern is invariant across theta and W: it equals
+    # pattern(Z_star.T @ Z_star) ∪ I_q.  Build a representative A0 with
+    # theta=ones to capture the full pattern, then refactor numerically
+    # per inner objective evaluation.
+    q_rand = lambda_builder.q
+    Lambda_init = lambda_builder.update(np.ones(lambda_builder._n_theta))
+    Z_star_init = (Z @ Lambda_init).tocsc()
+    A0 = ((Z_star_init.T @ Z_star_init) + sp.eye(q_rand, format="csc")).tocsc()
+    cholmod_handle = _make_cholmod_handle(A0)
+
     # Precompute group indices for AGQ
     if nAGQ > 1:
         group_codes = group_array(specs[0], nw_data)
@@ -1509,6 +1601,7 @@ def fit_glmm(
                 offset=offset_arr,
                 phi=phi,
                 lambda_builder=lambda_builder,
+                cholmod_handle=cholmod_handle,
             )
 
         lower_bounds = np.array(
@@ -1570,6 +1663,7 @@ def fit_glmm(
                 warm,
                 offset=offset_arr,
                 lambda_builder=lambda_builder,
+                cholmod_handle=cholmod_handle,
             )
 
         lower_bounds = np.array(
@@ -1623,6 +1717,7 @@ def fit_glmm(
                 warm_phase2,
                 offset_arr,
                 lambda_builder,
+                cholmod_handle,
             ),
             method="Nelder-Mead",
             # Tolerances aligned with lme4 stage-2 Nelder_Mead defaults
@@ -1665,6 +1760,8 @@ def fit_glmm(
             weights_arr,
             warm_phase2,
             offset_arr,
+            lambda_builder,
+            cholmod_handle,
         )
         beta_hat = warm["beta"].copy()  # type: ignore[union-attr]
         u_hat = warm_phase2["u"].copy()  # type: ignore[union-attr]
@@ -1689,6 +1786,8 @@ def fit_glmm(
             beta0=warm.get("beta"),
             offset=offset_arr,
             phi=phi_hat,
+            lambda_builder=lambda_builder,
+            cholmod_handle=cholmod_handle,
         )
     converged = opt_converged and pirls_converged
 
