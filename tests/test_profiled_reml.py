@@ -576,7 +576,14 @@ class _FakeCholmod:
 
 class TestTryCholmod:
     def test_returns_none_without_sksparse(self) -> None:
-        result = _try_cholmod()
+        # Force ImportError even if sksparse is installed in the dev venv:
+        # setting sys.modules[name] = None makes the import system raise
+        # ImportError on `from sksparse import cholmod`, which is what
+        # _try_cholmod is designed to catch.
+        with patch.dict(
+            sys.modules, {"sksparse": None, "sksparse.cholmod": None}
+        ):
+            result = _try_cholmod()
         assert result is None
 
     def test_returns_module_when_sksparse_available(self) -> None:
