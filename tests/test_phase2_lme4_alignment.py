@@ -94,7 +94,8 @@ class TestNumericalAgreementPreserved:
             groups="herd",
             weights=np.array(cbpp_data["size"], dtype=float),
         )
-        # lme4 estimates: Intercept=-1.398, period2=-0.992, period3=-1.128, period4=-1.580
+        # lme4 estimates: Intercept=-1.398, period[T.2]=-0.992,
+        # period[T.3]=-1.128, period[T.4]=-1.580
         np.testing.assert_allclose(
             result.fe_params["Intercept"], -1.398, atol=5e-2
         )
