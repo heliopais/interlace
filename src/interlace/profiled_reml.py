@@ -433,6 +433,11 @@ def _build_A11(
 # Profiled REML objective
 # ---------------------------------------------------------------------------
 
+# Below this q the dense kernel beats the sparse one (interlace-72oc): the
+# constant overhead of scipy.sparse construction dwarfs the actual
+# factorisation work at small q.
+_DENSE_Q_THRESHOLD = 200
+
 
 def reml_objective(
     theta: np.ndarray,
@@ -447,35 +452,50 @@ def reml_objective(
 ) -> float:
     """Profiled REML deviance (to minimise over theta).
 
-    Evaluates:
+    Dispatches to a dense kernel for small q (interlace-72oc); otherwise
+    falls through to the sparse path.  The sparse and dense kernels are
+    numerically equivalent.
 
-        obj(theta) = log|A11| + log|X'Omega^{-1}X| + (n-p) * log(y'Py)
-
-    where constants (independent of theta) are dropped.
-
-    Parameters
-    ----------
-    theta:
-        Relative covariance parameters. When *specs* is ``None``: one scalar
-        per grouping factor. When *specs* is provided: concatenated per-spec
-        theta blocks as returned by :func:`make_lambda`.
-    y, X, Z:
-        Response, fixed-effects matrix, random-effects design matrix.
-    q_sizes:
-        Number of levels per grouping factor (legacy path; ignored when
-        *specs* is provided).
-    _cache:
-        Optional dict of precomputed cross-products.
-    specs:
-        If provided, use :func:`make_lambda` to build a full sparse Lambda
-        (supports random slopes). Otherwise fall back to the diagonal path.
-    n_levels:
-        Number of group levels per spec. Required when *specs* is not ``None``.
-
-    Returns
-    -------
-    float  (profiled REML deviance; lower is better)
+    See :func:`reml_objective_sparse` / :func:`reml_objective_dense` for the
+    underlying implementations and the original docstring text.
     """
+    q = Z.shape[1]
+    if q <= _DENSE_Q_THRESHOLD:
+        return reml_objective_dense(
+            theta,
+            y,
+            X,
+            Z,
+            q_sizes,
+            _cache=_cache,
+            specs=specs,
+            n_levels=n_levels,
+        )
+    return reml_objective_sparse(
+        theta,
+        y,
+        X,
+        Z,
+        q_sizes,
+        _cache=_cache,
+        specs=specs,
+        n_levels=n_levels,
+    )
+
+
+def reml_objective_sparse(
+    theta: np.ndarray,
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    q_sizes: list[int],
+    _cache: dict[str, np.ndarray | sp.csc_matrix | float] | None = None,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
+) -> float:
+    """Sparse profiled REML deviance.  The original implementation; preserved
+    for the q > _DENSE_Q_THRESHOLD path."""
     if _cache is None:
         _cache = _precompute(y, X, Z)
 
@@ -545,6 +565,92 @@ def reml_objective(
     return float(log_det_A11 + log_det_MX + (n - p) * np.log(yPy))
 
 
+def reml_objective_dense(
+    theta: np.ndarray,
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    q_sizes: list[int],
+    _cache: dict[str, np.ndarray | sp.csc_matrix | float] | None = None,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
+) -> float:
+    """Dense profiled REML deviance for small q (interlace-72oc).
+
+    Mirrors :func:`reml_objective_sparse` line-for-line but keeps ZtZ, the
+    Lambda factor, and A11 as plain numpy arrays.  ``ZtZ_dense`` is cached
+    in the ``_cache`` dict so it materialises once per fit.
+    """
+    if _cache is None:
+        _cache = _precompute(y, X, Z)
+
+    ZtX = np.asarray(_cache["ZtX"])
+    Zty = np.asarray(_cache["Zty"])
+    XtX = np.asarray(_cache["XtX"])
+    Xty = np.asarray(_cache["Xty"])
+    yty = float(_cache["yty"])  # noqa: PGH003
+
+    ZtZ_dense_cached = _cache.get("ZtZ_dense") if _cache is not None else None
+    if ZtZ_dense_cached is None:
+        ZtZ_sp = _cache["ZtZ"]
+        ZtZ_dense = (
+            ZtZ_sp.toarray()  # type: ignore[union-attr]
+            if sp.issparse(ZtZ_sp)
+            else np.asarray(ZtZ_sp)
+        )
+        _cache["ZtZ_dense"] = ZtZ_dense
+    else:
+        ZtZ_dense = np.asarray(ZtZ_dense_cached)
+
+    n, p = X.shape
+    q = ZtZ_dense.shape[0]
+    eye_q = np.eye(q)
+
+    # --- Build Lambda and A11_dense ---
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
+        builder = _cache.get("lambda_builder") if _cache is not None else None
+        if builder is not None:
+            Lambda_dense = np.asarray(builder.update(theta).toarray())  # type: ignore[union-attr]
+        else:
+            Lambda_dense = np.asarray(
+                make_lambda(theta, specs, n_levels).toarray()  # type: ignore[arg-type]
+            )
+        A11 = Lambda_dense.T @ ZtZ_dense @ Lambda_dense + eye_q
+        lZty = Lambda_dense.T @ Zty
+        lZtX = Lambda_dense.T @ ZtX
+    else:
+        _q_sizes = n_levels if specs is not None else q_sizes
+        lambda_diag = make_lambda_diag(theta, _q_sizes)  # type: ignore[arg-type]
+        A11 = lambda_diag[:, None] * ZtZ_dense * lambda_diag[None, :] + eye_q
+        lZty = lambda_diag * Zty
+        lZtX = lambda_diag[:, None] * ZtX
+
+    # --- Dense Cholesky ---
+    try:
+        L = np.linalg.cholesky(A11)
+    except np.linalg.LinAlgError:
+        return np.inf
+    log_det_A11 = 2.0 * float(np.sum(np.log(np.diag(L))))
+
+    c1 = la.cho_solve((L, True), lZty)
+    C_X = la.cho_solve((L, True), lZtX)
+
+    MX = XtX - lZtX.T @ C_X
+    rhs = Xty - lZtX.T @ c1
+    try:
+        beta_hat = la.solve(MX, rhs, assume_a="pos")
+    except la.LinAlgError:
+        return np.inf
+
+    yPy = float(yty - lZty @ c1 - rhs @ beta_hat)
+    if yPy <= 0:
+        return np.inf
+
+    log_det_MX = float(np.linalg.slogdet(MX)[1])
+    return float(log_det_A11 + log_det_MX + (n - p) * np.log(yPy))
+
+
 def reml_gradient(
     theta: np.ndarray,
     y: np.ndarray,
@@ -558,8 +664,51 @@ def reml_gradient(
 ) -> np.ndarray:
     """Analytical gradient of the profiled REML deviance w.r.t. theta.
 
-    Only supported for the diagonal (intercept-only) path.  Raises
-    ``NotImplementedError`` for random-slope specs.
+    Dispatches to :func:`reml_gradient_dense` for small q (interlace-72oc),
+    otherwise to :func:`reml_gradient_sparse`.  Only supported for the
+    diagonal (intercept-only) path -- raises ``NotImplementedError`` for
+    random-slope specs.
+    """
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
+        msg = "reml_gradient is only implemented for the diagonal (intercept-only) path"
+        raise NotImplementedError(msg)
+    q = Z.shape[1]
+    if q <= _DENSE_Q_THRESHOLD:
+        return reml_gradient_dense(
+            theta,
+            y,
+            X,
+            Z,
+            q_sizes,
+            _cache=_cache,
+            specs=specs,
+            n_levels=n_levels,
+        )
+    return reml_gradient_sparse(
+        theta,
+        y,
+        X,
+        Z,
+        q_sizes,
+        _cache=_cache,
+        specs=specs,
+        n_levels=n_levels,
+    )
+
+
+def reml_gradient_sparse(
+    theta: np.ndarray,
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    q_sizes: list[int],
+    _cache: dict[str, np.ndarray | sp.csc_matrix | float] | None = None,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
+) -> np.ndarray:
+    """Sparse analytical gradient.  Original implementation; preserved for
+    the q > _DENSE_Q_THRESHOLD path.
 
     The gradient decomposes into three terms per theta_k:
 
@@ -567,8 +716,6 @@ def reml_gradient(
             = tr(A11^{-1} dA11_k)               [log|A11| term]
             + tr(MX^{-1} dMX_k)                 [log|MX|  term]
             + (n-p)/yPy * d(yPy)/d theta_k      [log(yPy) term]
-
-    Parameters mirror :func:`reml_objective`.
     """
     if specs is not None and not all(s.n_terms == 1 for s in specs):
         msg = "reml_gradient is only implemented for the diagonal (intercept-only) path"
@@ -668,6 +815,102 @@ def reml_gradient(
         # Term 3: (n-p)/yPy · d(yPy)/dtheta_k
         # d(yPy)/dtheta_k = 2 f[idx_k] · (ZtZ[idx_k,:] lf  −  Zt_resid[idx_k])
         ZtZ_k_lf = np.asarray(ZtZ_csr[q_start:q_end, :] @ lf).ravel()
+        d_yPy = float(2.0 * f[q_start:q_end] @ (ZtZ_k_lf - Zt_resid[q_start:q_end]))
+        term3 = float((n - p) / yPy * d_yPy)
+
+        grad[k] = term1 + term2 + term3
+        q_start = q_end
+
+    return grad
+
+
+def reml_gradient_dense(
+    theta: np.ndarray,
+    y: np.ndarray,
+    X: np.ndarray,
+    Z: sp.csc_matrix,
+    q_sizes: list[int],
+    _cache: dict[str, np.ndarray | sp.csc_matrix | float] | None = None,
+    *,
+    specs: list[RandomEffectSpec] | None = None,
+    n_levels: list[int] | None = None,
+) -> np.ndarray:
+    """Dense analytical gradient for small q (interlace-72oc).
+
+    Mirrors :func:`reml_gradient_sparse` but with all matrices kept dense.
+    Diagonal (intercept-only) only.
+    """
+    if specs is not None and not all(s.n_terms == 1 for s in specs):
+        msg = "reml_gradient is only implemented for the diagonal (intercept-only) path"
+        raise NotImplementedError(msg)
+
+    if _cache is None:
+        _cache = _precompute(y, X, Z)
+
+    ZtX = np.asarray(_cache["ZtX"])
+    Zty = np.asarray(_cache["Zty"])
+    XtX = np.asarray(_cache["XtX"])
+    Xty = np.asarray(_cache["Xty"])
+    yty = float(_cache["yty"])
+
+    ZtZ_dense_cached = _cache.get("ZtZ_dense") if _cache is not None else None
+    if ZtZ_dense_cached is None:
+        ZtZ_sp = _cache["ZtZ"]
+        ZtZ_dense = (
+            ZtZ_sp.toarray()  # type: ignore[union-attr]
+            if sp.issparse(ZtZ_sp)
+            else np.asarray(ZtZ_sp)
+        )
+        _cache["ZtZ_dense"] = ZtZ_dense
+    else:
+        ZtZ_dense = np.asarray(ZtZ_dense_cached)
+
+    n, p = X.shape
+    q = ZtZ_dense.shape[0]
+    eye_q = np.eye(q)
+
+    _q_sizes: list[int] = n_levels if specs is not None else q_sizes  # type: ignore[assignment]
+    lambda_diag = make_lambda_diag(theta, _q_sizes)
+    A11 = lambda_diag[:, None] * ZtZ_dense * lambda_diag[None, :] + eye_q
+    lZty = lambda_diag * Zty
+    lZtX = lambda_diag[:, None] * ZtX
+
+    L = np.linalg.cholesky(A11)
+    c1 = la.cho_solve((L, True), lZty)
+    C_X = la.cho_solve((L, True), lZtX)
+    A11_inv = la.cho_solve((L, True), eye_q)
+
+    MX = XtX - lZtX.T @ C_X
+    rhs = Xty - lZtX.T @ c1
+    beta_hat = la.solve(MX, rhs, assume_a="pos")
+    yPy = float(yty - lZty @ c1 - rhs @ beta_hat)
+    MX_inv = np.linalg.inv(MX)
+
+    f = c1 - C_X @ beta_hat
+    lf = lambda_diag * f
+    Zt_resid = Zty - ZtX @ beta_hat
+
+    grad = np.zeros(len(theta))
+    q_start = 0
+    for k, q_k in enumerate(_q_sizes):
+        q_end = q_start + q_k
+        # dA11_k[i,j] = ZtZ[i,j] * (e_k[i]*lambda[j] + lambda[i]*e_k[j])
+        ek = np.zeros(q)
+        ek[q_start:q_end] = 1.0
+        scale = np.outer(ek, lambda_diag) + np.outer(lambda_diag, ek)
+        dA11 = ZtZ_dense * scale  # (q, q)
+
+        term1 = float(np.sum(A11_inv * dA11))
+
+        # dMX_k = -dB_k' C_X - C_X' dB_k + C_X' dA11_k C_X
+        C_XT_dBk = C_X[q_start:q_end, :].T @ ZtX[q_start:q_end, :]
+        dA_CX = dA11 @ C_X
+        C_XT_dA_CX = C_X.T @ dA_CX
+        term2 = float(
+            -2.0 * np.trace(MX_inv @ C_XT_dBk) + np.trace(MX_inv @ C_XT_dA_CX)
+        )
+
+        ZtZ_k_lf = ZtZ_dense[q_start:q_end, :] @ lf
         d_yPy = float(2.0 * f[q_start:q_end] @ (ZtZ_k_lf - Zt_resid[q_start:q_end]))
         term3 = float((n - p) / yPy * d_yPy)
 

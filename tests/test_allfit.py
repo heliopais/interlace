@@ -35,9 +35,10 @@ def flat_likelihood_data() -> pd.DataFrame:
     # Seed chosen so optimizers reliably disagree on theta by >1% (the
     # possible_issue threshold).  With 1 obs per group the likelihood is
     # genuinely flat near the boundary, but the magnitude of optimizer
-    # disagreement is seed-dependent: seed=7 happened to land at 0.9%
-    # (just under threshold).  Seed=5 produces ~5% disagreement reliably.
-    rng = np.random.default_rng(5)
+    # disagreement is seed-dependent.  After interlace-72oc landed the dense
+    # kernel for small q, the previous seed=5 (5% disagreement on sparse)
+    # converged tightly to 0.6% on dense.  seed=27 lands at ~7% on dense.
+    rng = np.random.default_rng(27)
     n_groups = 20
     groups = np.arange(n_groups)
     x = rng.normal(size=n_groups)

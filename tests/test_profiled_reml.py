@@ -945,29 +945,34 @@ class TestRemlGradient:
         assert counts["with_jac"] < counts["no_jac"]
 
     def test_gradient_reuses_cached_cholmod_factor(
-        self, single_re_dataset: dict
+        self, single_re_dataset: dict, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """When _cache holds a cholmod factor, reml_gradient must reuse it
-        (no extra splu refactorisations) and produce a numerically identical
-        result vs the splu-fallback path.
+        """When _cache holds a cholmod factor, the *sparse* gradient path
+        must reuse it (no extra splu refactorisations) and produce a
+        numerically identical result vs the splu-fallback path.
 
         Drives interlace-mxzk Phase A: the dense ``A11_inv = lu.solve(eye(q))``
         path triggers three separate splu factorisations per gradient call;
         with a cached factor we expect zero splu calls.
+
+        Threshold is forced to 0 so the dispatcher selects the sparse path
+        (interlace-72oc Step 2 routes small q to a dense kernel that does
+        not exercise splu/cholmod).
         """
         cholmod = _try_cholmod()
         if cholmod is None:
             pytest.skip("sksparse.cholmod not installed")
+        from interlace import profiled_reml as _pm
+
+        monkeypatch.setattr(_pm, "_DENSE_Q_THRESHOLD", 0)
 
         d = single_re_dataset
         Z = _make_Z(d["group_codes"], d["q_sizes"][0])
         theta = d["theta_true"] * 1.2
 
-        # Path 1: no cached factor -> splu fallback (current behaviour).
         cache_no_chol = _precompute(d["y"], d["X"], Z)
         g_splu = reml_gradient(theta, d["y"], d["X"], Z, d["q_sizes"], cache_no_chol)
 
-        # Path 2: prime _cache with a cholmod factor (mirrors fit_reml).
         cache_chol = _precompute(d["y"], d["X"], Z)
         ZtZ = sp.csc_matrix(cache_chol["ZtZ"])
         A11_init = _build_A11(ZtZ, make_lambda_diag(theta, d["q_sizes"]))
@@ -979,23 +984,26 @@ class TestRemlGradient:
         with patch.object(spla, "splu", wraps=spla.splu) as splu_spy:
             g_chol = reml_gradient(theta, d["y"], d["X"], Z, d["q_sizes"], cache_chol)
 
-        # No splu calls when a cached cholmod factor is available.
         assert splu_spy.call_count == 0, (
-            f"reml_gradient should not call splu when a cached cholmod factor "
-            f"is in _cache (saw {splu_spy.call_count} call(s))"
+            f"sparse reml_gradient should not call splu when a cached cholmod "
+            f"factor is in _cache (saw {splu_spy.call_count} call(s))"
         )
         np.testing.assert_allclose(g_chol, g_splu, rtol=1e-10, atol=1e-12)
 
     def test_gradient_splu_fallback_factorises_once(
-        self, single_re_dataset: dict
+        self, single_re_dataset: dict, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Without cached cholmod, splu fallback should factorise A11 only
-        once per gradient call (current code factorises three times)."""
+        """Without cached cholmod, the *sparse* splu fallback should factorise
+        A11 only once per gradient call.  Threshold forced to 0 so the
+        dispatcher selects the sparse path."""
+        from interlace import profiled_reml as _pm
+
+        monkeypatch.setattr(_pm, "_DENSE_Q_THRESHOLD", 0)
+
         d = single_re_dataset
         Z = _make_Z(d["group_codes"], d["q_sizes"][0])
         theta = d["theta_true"] * 1.2
         cache_no_chol = _precompute(d["y"], d["X"], Z)
-        # Strip any cholmod factor a fixture might have added.
         cache_no_chol.pop("chol_factor", None)
         cache_no_chol.pop("chol_api", None)
 
@@ -1003,7 +1011,7 @@ class TestRemlGradient:
             reml_gradient(theta, d["y"], d["X"], Z, d["q_sizes"], cache_no_chol)
 
         assert splu_spy.call_count == 1, (
-            f"splu fallback should factorise A11 exactly once per gradient "
+            f"sparse splu fallback should factorise A11 exactly once per gradient "
             f"call (saw {splu_spy.call_count})"
         )
 
