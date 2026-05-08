@@ -1,0 +1,18 @@
+{
+  "model": "M0_naive",
+  "formula": "Y ~ X + Zg",
+  "nobs": 200,
+  "family": "binomial",
+  "link": "logit",
+  "fixed_effects": {
+    "(Intercept)": -1.6813729768,
+    "X": 1.4994872025,
+    "Zg": -0.73525677061
+  },
+  "fixed_effects_se": {
+    "(Intercept)": 0.36167920246,
+    "X": 0.22488561654,
+    "Zg": 0.20610004503
+  },
+  "loglik": -88.0249836661
+}
