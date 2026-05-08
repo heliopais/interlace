@@ -257,7 +257,11 @@ def make_lambda_diag(theta: np.ndarray, q_sizes: list[int]) -> np.ndarray:
 def _try_cholmod() -> Any:
     """Return the ``sksparse.cholmod`` module, or ``None`` if not installed."""
     try:
-        from sksparse import cholmod  # type: ignore[import-untyped]
+        # sksparse is optional ([cholmod] extra).  Locally it triggers
+        # ``import-untyped`` (no type stubs); on CI without the extra it
+        # triggers ``import-not-found``.  The third code self-suppresses
+        # the surviving "unused-ignore" warning when only one fires.
+        from sksparse import cholmod  # type: ignore[import-untyped,import-not-found,unused-ignore]  # noqa: I001, E501
 
         return cholmod
     except ImportError:
