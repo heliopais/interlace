@@ -15,6 +15,7 @@ from interlace.profiled_reml import (
     REMLResult,
     _build_A11,
     _precompute,
+    _sparse_solve,
     _try_cholmod,
     fit_ml,
     fit_reml,
@@ -111,6 +112,29 @@ class TestSparseCholLogdet:
         logdet = sparse_chol_logdet(M)
         expected = np.linalg.slogdet(A)[1]
         assert abs(logdet - expected) < 1e-10
+
+
+class TestSparseSolveShape:
+    """_sparse_solve must preserve the 2D shape of the rhs even for single-col."""
+
+    def test_preserves_2d_with_single_column(self) -> None:
+        # spla.spsolve squeezes (q, 1) rhs to (q,); _sparse_solve must not.
+        A = sp.eye(5, format="csc")
+        B = np.ones((5, 1))
+        out = _sparse_solve(A, B)
+        assert out.shape == (5, 1)
+
+    def test_preserves_2d_with_multiple_columns(self) -> None:
+        A = sp.eye(5, format="csc")
+        B = np.ones((5, 3))
+        out = _sparse_solve(A, B)
+        assert out.shape == (5, 3)
+
+    def test_returns_1d_for_1d_rhs(self) -> None:
+        A = sp.eye(5, format="csc")
+        b = np.ones(5)
+        out = _sparse_solve(A, b)
+        assert out.shape == (5,)
 
 
 # ---------------------------------------------------------------------------
@@ -580,9 +604,7 @@ class TestTryCholmod:
         # setting sys.modules[name] = None makes the import system raise
         # ImportError on `from sksparse import cholmod`, which is what
         # _try_cholmod is designed to catch.
-        with patch.dict(
-            sys.modules, {"sksparse": None, "sksparse.cholmod": None}
-        ):
+        with patch.dict(sys.modules, {"sksparse": None, "sksparse.cholmod": None}):
             result = _try_cholmod()
         assert result is None
 
@@ -881,7 +903,7 @@ class TestRemlGradient:
         d = single_re_dataset
         Z = _make_Z(d["group_codes"], d["q_sizes"][0])
 
-        r_no_jac = fit_reml(d["y"], d["X"], Z, d["q_sizes"])
+        r_no_jac = fit_reml(d["y"], d["X"], Z, d["q_sizes"], use_gradient=False)
         r_with_jac = fit_reml(d["y"], d["X"], Z, d["q_sizes"], use_gradient=True)
 
         np.testing.assert_allclose(r_with_jac.beta, r_no_jac.beta, rtol=1e-4)
@@ -912,7 +934,7 @@ class TestRemlGradient:
         import unittest.mock as mock
 
         with mock.patch("interlace.profiled_reml.reml_objective", counting_obj_no_jac):
-            fit_reml(d["y"], d["X"], Z, d["q_sizes"])
+            fit_reml(d["y"], d["X"], Z, d["q_sizes"], use_gradient=False)
         with mock.patch(
             "interlace.profiled_reml.reml_objective", counting_obj_with_jac
         ):

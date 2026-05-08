@@ -96,18 +96,10 @@ class TestNumericalAgreementPreserved:
         )
         # lme4 estimates: Intercept=-1.398, period[T.2]=-0.992,
         # period[T.3]=-1.128, period[T.4]=-1.580
-        np.testing.assert_allclose(
-            result.fe_params["Intercept"], -1.398, atol=5e-2
-        )
-        np.testing.assert_allclose(
-            result.fe_params["period[T.2]"], -0.992, atol=5e-2
-        )
-        np.testing.assert_allclose(
-            result.fe_params["period[T.3]"], -1.128, atol=5e-2
-        )
-        np.testing.assert_allclose(
-            result.fe_params["period[T.4]"], -1.580, atol=5e-2
-        )
+        np.testing.assert_allclose(result.fe_params["Intercept"], -1.398, atol=5e-2)
+        np.testing.assert_allclose(result.fe_params["period[T.2]"], -0.992, atol=5e-2)
+        np.testing.assert_allclose(result.fe_params["period[T.3]"], -1.128, atol=5e-2)
+        np.testing.assert_allclose(result.fe_params["period[T.4]"], -1.580, atol=5e-2)
 
     def test_cbpp_variance_component_matches_lme4(
         self, cbpp_data: pd.DataFrame

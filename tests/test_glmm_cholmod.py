@@ -94,9 +94,7 @@ class TestNumericalAgreementBothPaths:
         monkeypatch.setattr(profiled_reml, "_try_cholmod", lambda: None)
         # Also blow away any cached imports just in case
         monkeypatch.setitem(sys.modules, "sksparse", unittest.mock.MagicMock())
-        monkeypatch.setitem(
-            sys.modules, "sksparse.cholmod", unittest.mock.MagicMock()
-        )
+        monkeypatch.setitem(sys.modules, "sksparse.cholmod", unittest.mock.MagicMock())
         # Re-fetch _try_cholmod from glmm_laplace's module to ensure the
         # patched one is seen
         result_superlu = _fit_cbpp(cbpp_data)
@@ -117,9 +115,7 @@ class TestNumericalAgreementBothPaths:
                 result_superlu.variance_components[key],
                 rtol=1e-3,
             )
-        np.testing.assert_allclose(
-            result_cholmod.llf, result_superlu.llf, atol=1e-4
-        )
+        np.testing.assert_allclose(result_cholmod.llf, result_superlu.llf, atol=1e-4)
 
 
 class TestSuperLUFallbackStillWorks:
@@ -133,6 +129,4 @@ class TestSuperLUFallbackStillWorks:
         # Just check the fit succeeded and produced sensible numbers
         assert result.converged
         assert "Intercept" in result.fe_params
-        np.testing.assert_allclose(
-            result.fe_params["Intercept"], -1.398, atol=5e-2
-        )
+        np.testing.assert_allclose(result.fe_params["Intercept"], -1.398, atol=5e-2)

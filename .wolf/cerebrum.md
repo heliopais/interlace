@@ -48,6 +48,9 @@
 - [2026-04-24] CLMM threshold parameterisation: use increments (alpha_1 free, alpha_k = alpha_1 + Σ exp(log_delta_j)) to enforce strict ordering during unconstrained optimization.
 - [2026-04-24] CLMM SEs MUST include theta (variance parameter) uncertainty. Conditioning on theta gives SEs that are consistently ~4-6% too narrow. The fix: numerical Hessian of the full profiled Laplace LL w.r.t. (alpha, beta, theta), then extract the (alpha, beta) block from the inverse. This gives <0.1% parity with R's ordinal::clmm.
 
+- [2026-05-08] `scipy.sparse.linalg.spsolve(A, B)` silently squeezes a (q, 1) 2D dense rhs to a (q,) 1D output, breaking 2D shape contracts. Any wrapper that promises (q, p) output for 2D rhs must reshape: `if rhs.ndim == 2 and out.ndim == 1: out = out.reshape(rhs.shape[0], -1)`. This bit `_sparse_solve` in profiled_reml.py for intercept-only X (p=1) + crossed RE in `reml_gradient`.
+- [2026-05-08] The current `reml_gradient` is correct (passes check_grad) but **slower than forward-difference** at q ≥ ~80 because it computes a dense `A11_inv = lu.solve(np.eye(q))` per call (O(q³)). Obj-call count drops 50–75% but wall time is flat-to-negative on multi-factor diagonal fits. Don't flip `use_gradient=True` as the default until the gradient body uses selective inverse / Hutchinson estimators (tracked as interlace-mxzk). Counter-intuitive: an analytic gradient that's mathematically correct can still lose to FD if its per-call cost dominates.
+
 ## Decision Log
 
 <!-- Significant technical decisions with rationale. Why X was chosen over Y. -->

@@ -365,11 +365,7 @@ class _CholmodHandle:
             self.factor.cholesky(A)
 
     def solve(self, b: np.ndarray) -> np.ndarray:
-        x = (
-            self.factor.solve(b, "A")
-            if self.api == "new"
-            else self.factor.solve_A(b)
-        )
+        x = self.factor.solve(b, "A") if self.api == "new" else self.factor.solve_A(b)
         x = np.asarray(x)
         return x.squeeze() if b.ndim == 1 else x
 

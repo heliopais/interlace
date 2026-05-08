@@ -1,7 +1,11 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-04-24T15:46:51.387Z
-> Files: 698 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-05-08T11:04:00.963Z
+> Files: 737 tracked | Anatomy hits: 0 | Misses: 0
+
+## ../../../../../tmp/interlace-issue11/
+
+- `repro.py` — Reproduce GitHub issue #11 in interlace-lme v0.2.5. (~328 tok)
 
 ## ../../../.claude/
 
@@ -19,8 +23,8 @@
 - `interlace-name.md` — Why "interlace"? (~259 tok)
 - `LICENSE` — Project license (~400 tok)
 - `Makefile` — Make build targets (~140 tok)
-- `pyproject.toml` — Joint REML estimation for linear mixed models with crossed random intercepts using sparse design mat (~698 tok)
-- `README.md` — Project documentation (~1214 tok)
+- `pyproject.toml` — Mixed-effects models in Python: LMM, GLMM, CLMM, and Cox frailty with crossed random effects, valida (~700 tok)
+- `README.md` — Project documentation (~1362 tok)
 
 ## .beads/
 
@@ -125,7 +129,7 @@
 
 ## .github/workflows/
 
-- `ci.yml` — CI: CI (~316 tok)
+- `ci.yml` — CI: CI (~570 tok)
 - `docs.yml` — CI: Deploy docs to GitHub Pages (~286 tok)
 - `publish.yml` — CI: Publish to PyPI (~387 tok)
 
@@ -778,6 +782,45 @@
 - `summary.data.json` (~3994 tok)
 - `summary.meta.json` (~836 tok)
 
+## docs/perf/
+
+- `profile_fits.py` — Profile Sleepstudy and CBPP fits to confirm the hot spots in epic (~2983 tok)
+
+## docs/perf/profiles/
+
+- `notes.md` — Profile notes — Sleepstudy & CBPP (~2167 tok)
+
+## docs/source/
+
+- `_toc.yml` (~469 tok)
+- `case-study-glmm.ipynb` — GLMM case study: Poisson workplace safety incidents with crossed RE, deviance residuals, AGQ comparison (~7514 tok)
+- `case-study-ordinal.ipynb` — CLMM case study: teacher effectiveness ratings, 5-point Likert, method×size 2×2, teacher random intercept, plotnine EDA + cumulative curve + BLUP caterpillar + logit vs probit comparison (~3600 tok)
+- `case-study-survival.ipynb` — Declares mirrors (~3261 tok)
+- `changelog.md` — Changelog (~7397 tok)
+- `clmm-quickstart.md` — CLMM quickstart (~2245 tok)
+- `comparison.md` — Feature comparison (~2116 tok)
+- `concepts.md` — Concepts: Linear mixed models (~3516 tok)
+- `contributing.md` — Contributing (~1153 tok)
+- `coxme-quickstart.md` — Cox frailty quickstart (~1960 tok)
+- `glmm-quickstart.md` — GLMM quickstart (~1899 tok)
+- `index.md` — interlace (~963 tok)
+- `longitudinal.md` — Longitudinal Data Guide (~1993 tok)
+- `quickstart.md` — Quickstart (~1399 tok)
+- `simulation.md` — Simulation and Bootstrap Guide (~2325 tok)
+- `why-python.md` — For Python / statsmodels users (~1414 tok)
+
+## docs/source/api/
+
+- `clmm.md` — clmm (~1082 tok)
+- `correlation.md` — Correlation structures (~781 tok)
+- `coxme.md` — coxme (~984 tok)
+- `fit.md` — fit (~745 tok)
+- `glmer.md` — glmer (~2194 tok)
+- `glmm_families.md` — GLMM families (~1232 tok)
+- `index.md` — API Reference (~695 tok)
+- `kenward_roger.md` — Kenward-Roger degrees of freedom (~751 tok)
+- `summary.md` — summary and VarCorr (~521 tok)
+
 ## paper/
 
 - `interlace.tex` — Declares to (~12307 tok)
@@ -790,7 +833,8 @@
 
 ## src/interlace/
 
-- `__init__.py` — interlace: REML estimation for linear mixed models with crossed random intercepts. (~5648 tok)
+- `__init__.py` — interlace: mixed-effects models in Python (LMM, GLMM, CLMM, Cox frailty). (~5666 tok)
+- `_frame.py` — Internal helpers for narwhals-based DataFrame boundary conversion. (~704 tok)
 - `allfit.py` — allFit(): refit a model with all available optimizers and compare convergence. (~1726 tok)
 - `augment.py` — Combined residuals + influence diagnostics DataFrame. (~458 tok)
 - `clmm.py` — Cumulative link mixed model (CLMM) — proportional odds with random effects. Includes predict() and confint(). (~12500 tok)
@@ -798,19 +842,20 @@
 - `correlation.py` — Residual correlation structures for linear mixed models. (~4072 tok)
 - `coxme.py` — Cox PH with Gaussian frailty (shared frailty model). (~10678 tok)
 - `cross_val.py` — Cross-validation utilities with group-aware splits for mixed models. (~1875 tok)
-- `emmeans.py` — emmeans(): estimated marginal means for linear mixed models. (~5498 tok)
+- `emmeans.py` — emmeans(): estimated marginal means for linear mixed models. (~5630 tok)
 - `glmm_family.py` — GLMMFamily protocol and concrete family implementations for GLMM support. (~7529 tok)
-- `glmm_laplace.py` — GLMM estimation via Laplace approximation (PIRLS). (~17381 tok)
+- `glmm_laplace.py` — GLMM estimation via Laplace approximation (PIRLS). (~19231 tok)
 - `influence.py` — Influence diagnostics for fitted linear mixed models via exact deletion. (~11777 tok)
 - `kenward_roger.py` — KR-adjusted covariance and DFs via Satterthwaite in un-profiled vc parameterization. (~2100 tok)
 - `kr_vcov.py` — Kenward-Roger variance-covariance matrix derivatives. (~1596 tok)
 - `leverage.py` — Leverage diagnostics for fitted linear mixed models. (~2334 tok)
 - `ols.py` — OLS fitting with formulaic design matrices and HC3 robust standard errors. (~1604 tok)
 - `plotting.py` — plotnine-based diagnostic plots for linear mixed models. (~1297 tok)
-- `profiled_reml.py` — Profiled REML estimation for linear mixed models with crossed random effects. (~14121 tok)
+- `profile_ci.py` — Profile likelihood confidence intervals for variance components. (~3605 tok)
+- `profiled_reml.py` — Profiled REML estimation for linear mixed models with crossed random effects. (~16006 tok)
 - `quantreg.py` — Quantile regression: LP-based coefficient fitting + kernel SE. (~2609 tok)
 - `residuals.py` — Residual extraction for fitted linear mixed models. (~1607 tok)
-- `result.py` — CrossedLMEResult and ModelInfo dataclasses. (~6084 tok)
+- `result.py` — CrossedLMEResult and ModelInfo dataclasses. (~6299 tok)
 - `simulate.py` — Parametric simulation and bootstrap for CrossedLMEResult. (~2441 tok)
 - `summary.py` — summary() and VarCorr() for CrossedLMEResult. (~2789 tok)
 
@@ -819,22 +864,31 @@
 - `_diag_coxme.py` — Diagnostic script: how good are the coxme estimates really? (~559 tok)
 - `_diag_se.py` — Diagnostic: compare SE computation methods against R coxme. (~1429 tok)
 - `_diag_se2.py` — Diagnostic: exact Breslow information vs diagonal approximation. (~1614 tok)
+- `test_allfit.py` — Tests for allFit() — multi-optimizer convergence check. (~1833 tok)
 - `test_ar1.py` — Tests for AR(1) residual correlation structure. (~3030 tok)
+- `test_backend_compat.py` — Regression tests: fit-result attributes are always pandas regardless of input. (~806 tok)
+- `test_cholmod.py` — Tests for the CHOLMOD sparse Cholesky path in profiled_reml. (~2138 tok)
 - `test_clmm.py` — Tests for cumulative link mixed models (CLMM): parity, predict, crossed RE, confint. (~5500 tok)
 - `test_coxme_parity.py` — Parity test: interlace coxme vs R coxme::coxme() reference values. (~798 tok)
 - `test_coxme.py` — Tests for Cox PH frailty: API, predict, residuals, summary, crossed RE. (~8500 tok)
 - `test_cs.py` — Tests for compound symmetry (exchangeable) residual correlation structure. (~2688 tok)
+- `test_emmeans.py` — Tests for emmeans() — estimated marginal means for LMMs. (~3054 tok)
 - `test_glmer_api.py` — Tests for the public interlace.glmer() API. (~1488 tok)
+- `test_glmm_cholmod.py` — Tests: GLMM hot path uses CHOLMOD when sksparse is available. (~1376 tok)
 - `test_glmm_family.py` — Tests for GLMMFamily protocol and concrete family implementations. (~11295 tok)
+- `test_glmm_laplace_helpers.py` — Tests for the in-place CSC scaling helpers in glmm_laplace. (~919 tok)
 - `test_glmm_laplace.py` — Tests for GLMM Laplace approximation (glmm_laplace.py). (~11321 tok)
 - `test_kenward_roger.py` — Tests for Kenward-Roger adjusted covariance and denominator DFs. (~1619 tok)
 - `test_kr_api.py` — Tests for exposing KR DFs via df_method parameter in fit() and summary(). (~1050 tok)
 - `test_kr_parity.py` — Parity tests: KR variance-covariance derivatives vs R's pbkrtest/lmerTest. (~2312 tok)
 - `test_kr_vcov.py` — Tests for Kenward-Roger variance-covariance second derivatives. (~3281 tok)
+- `test_lambda_builder.py` — Tests for LambdaBuilder — cached-pattern Lambda construction. (~2082 tok)
 - `test_lmm_weights.py` — Tests for observation-level weights in LMM fit(). (~1842 tok)
 - `test_parity_ar1.py` — Parity test: interlace AR(1) vs R nlme, AR(1) residual correlation. (~1387 tok)
 - `test_parity_cs.py` — Parity test: interlace CS vs R nlme, compound symmetry residual correlation. (~1691 tok)
-- `test_profile_ci.py` — Tests for profile_confint in profile_ci.py. (~4660 tok)
+- `test_phase2_lme4_alignment.py` — Regression tests: GLMM Phase-2 Nelder-Mead aligned with lme4 conventions. (~1539 tok)
+- `test_profile_ci.py` — Tests for profile_confint in profile_ci.py. (~6908 tok)
+- `test_profiled_reml.py` — Tests for profiled_reml.py — Lambda parameterisation, sparse Cholesky, (~10297 tok)
 
 ## tests/fixtures/
 

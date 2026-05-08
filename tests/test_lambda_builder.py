@@ -14,9 +14,7 @@ from interlace.profiled_reml import LambdaBuilder, make_lambda
 
 
 def _intercept(group: str) -> RandomEffectSpec:
-    return RandomEffectSpec(
-        group=group, predictors=[], intercept=True, correlated=True
-    )
+    return RandomEffectSpec(group=group, predictors=[], intercept=True, correlated=True)
 
 
 def _slope(group: str, predictor: str, correlated: bool = True) -> RandomEffectSpec:

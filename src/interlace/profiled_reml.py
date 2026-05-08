@@ -165,9 +165,7 @@ class LambdaBuilder:
     ) -> None:
         self.specs = specs
         self.n_levels = list(n_levels)
-        n_theta = sum(
-            n_theta_for_spec(s.n_terms, s.correlated) for s in specs
-        )
+        n_theta = sum(n_theta_for_spec(s.n_terms, s.correlated) for s in specs)
         if n_theta == 0:
             raise ValueError("LambdaBuilder requires at least one theta parameter")
 
@@ -330,8 +328,16 @@ def sparse_chol_logdet(M: sp.csc_matrix) -> float:
 
 
 def _sparse_solve(M: sp.csc_matrix, rhs: np.ndarray) -> np.ndarray:
-    """Solve M x = rhs where M is sparse SPD."""
-    return np.asarray(spla.spsolve(M, rhs))
+    """Solve M x = rhs where M is sparse SPD.
+
+    Preserves the 2D shape of *rhs*: ``spla.spsolve`` silently squeezes a
+    ``(q, 1)`` rhs to ``(q,)``, which breaks downstream matmul shape contracts
+    (e.g. ``C_X @ beta_hat`` in :func:`reml_gradient` for intercept-only X).
+    """
+    out = np.asarray(spla.spsolve(M, rhs))
+    if rhs.ndim == 2 and out.ndim == 1:
+        out = out.reshape(rhs.shape[0], -1)
+    return out
 
 
 # ---------------------------------------------------------------------------
