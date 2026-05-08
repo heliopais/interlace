@@ -593,17 +593,40 @@ def reml_gradient(
     n, p = X.shape
     q = A11.shape[0]
 
-    c1 = _sparse_solve(A11, lZty)  # A11^{-1} lZty   (q,)
-    C_X = _sparse_solve(A11, lZtX)  # A11^{-1} lZtX   (q, p)
+    # Single factorisation reused for c1, C_X, and the dense inverse.  When
+    # the caller passed a primed cholmod factor in _cache (mirrors the path
+    # taken by reml_objective), reuse it; otherwise fall back to a single
+    # SuperLU factorisation.
+    chol_factor = _cache.get("chol_factor") if _cache is not None else None
+    chol_api = _cache.get("chol_api", "old") if _cache is not None else "old"
+    eye_q = np.eye(q)
+    if chol_factor is not None:
+        if chol_api == "new":
+            chol_factor.factorize(A11)  # type: ignore[union-attr]
+            c1 = np.asarray(chol_factor.solve(lZty, "A")).squeeze()  # type: ignore[union-attr]
+            C_X = np.asarray(chol_factor.solve(lZtX, "A"))  # type: ignore[union-attr]
+            A11_inv = np.asarray(chol_factor.solve(eye_q, "A"))  # type: ignore[union-attr]
+        else:
+            chol_factor.cholesky(A11)  # type: ignore[union-attr]
+            c1 = np.asarray(chol_factor.solve_A(lZty)).squeeze()  # type: ignore[union-attr]
+            C_X = np.asarray(chol_factor.solve_A(lZtX))  # type: ignore[union-attr]
+            A11_inv = np.asarray(chol_factor.solve_A(eye_q))  # type: ignore[union-attr]
+    else:
+        # SuperLU fallback: factorise A11 once, reuse the LU factor for all
+        # three solves (c1, C_X, dense inverse).  Saves two redundant
+        # factorisations vs the previous code path.
+        lu = spla.splu(A11)
+        c1 = np.asarray(lu.solve(lZty))
+        C_X = np.asarray(lu.solve(lZtX))
+        A11_inv = lu.solve(eye_q)
+    if c1.ndim == 2 and c1.shape[1] == 1:
+        c1 = c1.ravel()
+
     MX = XtX - lZtX.T @ C_X  # (p, p)
     rhs = Xty - lZtX.T @ c1  # (p,)
     beta_hat = la.solve(MX, rhs, assume_a="pos")
     yPy = float(yty - lZty @ c1 - rhs @ beta_hat)
     MX_inv = np.linalg.inv(MX)  # (p, p) small dense inverse
-
-    # Dense A11^{-1} for trace computations; O(q^3) once per gradient call.
-    lu = spla.splu(A11)
-    A11_inv = lu.solve(np.eye(q))  # (q, q)
 
     # Shared quantities across factors
     coo = ZtZ.tocoo()
@@ -670,7 +693,7 @@ def fit_reml(
     n_levels: list[int] | None = None,
     optimizer: str = "lbfgsb",
     tight: bool = True,
-    use_gradient: bool = False,
+    use_gradient: bool | None = None,
     weights: np.ndarray | None = None,
     correlation: CorStruct | None = None,
 ) -> REMLResult:
@@ -719,6 +742,25 @@ def fit_reml(
     else:
         n_theta = len(q_sizes)
         bounds = [(1e-8, None)] * n_theta
+
+    # Auto-resolve use_gradient.  Analytic gradient is only implemented for
+    # the diagonal (intercept-only) path; with random slopes it always falls
+    # back to forward-difference.  Explicit ``True`` with slopes raises early.
+    #
+    # Default (use_gradient=None) is currently conservative (False): Phase A
+    # of interlace-mxzk made the gradient call ~2x faster, but L-BFGS-B's FD
+    # path remains competitive at q >= ~35 because the objective is cheap.
+    # The default flip waits on a faster selected-inverse (Phase B / numba).
+    is_diagonal = specs is None or all(s.n_terms == 1 for s in specs)
+    if use_gradient is None:
+        use_gradient = False
+    elif use_gradient and not is_diagonal:
+        msg = (
+            "reml_gradient is only implemented for the diagonal "
+            "(intercept-only) path; pass use_gradient=False or None for "
+            "specs with random slopes."
+        )
+        raise NotImplementedError(msg)
 
     if theta0 is None:
         theta0 = np.ones(n_theta)

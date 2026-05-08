@@ -14,6 +14,7 @@ from interlace.formula import RandomEffectSpec
 from interlace.profiled_reml import (
     REMLResult,
     _build_A11,
+    _init_chol_factor,
     _precompute,
     _sparse_solve,
     _try_cholmod,
@@ -942,3 +943,158 @@ class TestRemlGradient:
 
         # Using gradient should require fewer objective evaluations
         assert counts["with_jac"] < counts["no_jac"]
+
+    def test_gradient_reuses_cached_cholmod_factor(
+        self, single_re_dataset: dict
+    ) -> None:
+        """When _cache holds a cholmod factor, reml_gradient must reuse it
+        (no extra splu refactorisations) and produce a numerically identical
+        result vs the splu-fallback path.
+
+        Drives interlace-mxzk Phase A: the dense ``A11_inv = lu.solve(eye(q))``
+        path triggers three separate splu factorisations per gradient call;
+        with a cached factor we expect zero splu calls.
+        """
+        cholmod = _try_cholmod()
+        if cholmod is None:
+            pytest.skip("sksparse.cholmod not installed")
+
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        theta = d["theta_true"] * 1.2
+
+        # Path 1: no cached factor -> splu fallback (current behaviour).
+        cache_no_chol = _precompute(d["y"], d["X"], Z)
+        g_splu = reml_gradient(theta, d["y"], d["X"], Z, d["q_sizes"], cache_no_chol)
+
+        # Path 2: prime _cache with a cholmod factor (mirrors fit_reml).
+        cache_chol = _precompute(d["y"], d["X"], Z)
+        ZtZ = sp.csc_matrix(cache_chol["ZtZ"])
+        A11_init = _build_A11(ZtZ, make_lambda_diag(theta, d["q_sizes"]))
+        factor, api = _init_chol_factor(cholmod, A11_init)
+        assert factor is not None, "cholmod factor init failed"
+        cache_chol["chol_factor"] = factor
+        cache_chol["chol_api"] = api
+
+        with patch.object(spla, "splu", wraps=spla.splu) as splu_spy:
+            g_chol = reml_gradient(theta, d["y"], d["X"], Z, d["q_sizes"], cache_chol)
+
+        # No splu calls when a cached cholmod factor is available.
+        assert splu_spy.call_count == 0, (
+            f"reml_gradient should not call splu when a cached cholmod factor "
+            f"is in _cache (saw {splu_spy.call_count} call(s))"
+        )
+        np.testing.assert_allclose(g_chol, g_splu, rtol=1e-10, atol=1e-12)
+
+    def test_gradient_splu_fallback_factorises_once(
+        self, single_re_dataset: dict
+    ) -> None:
+        """Without cached cholmod, splu fallback should factorise A11 only
+        once per gradient call (current code factorises three times)."""
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        theta = d["theta_true"] * 1.2
+        cache_no_chol = _precompute(d["y"], d["X"], Z)
+        # Strip any cholmod factor a fixture might have added.
+        cache_no_chol.pop("chol_factor", None)
+        cache_no_chol.pop("chol_api", None)
+
+        with patch.object(spla, "splu", wraps=spla.splu) as splu_spy:
+            reml_gradient(theta, d["y"], d["X"], Z, d["q_sizes"], cache_no_chol)
+
+        assert splu_spy.call_count == 1, (
+            f"splu fallback should factorise A11 exactly once per gradient "
+            f"call (saw {splu_spy.call_count})"
+        )
+
+    def test_use_gradient_none_resolves_to_fd(self, single_re_dataset: dict) -> None:
+        """``use_gradient=None`` (default) currently resolves to FD even for
+        diagonal specs.
+
+        End-to-end fit_reml with the analytic gradient regresses vs FD at
+        q >= ~35 because L-BFGS-B's FD path is competitive with cheap obj
+        calls.  The default flip waits on a faster selected-inverse
+        (interlace-mxzk follow-up: numba Takahashi).
+        """
+        d = single_re_dataset
+        Z = _make_Z(d["group_codes"], d["q_sizes"][0])
+        with patch(
+            "interlace.profiled_reml.reml_gradient", wraps=reml_gradient
+        ) as grad_spy:
+            fit_reml(d["y"], d["X"], Z, d["q_sizes"], use_gradient=None)
+        assert grad_spy.call_count == 0, (
+            "use_gradient=None should currently resolve to FD; saw "
+            f"{grad_spy.call_count} gradient call(s)"
+        )
+
+    def test_use_gradient_auto_detect_slopes_uses_fd(
+        self, rng: np.random.Generator
+    ) -> None:
+        """``use_gradient=None`` with random-slope specs -> FD path."""
+        n, q1 = 200, 10
+        gc1 = np.repeat(np.arange(q1), n // q1)
+        x = rng.normal(size=n)
+        X = np.column_stack([np.ones(n), x])
+        b = rng.normal(size=(q1, 2))
+        y = X @ [1.0, 0.5] + (b[gc1, 0] + b[gc1, 1] * x) + rng.normal(size=n)
+
+        # Build Z for (1 + x | g1) random slopes.
+        rows = np.arange(n)
+        cols0 = gc1 * 2
+        cols1 = gc1 * 2 + 1
+        Z = sp.csc_matrix(
+            (
+                np.concatenate([np.ones(n), x]),
+                (np.concatenate([rows, rows]), np.concatenate([cols0, cols1])),
+            ),
+            shape=(n, q1 * 2),
+        )
+        specs = [RandomEffectSpec(group="g1", predictors=["x"], correlated=True)]
+        with patch(
+            "interlace.profiled_reml.reml_gradient", wraps=reml_gradient
+        ) as grad_spy:
+            fit_reml(
+                y,
+                X,
+                Z,
+                q_sizes=[q1 * 2],
+                specs=specs,
+                n_levels=[q1],
+                use_gradient=None,
+            )
+        assert grad_spy.call_count == 0, (
+            "Random-slope specs with use_gradient=None should fall back to "
+            "forward-difference (gradient not implemented for slopes)"
+        )
+
+    def test_use_gradient_explicit_true_with_slopes_raises(
+        self, rng: np.random.Generator
+    ) -> None:
+        """Explicit ``use_gradient=True`` with random slopes must raise."""
+        n, q1 = 200, 10
+        gc1 = np.repeat(np.arange(q1), n // q1)
+        x = rng.normal(size=n)
+        X = np.column_stack([np.ones(n), x])
+        b = rng.normal(size=(q1, 2))
+        y = X @ [1.0, 0.5] + (b[gc1, 0] + b[gc1, 1] * x) + rng.normal(size=n)
+        rows = np.arange(n)
+        cols0 = gc1 * 2
+        cols1 = gc1 * 2 + 1
+        Z = sp.csc_matrix(
+            (
+                np.concatenate([np.ones(n), x]),
+                (np.concatenate([rows, rows]), np.concatenate([cols0, cols1])),
+            ),
+            shape=(n, q1 * 2),
+        )
+        specs = [RandomEffectSpec(group="g1", predictors=["x"], correlated=True)]
+        with pytest.raises(NotImplementedError, match="diagonal"):
+            fit_reml(
+                y,
+                X,
+                Z,
+                q_sizes=[q1 * 2],
+                specs=specs,
+                n_levels=[q1],
+                use_gradient=True,
+            )
