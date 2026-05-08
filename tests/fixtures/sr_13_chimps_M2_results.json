@@ -1,0 +1,50 @@
+{
+  "model": "M2",
+  "formula": "pulled_left ~ prosoc_left * condition + (1 | actor) + (1 | block)",
+  "nobs": 504,
+  "family": "binomial",
+  "link": "logit",
+  "fixed_effects": {
+    "(Intercept)": 0.59840935783,
+    "prosoc_left": 0.61751974866,
+    "condition": -0.41216787867,
+    "prosoc_left:condition": 0.27856377027
+  },
+  "fixed_effects_se": {
+    "(Intercept)": 0.7478867233,
+    "prosoc_left": 0.29836377763,
+    "condition": 0.30266273802,
+    "prosoc_left:condition": 0.42411255827
+  },
+  "theta": [1.8594424734, 0.078109232152],
+  "loglik": -272.1344327026,
+  "aic": 556.2688654052,
+  "bic": 581.6043230136,
+  "deviance": 512.403937108,
+  "converged": true,
+  "variance_components": {
+    "actor": 3.457526312,
+    "block": 0.0061010521473
+  },
+  "ranef_actor": {
+    "1": -1.103988611,
+    "2": 3.5496883728,
+    "3": -1.4027121372,
+    "4": -1.4029893997,
+    "5": -1.1037909787,
+    "6": -0.17515521389,
+    "7": 1.3203233944
+  },
+  "ranef_block": {
+    "1": -0.039906330083,
+    "2": 0.0074066909556,
+    "3": 0.011709967439,
+    "4": 0.0028288889273,
+    "5": -0.0088035972385,
+    "6": 0.02620214418
+  },
+  "ngroups": {
+    "actor": 7,
+    "block": 6
+  }
+}
