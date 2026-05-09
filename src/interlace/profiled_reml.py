@@ -1009,6 +1009,11 @@ def fit_reml(
         )
         raise NotImplementedError(msg)
 
+    if not is_diagonal:
+        from interlace._cholmod_warn import maybe_warn_slow_path
+
+        maybe_warn_slow_path("Random-slopes LMM")
+
     if theta0 is None:
         theta0 = np.ones(n_theta)
 
@@ -1613,6 +1618,12 @@ def fit_ml(
     else:
         n_theta = len(q_sizes)
         bounds = [(1e-8, None)] * n_theta
+
+    is_diagonal = specs is None or all(s.n_terms == 1 for s in specs)
+    if not is_diagonal:
+        from interlace._cholmod_warn import maybe_warn_slow_path
+
+        maybe_warn_slow_path("Random-slopes LMM")
 
     if theta0 is None:
         theta0 = np.ones(n_theta)

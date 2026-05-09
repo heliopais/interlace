@@ -73,12 +73,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libsuitesparse-dev
 
-      - name: Install with scikit-sparse
+      - name: Install with scikit-sparse (via [fast] extra)
         run: |
           uv venv .venv-cholmod
           uv pip install --python .venv-cholmod/bin/python \
-            ".[cholmod]" pandas pytest "scikit-sparse>=0.5"
+            ".[fast]" pandas pytest "scikit-sparse>=0.5"
 
       - name: Run cholmod tests
         run: |
-          .venv-cholmod/bin/python -m pytest tests/test_cholmod.py -v
+          .venv-cholmod/bin/python -m pytest tests/test_cholmod.py tests/test_cholmod_warn.py -v

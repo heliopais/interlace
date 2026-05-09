@@ -18,6 +18,14 @@ pip install interlace-lme
 
 Requires Python ≥ 3.13.
 
+For materially faster random-slopes LMM and GLMM fits (~3-10x), install the `[fast]` extra to pull in `scikit-sparse` (CHOLMOD):
+
+```bash
+pip install 'interlace-lme[fast]'
+```
+
+CHOLMOD requires SuiteSparse system libraries (`libsuitesparse-dev` on Debian/Ubuntu, `brew install suite-sparse` on macOS). Without `[fast]`, fits fall back to SuperLU and you'll see a one-shot warning at fit time on the slow path.
+
 ## Quick start
 
 ```python

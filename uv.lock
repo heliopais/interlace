@@ -902,6 +902,9 @@ bobyqa = [
 cholmod = [
     { name = "scikit-sparse" },
 ]
+fast = [
+    { name = "scikit-sparse" },
+]
 smooth = [
     { name = "scikit-misc" },
 ]
@@ -946,11 +949,12 @@ requires-dist = [
     { name = "py-bobyqa", marker = "extra == 'bobyqa'", specifier = ">=1.4" },
     { name = "scikit-misc", marker = "extra == 'smooth'", specifier = ">=0.4" },
     { name = "scikit-sparse", marker = "extra == 'cholmod'", specifier = ">=0.4" },
+    { name = "scikit-sparse", marker = "extra == 'fast'", specifier = ">=0.4" },
     { name = "scipy", specifier = ">=1.12" },
     { name = "statsmodels", specifier = ">=0.14" },
     { name = "tqdm", specifier = ">=4.67.3" },
 ]
-provides-extras = ["bobyqa", "cholmod", "smooth"]
+provides-extras = ["bobyqa", "cholmod", "fast", "smooth"]
 
 [package.metadata.requires-dev]
 dev = [

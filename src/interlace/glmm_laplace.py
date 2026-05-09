@@ -1857,6 +1857,10 @@ def fit_glmm(
     import formulaic
     import narwhals as nw
 
+    from interlace._cholmod_warn import maybe_warn_slow_path
+
+    maybe_warn_slow_path("GLMM (Laplace)")
+
     fam = resolve_family(family)
     nw_data = nw.from_native(data, eager_only=True)
 
