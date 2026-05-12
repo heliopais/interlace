@@ -847,3 +847,155 @@
 | 13:04 | Edited tests/test_profiled_reml.py | removed 31 lines | ~35 |
 | 13:10 | jjm7 closed; default flip reverted after benchmark probe (analytic gradient slower at q≥80 due to dense O(q³) A11_inv); spawned interlace-mxzk; bugfix kept in _sparse_solve | profiled_reml.py, test_profiled_reml.py, .wolf/buglog.json | ~120 |
 | 13:09 | Session end: 9 writes across 2 files (test_profiled_reml.py, profiled_reml.py) | 4 reads | ~59541 tok |
+| 13:44 | Session end: 9 writes across 2 files (test_profiled_reml.py, profiled_reml.py) | 4 reads | ~59541 tok |
+| 13:46 | Session end: 9 writes across 2 files (test_profiled_reml.py, profiled_reml.py) | 4 reads | ~59541 tok |
+
+## Session: 2026-05-08 14:10
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 14:17 | Created docs/perf/probes/bench_gradient_inverse.py | — | ~2041 |
+| 14:17 | Edited docs/perf/probes/bench_gradient_inverse.py | modified _make_crossed_data() | ~361 |
+| 14:17 | Edited docs/perf/probes/bench_gradient_inverse.py | 7→9 lines | ~54 |
+| 14:18 | Edited docs/perf/probes/bench_gradient_inverse.py | modified bench_one() | ~70 |
+| 14:18 | Edited docs/perf/probes/bench_gradient_inverse.py | modified _cholmod_one() | ~346 |
+| 14:18 | Edited docs/perf/probes/bench_gradient_inverse.py | modified main() | ~574 |
+| 14:19 | Edited docs/perf/probes/bench_gradient_inverse.py | modified reml_gradient_phaseA() | ~874 |
+| 14:19 | Edited docs/perf/probes/bench_gradient_inverse.py | modified _grad() | ~243 |
+| 14:19 | Edited docs/perf/probes/bench_gradient_inverse.py | 3→6 lines | ~98 |
+| 14:20 | Edited docs/perf/probes/bench_gradient_inverse.py | reduced (-6 lines) | ~336 |
+| 14:20 | Session end: 10 writes across 1 files (bench_gradient_inverse.py) | 3 reads | ~26027 tok |
+| 14:26 | Created docs/perf/probes/test_selected_inverse.py | — | ~1255 |
+| 14:30 | Session end: 11 writes across 2 files (bench_gradient_inverse.py, test_selected_inverse.py) | 3 reads | ~27282 tok |
+| 15:10 | Edited tests/test_profiled_reml.py | 16→17 lines | ~91 |
+| 15:10 | Edited tests/test_profiled_reml.py | modified test_gradient_reuses_cached_cholmod_factor() | ~1720 |
+| 15:11 | Edited tests/test_profiled_reml.py | 2→1 lines | ~24 |
+| 15:11 | Edited src/interlace/profiled_reml.py | modified all() | ~744 |
+| 15:12 | Edited src/interlace/profiled_reml.py | 6→6 lines | ~55 |
+| 15:12 | Edited src/interlace/profiled_reml.py | expanded (+14 lines) | ~312 |
+| 15:16 | Session end: 17 writes across 4 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py) | 5 reads | ~40909 tok |
+| 15:17 | Session end: 17 writes across 4 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py) | 6 reads | ~40909 tok |
+| 15:19 | Edited src/interlace/profiled_reml.py | modified conservative() | ~274 |
+| 15:19 | Edited tests/test_profiled_reml.py | modified test_use_gradient_none_resolves_to_fd() | ~267 |
+| 15:21 | Session end: 19 writes across 4 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py) | 7 reads | ~41450 tok |
+| 15:25 | Session end: 19 writes across 4 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py) | 7 reads | ~41450 tok |
+| 15:31 | Session end: 19 writes across 4 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py) | 7 reads | ~41450 tok |
+| 15:36 | Session end: 19 writes across 4 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py) | 8 reads | ~60955 tok |
+| 15:41 | Edited src/interlace/glmm_laplace.py | 2→7 lines | ~91 |
+| 15:42 | Created tests/test_glmm_dense_kernel.py | — | ~2330 |
+| 15:42 | Edited tests/test_glmm_dense_kernel.py | inline fix | ~14 |
+| 15:43 | Created tests/test_glmm_dense_kernel.py | — | ~2094 |
+| 15:43 | Edited src/interlace/glmm_laplace.py | modified _laplace_objective_profiled() | ~556 |
+| 15:44 | Edited src/interlace/glmm_laplace.py | modified _laplace_objective_profiled_dense() | ~1449 |
+| 15:45 | Edited src/interlace/glmm_laplace.py | modified _pirls() | ~345 |
+| 15:46 | Edited src/interlace/glmm_laplace.py | modified _pirls_dense() | ~1563 |
+| 15:49 | Session end: 27 writes across 6 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py, glmm_laplace.py) | 10 reads | ~73742 tok |
+| 15:52 | Session end: 27 writes across 6 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py, glmm_laplace.py) | 10 reads | ~73742 tok |
+| 16:00 | Created tests/test_profiled_reml_dense.py | — | ~1662 |
+| 16:00 | Edited tests/test_profiled_reml_dense.py | 2→2 lines | ~16 |
+| 16:02 | Edited src/interlace/profiled_reml.py | modified reml_objective() | ~607 |
+| 16:02 | Edited src/interlace/profiled_reml.py | modified reml_objective_dense() | ~887 |
+| 16:03 | Edited src/interlace/profiled_reml.py | modified reml_gradient_sparse() | ~665 |
+| 16:03 | Edited src/interlace/profiled_reml.py | modified reml_gradient_dense() | ~922 |
+| 16:04 | Edited src/interlace/profiled_reml.py | 2→2 lines | ~28 |
+| 16:05 | Edited tests/test_profiled_reml.py | modified test_gradient_reuses_cached_cholmod_factor() | ~891 |
+| 16:06 | Edited src/interlace/profiled_reml.py | expanded (+6 lines) | ~115 |
+| 16:06 | Session end: 36 writes across 7 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py, glmm_laplace.py) | 10 reads | ~83342 tok |
+| 16:10 | Edited tests/test_allfit.py | modified flat_likelihood_data() | ~178 |
+| 16:11 | Session end: 37 writes across 8 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py, glmm_laplace.py) | 12 reads | ~87079 tok |
+| 16:13 | Session end: 37 writes across 8 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py, glmm_laplace.py) | 12 reads | ~87079 tok |
+| 16:14 | Session end: 37 writes across 8 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py, glmm_laplace.py) | 12 reads | ~87079 tok |
+| 16:18 | Edited src/interlace/profiled_reml.py | 1→6 lines | ~118 |
+| 16:20 | Edited src/interlace/profiled_reml.py | 8→5 lines | ~116 |
+| 16:22 | Session end: 39 writes across 8 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py, glmm_laplace.py) | 12 reads | ~87514 tok |
+| 16:23 | Session end: 39 writes across 8 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py, glmm_laplace.py) | 12 reads | ~87514 tok |
+| 16:29 | Session end: 39 writes across 8 files (bench_gradient_inverse.py, test_selected_inverse.py, test_profiled_reml.py, profiled_reml.py, glmm_laplace.py) | 12 reads | ~87514 tok |
+
+## Session: 2026-05-08 16:29
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 16:45 | Edited CLAUDE.md | modified LMM() | ~1044 |
+| 16:45 | Session end: 1 writes across 1 files (CLAUDE.md) | 3 reads | ~3979 tok |
+| 16:48 | Session end: 1 writes across 1 files (CLAUDE.md) | 3 reads | ~3979 tok |
+| 16:51 | Session end: 1 writes across 1 files (CLAUDE.md) | 3 reads | ~3979 tok |
+
+## Session: 2026-05-08 16:52
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 17:10 | Edited .gitignore | 2→3 lines | ~40 |
+| 17:11 | Session end: 1 writes across 1 files (.gitignore) | 1 reads | ~1368 tok |
+| 17:46 | Created tests/fixtures/gen_sr_12_reedfrogs.R | — | ~885 |
+| 17:47 | Edited tests/fixtures/gen_sr_12_reedfrogs.R | modified function() | ~119 |
+| 17:49 | Created tests/test_sr_reedfrogs_parity.py | — | ~1205 |
+| 17:51 | Edited tests/test_sr_reedfrogs_parity.py | modified _check_fixed_effects() | ~191 |
+| 17:51 | Edited tests/test_sr_reedfrogs_parity.py | modified test_fixed_effects() | ~506 |
+| 17:51 | Edited tests/test_sr_reedfrogs_parity.py | modified test_fixed_effects() | ~50 |
+| 17:53 | Created ../../../../../tmp/build_sr12_nb.py | — | ~3495 |
+| 17:54 | Edited tests/test_sr_reedfrogs_parity.py | inline fix | ~12 |
+| 18:00 | Session end: 9 writes across 4 files (.gitignore, gen_sr_12_reedfrogs.R, test_sr_reedfrogs_parity.py, build_sr12_nb.py) | 5 reads | ~20021 tok |
+| 18:17 | Session end: 9 writes across 4 files (.gitignore, gen_sr_12_reedfrogs.R, test_sr_reedfrogs_parity.py, build_sr12_nb.py) | 5 reads | ~20021 tok |
+| 18:20 | Created tests/fixtures/gen_sr_13_chimps.R | — | ~936 |
+| 18:21 | Created tests/test_sr_chimps_parity.py | — | ~1514 |
+| 18:22 | Edited tests/test_sr_chimps_parity.py | modified _check_fixed_effects() | ~390 |
+| 18:23 | Edited tests/test_sr_chimps_parity.py | 6→7 lines | ~102 |
+| 18:24 | Created ../../../../../tmp/build_sr13_nb.py | — | ~2584 |
+| 18:30 | Session end: 14 writes across 7 files (.gitignore, gen_sr_12_reedfrogs.R, test_sr_reedfrogs_parity.py, build_sr12_nb.py, gen_sr_13_chimps.R) | 7 reads | ~27274 tok |
+| 18:34 | Created tests/fixtures/gen_sr_13_bangladesh.R | — | ~907 |
+| 18:35 | Created tests/test_sr_bangladesh_parity.py | — | ~1182 |
+| 18:44 | Created ../../../../../tmp/build_sr13_bangladesh_nb.py | — | ~2670 |
+| 18:45 | Edited tests/test_sr_bangladesh_parity.py | modified Models() | ~89 |
+| 18:51 | Created tests/fixtures/gen_sr_14_bangladesh_slopes.R | — | ~1038 |
+| 18:53 | Created tests/test_sr_bangladesh_slopes_parity.py | — | ~1816 |
+| 18:55 | Created ../../../../../tmp/build_sr14_nb.py | — | ~2454 |
+| 19:02 | Created tests/fixtures/gen_sr_12_mundlak.R | — | ~1287 |
+| 19:03 | Created tests/test_sr_mundlak_parity.py | — | ~1188 |
+| 19:05 | Edited tests/test_sr_mundlak_parity.py | modified _check_fixed_effects() | ~592 |
+| 19:06 | Created ../../../../../tmp/build_sr12_mundlak_nb.py | — | ~2655 |
+| 19:13 | Session end: 25 writes across 16 files (.gitignore, gen_sr_12_reedfrogs.R, test_sr_reedfrogs_parity.py, build_sr12_nb.py, gen_sr_13_chimps.R) | 8 reads | ~43383 tok |
+| 19:17 | Session end: 25 writes across 16 files (.gitignore, gen_sr_12_reedfrogs.R, test_sr_reedfrogs_parity.py, build_sr12_nb.py, gen_sr_13_chimps.R) | 8 reads | ~43383 tok |
+
+## Session: 2026-05-08 19:17
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-05-09 19:26
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 19:36 | Created tests/test_cholmod_warn.py | — | ~1609 |
+| 19:36 | Created src/interlace/_cholmod_warn.py | — | ~393 |
+| 19:37 | Edited src/interlace/profiled_reml.py | 10→15 lines | ~159 |
+| 19:37 | Edited src/interlace/profiled_reml.py | expanded (+6 lines) | ~187 |
+| 19:37 | Edited src/interlace/glmm_laplace.py | 5→9 lines | ~68 |
+| 19:38 | Edited tests/test_cholmod_warn.py | 5→6 lines | ~46 |
+| 19:38 | Edited pyproject.toml | 4→5 lines | ~41 |
+| 19:39 | Edited README.md | expanded (+8 lines) | ~131 |
+| 19:39 | Edited .github/workflows/ci.yml | 9→9 lines | ~106 |
+| 19:50 | Session end: 9 writes across 7 files (test_cholmod_warn.py, _cholmod_warn.py, profiled_reml.py, glmm_laplace.py, pyproject.toml) | 7 reads | ~49220 tok |
+
+## Session: 2026-05-12 17:27
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 17:40 | Created tests/test_student_t.py | — | ~1368 |
+| 17:50 | Created src/interlace/student_t.py | — | ~1917 |
+| 17:51 | Edited tests/test_student_t.py | modified test_student_t_fixed_nu_recovers_params() | ~314 |
+| 17:54 | Edited tests/test_student_t.py | 3→3 lines | ~45 |
+| 17:54 | Edited src/interlace/student_t.py | cov_re() → variance_components() | ~32 |
+| 17:54 | Edited tests/test_student_t.py | modified test_student_t_estimable_nu() | ~272 |
+| 17:54 | Edited tests/test_student_t.py | modified test_student_t_weights_noop() | ~418 |
+| 17:55 | Edited tests/test_student_t.py | 4→4 lines | ~51 |
+| 17:56 | Edited src/interlace/__init__.py | modified fit() | ~121 |
+| 17:56 | Edited src/interlace/__init__.py | modified in() | ~177 |
+| 17:56 | Edited tests/test_student_t.py | modified test_fit_family_student_t_routes_to_student_t_fit() | ~214 |
+| 17:57 | Edited src/interlace/student_t.py | modified range() | ~108 |
+| 17:58 | Edited src/interlace/student_t.py | modified fe_params() | ~101 |
+| 17:58 | Edited src/interlace/student_t.py | modified _log_t_density() | ~110 |
+| 17:58 | Edited src/interlace/student_t.py | 2→2 lines | ~34 |
+| 18:17 | Created docs/source/api/student_t.md | — | ~482 |
+| 18:17 | Edited docs/source/_toc.yml | 1→2 lines | ~15 |
+| 18:18 | interlace-8tna Student-t LMM via EM | src/interlace/student_t.py, tests/test_student_t.py, src/interlace/__init__.py, docs/source/api/student_t.md, docs/source/_toc.yml | 8 tests pass; full suite 1558 pass | ~3000 |
+| 18:18 | Session end: 17 writes across 5 files (test_student_t.py, student_t.py, __init__.py, student_t.md, _toc.yml) | 7 reads | ~20899 tok |

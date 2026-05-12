@@ -158,6 +158,7 @@ def fit(
     offset: np.ndarray | None = None,
     correlation: Any | None = None,
     df_method: str = "satterthwaite",
+    family: str | None = None,
 ) -> CrossedLMEResult:
     """Fit a linear mixed model with crossed random effects via profiled REML.
 
@@ -223,6 +224,22 @@ def fit(
     x            ...
     dtype: float64
     """
+    if family is not None:
+        if family != "student_t":
+            raise ValueError(
+                f"family must be None (Gaussian) or 'student_t'; got '{family}'."
+            )
+        from interlace.student_t import student_t_fit
+
+        return student_t_fit(  # type: ignore[return-value]
+            formula=formula,
+            data=data,
+            groups=groups,
+            random=random,
+            weights=weights,
+            method=method,
+            df_method=df_method,
+        )
     if method not in ("REML", "ML"):
         raise ValueError(f"method must be 'REML' or 'ML'; got '{method}'")
     _valid_df_methods = ("satterthwaite", "kenward-roger")

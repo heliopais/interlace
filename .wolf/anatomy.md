@@ -1,7 +1,15 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-05-08T11:04:00.963Z
-> Files: 737 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-05-12T16:17:44.746Z
+> Files: 761 tracked | Anatomy hits: 0 | Misses: 0
+
+## ../../../../../tmp/
+
+- `build_sr12_mundlak_nb.py` — Build sr_12_mundlak.ipynb. (~2655 tok)
+- `build_sr12_nb.py` — Build sr_12_intro_multilevel.ipynb from a list of cells. (~3495 tok)
+- `build_sr13_bangladesh_nb.py` — Build sr_13_bangladesh_intercepts.ipynb. (~2670 tok)
+- `build_sr13_nb.py` — Build sr_13_chimps_multi.ipynb. (~2584 tok)
+- `build_sr14_nb.py` — Build sr_14_bangladesh_slopes.ipynb. (~2454 tok)
 
 ## ../../../../../tmp/interlace-issue11/
 
@@ -15,16 +23,16 @@
 
 - `.coverage` (~14199 tok)
 - `.DS_Store` (~2186 tok)
-- `.gitignore` — Git ignore rules (~1325 tok)
+- `.gitignore` — Git ignore rules (~1356 tok)
 - `.mcp.json` (~40 tok)
 - `.tldrignore` — Reference books and notebooks (large non-source files) (~100 tok)
 - `AGENTS.md` — Agent Instructions (~724 tok)
-- `CLAUDE.md` — OpenWolf (~1498 tok)
+- `CLAUDE.md` — OpenWolf (~1934 tok)
 - `interlace-name.md` — Why "interlace"? (~259 tok)
 - `LICENSE` — Project license (~400 tok)
 - `Makefile` — Make build targets (~140 tok)
-- `pyproject.toml` — Mixed-effects models in Python: LMM, GLMM, CLMM, and Cox frailty with crossed random effects, valida (~700 tok)
-- `README.md` — Project documentation (~1362 tok)
+- `pyproject.toml` — Mixed-effects models in Python: LMM, GLMM, CLMM, and Cox frailty with crossed random effects, valida (~708 tok)
+- `README.md` — Project documentation (~1465 tok)
 
 ## .beads/
 
@@ -129,7 +137,7 @@
 
 ## .github/workflows/
 
-- `ci.yml` — CI: CI (~570 tok)
+- `ci.yml` — CI: CI (~582 tok)
 - `docs.yml` — CI: Deploy docs to GitHub Pages (~286 tok)
 - `publish.yml` — CI: Publish to PyPI (~387 tok)
 
@@ -786,13 +794,18 @@
 
 - `profile_fits.py` — Profile Sleepstudy and CBPP fits to confirm the hot spots in epic (~2983 tok)
 
+## docs/perf/probes/
+
+- `bench_gradient_inverse.py` — Micro-benchmark for interlace-mxzk Phase A. (~3362 tok)
+- `test_selected_inverse.py` — Prototype + correctness check for Takahashi selected-inverse on pattern(L+L^T). (~1255 tok)
+
 ## docs/perf/profiles/
 
 - `notes.md` — Profile notes — Sleepstudy & CBPP (~2167 tok)
 
 ## docs/source/
 
-- `_toc.yml` (~469 tok)
+- `_toc.yml` (~476 tok)
 - `case-study-glmm.ipynb` — GLMM case study: Poisson workplace safety incidents with crossed RE, deviance residuals, AGQ comparison (~7514 tok)
 - `case-study-ordinal.ipynb` — CLMM case study: teacher effectiveness ratings, 5-point Likert, method×size 2×2, teacher random intercept, plotnine EDA + cumulative curve + BLUP caterpillar + logit vs probit comparison (~3600 tok)
 - `case-study-survival.ipynb` — Declares mirrors (~3261 tok)
@@ -819,6 +832,7 @@
 - `glmm_families.md` — GLMM families (~1232 tok)
 - `index.md` — API Reference (~695 tok)
 - `kenward_roger.md` — Kenward-Roger degrees of freedom (~751 tok)
+- `student_t.md` — Student-t (robust) family (~452 tok)
 - `summary.md` — summary and VarCorr (~521 tok)
 
 ## paper/
@@ -833,7 +847,8 @@
 
 ## src/interlace/
 
-- `__init__.py` — interlace: mixed-effects models in Python (LMM, GLMM, CLMM, Cox frailty). (~5666 tok)
+- `__init__.py` — interlace: mixed-effects models in Python (LMM, GLMM, CLMM, Cox frailty). (~5819 tok)
+- `_cholmod_warn.py` — One-shot UserWarning when sksparse/CHOLMOD is unavailable on a hard path. (~393 tok)
 - `_frame.py` — Internal helpers for narwhals-based DataFrame boundary conversion. (~704 tok)
 - `allfit.py` — allFit(): refit a model with all available optimizers and compare convergence. (~1726 tok)
 - `augment.py` — Combined residuals + influence diagnostics DataFrame. (~458 tok)
@@ -844,7 +859,7 @@
 - `cross_val.py` — Cross-validation utilities with group-aware splits for mixed models. (~1875 tok)
 - `emmeans.py` — emmeans(): estimated marginal means for linear mixed models. (~5630 tok)
 - `glmm_family.py` — GLMMFamily protocol and concrete family implementations for GLMM support. (~7529 tok)
-- `glmm_laplace.py` — GLMM estimation via Laplace approximation (PIRLS). (~19231 tok)
+- `glmm_laplace.py` — GLMM estimation via Laplace approximation (PIRLS). (~22897 tok)
 - `influence.py` — Influence diagnostics for fitted linear mixed models via exact deletion. (~11777 tok)
 - `kenward_roger.py` — KR-adjusted covariance and DFs via Satterthwaite in un-profiled vc parameterization. (~2100 tok)
 - `kr_vcov.py` — Kenward-Roger variance-covariance matrix derivatives. (~1596 tok)
@@ -852,11 +867,12 @@
 - `ols.py` — OLS fitting with formulaic design matrices and HC3 robust standard errors. (~1604 tok)
 - `plotting.py` — plotnine-based diagnostic plots for linear mixed models. (~1297 tok)
 - `profile_ci.py` — Profile likelihood confidence intervals for variance components. (~3605 tok)
-- `profiled_reml.py` — Profiled REML estimation for linear mixed models with crossed random effects. (~16006 tok)
+- `profiled_reml.py` — Profiled REML estimation for linear mixed models with crossed random effects. (~19019 tok)
 - `quantreg.py` — Quantile regression: LP-based coefficient fitting + kernel SE. (~2609 tok)
 - `residuals.py` — Residual extraction for fitted linear mixed models. (~1607 tok)
 - `result.py` — CrossedLMEResult and ModelInfo dataclasses. (~6299 tok)
 - `simulate.py` — Parametric simulation and bootstrap for CrossedLMEResult. (~2441 tok)
+- `student_t.py` — Student-t (robust) response family for linear mixed models. (~1918 tok)
 - `summary.py` — summary() and VarCorr() for CrossedLMEResult. (~2789 tok)
 
 ## tests/
@@ -864,9 +880,10 @@
 - `_diag_coxme.py` — Diagnostic script: how good are the coxme estimates really? (~559 tok)
 - `_diag_se.py` — Diagnostic: compare SE computation methods against R coxme. (~1429 tok)
 - `_diag_se2.py` — Diagnostic: exact Breslow information vs diagonal approximation. (~1614 tok)
-- `test_allfit.py` — Tests for allFit() — multi-optimizer convergence check. (~1833 tok)
+- `test_allfit.py` — Tests for allFit() — multi-optimizer convergence check. (~1856 tok)
 - `test_ar1.py` — Tests for AR(1) residual correlation structure. (~3030 tok)
 - `test_backend_compat.py` — Regression tests: fit-result attributes are always pandas regardless of input. (~806 tok)
+- `test_cholmod_warn.py` — Slow-path warning when sksparse/CHOLMOD is unavailable. (~1614 tok)
 - `test_cholmod.py` — Tests for the CHOLMOD sparse Cholesky path in profiled_reml. (~2138 tok)
 - `test_clmm.py` — Tests for cumulative link mixed models (CLMM): parity, predict, crossed RE, confint. (~5500 tok)
 - `test_coxme_parity.py` — Parity test: interlace coxme vs R coxme::coxme() reference values. (~798 tok)
@@ -875,6 +892,7 @@
 - `test_emmeans.py` — Tests for emmeans() — estimated marginal means for LMMs. (~3054 tok)
 - `test_glmer_api.py` — Tests for the public interlace.glmer() API. (~1488 tok)
 - `test_glmm_cholmod.py` — Tests: GLMM hot path uses CHOLMOD when sksparse is available. (~1376 tok)
+- `test_glmm_dense_kernel.py` — Tests for the small-q dense fast path in ``glmm_laplace`` (interlace-72oc). (~2094 tok)
 - `test_glmm_family.py` — Tests for GLMMFamily protocol and concrete family implementations. (~11295 tok)
 - `test_glmm_laplace_helpers.py` — Tests for the in-place CSC scaling helpers in glmm_laplace. (~919 tok)
 - `test_glmm_laplace.py` — Tests for GLMM Laplace approximation (glmm_laplace.py). (~11321 tok)
@@ -888,7 +906,14 @@
 - `test_parity_cs.py` — Parity test: interlace CS vs R nlme, compound symmetry residual correlation. (~1691 tok)
 - `test_phase2_lme4_alignment.py` — Regression tests: GLMM Phase-2 Nelder-Mead aligned with lme4 conventions. (~1539 tok)
 - `test_profile_ci.py` — Tests for profile_confint in profile_ci.py. (~6908 tok)
-- `test_profiled_reml.py` — Tests for profiled_reml.py — Lambda parameterisation, sparse Cholesky, (~10297 tok)
+- `test_profiled_reml_dense.py` — Tests for the small-q dense fast path in ``profiled_reml`` (interlace-72oc Step 2). (~1662 tok)
+- `test_profiled_reml.py` — Tests for profiled_reml.py — Lambda parameterisation, sparse Cholesky, (~12188 tok)
+- `test_sr_bangladesh_parity.py` — Parity test: interlace.glmer vs lme4::glmer on McElreath bangladesh. (~1172 tok)
+- `test_sr_bangladesh_slopes_parity.py` — Parity test: interlace.glmer vs lme4::glmer on McElreath Bangladesh (~1816 tok)
+- `test_sr_chimps_parity.py` — Parity test: interlace.glmer vs lme4::glmer on McElreath chimpanzees. (~1683 tok)
+- `test_sr_mundlak_parity.py` — Parity test: interlace.glmer vs lme4::glmer on McElreath Mundlak DGP (~1397 tok)
+- `test_sr_reedfrogs_parity.py` — Parity test: interlace.glmer vs lme4::glmer on McElreath reedfrogs. (~1493 tok)
+- `test_student_t.py` — Tests for Student-t (robust) family for LMM (interlace-8tna). (~1830 tok)
 
 ## tests/fixtures/
 
@@ -898,3 +923,8 @@
 - `gen_cs_parity.R` — Generate fixture: LMM with compound symmetry residual correlation (nlme) (~1108 tok)
 - `gen_kr_parity.R` — Generate Kenward-Roger reference values for testing interlace. (~965 tok)
 - `gen_profile_ci.R` — Generate lme4 profile CI reference values for testing interlace. (~1018 tok)
+- `gen_sr_12_mundlak.R` — Generate Mundlak DGP + lme4 reference fixtures (interlace-x52r). (~1287 tok)
+- `gen_sr_12_reedfrogs.R` — Generate lme4 reference fixtures for Statistical Rethinking ch12 reedfrogs. (~943 tok)
+- `gen_sr_13_bangladesh.R` — Generate lme4 reference fixtures for Statistical Rethinking ch13 bangladesh. (~907 tok)
+- `gen_sr_13_chimps.R` — Generate lme4 reference fixtures for Statistical Rethinking ch13 chimps. (~936 tok)
+- `gen_sr_14_bangladesh_slopes.R` — Generate lme4 reference fixtures for Statistical Rethinking ch14 bangladesh (~1038 tok)

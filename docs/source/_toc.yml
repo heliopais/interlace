@@ -51,6 +51,7 @@ subtrees:
   - file: api/quantreg
   - file: api/correlation
   - file: api/glmm_families
+  - file: api/student_t
   - file: api/result
   - file: api/summary
   - file: api/predict
