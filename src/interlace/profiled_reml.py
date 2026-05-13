@@ -1105,7 +1105,17 @@ def fit_reml(
         # tight=False: limit iterations for warm-started case-deletion refits.
         # maxiter=10 caps expensive outlier refits; maxls=5 limits line-search evals.
         # Together they give ~2× speedup vs default convergence on large n.
-        lbfgsb_opts = None if tight else {"maxiter": 10, "maxls": 5}
+        #
+        # Default (tight=True) tolerances are loosened from scipy's defaults
+        # (ftol=2.22e-9, gtol=1e-5) to align with lme4's nloptr_bobyqa
+        # convergence regime (ftol_abs=1e-8, xtol_rel=1e-4). This trims
+        # ~10-25% off the outer-optimiser wall on Sleepstudy/CBPP with theta
+        # deltas below the manuscript's validation tolerance (FE abs<1e-4).
+        lbfgsb_opts = (
+            {"ftol": 1e-8, "gtol": 1e-4}
+            if tight
+            else {"maxiter": 10, "maxls": 5, "ftol": 1e-8, "gtol": 1e-4}
+        )
         jac = grad if use_gradient else None
         res = opt.minimize(
             obj, theta0, method="L-BFGS-B", bounds=bounds, jac=jac, options=lbfgsb_opts
@@ -1276,7 +1286,11 @@ def _fit_reml_with_correlation(
         params_hat = np.maximum(res.x, lower_bounds_joint)
         converged = bool(res.success)
     else:
-        lbfgsb_opts = None if tight else {"maxiter": 10, "maxls": 5}
+        lbfgsb_opts = (
+            {"ftol": 1e-8, "gtol": 1e-4}
+            if tight
+            else {"maxiter": 10, "maxls": 5, "ftol": 1e-8, "gtol": 1e-4}
+        )
         res = opt.minimize(
             obj_joint,
             params0,
@@ -1687,7 +1701,13 @@ def fit_ml(
         theta_hat = np.maximum(res.x, lower_bounds)
         converged = bool(res.success)
     else:
-        res = opt.minimize(obj, theta0, method="L-BFGS-B", bounds=bounds)
+        res = opt.minimize(
+            obj,
+            theta0,
+            method="L-BFGS-B",
+            bounds=bounds,
+            options={"ftol": 1e-8, "gtol": 1e-4},
+        )
         theta_hat = res.x
         converged = bool(res.success)
 

@@ -2018,6 +2018,9 @@ def fit_glmm(
                 params0,
                 method="L-BFGS-B",
                 bounds=joint_bounds,
+                # Loosened ftol/gtol vs scipy defaults to align with lme4's
+                # nloptr convergence regime (see interlace-tfrg).
+                options={"ftol": 1e-8, "gtol": 1e-4},
             )
             params_hat = res.x
             opt_converged = bool(res.success)
@@ -2080,6 +2083,9 @@ def fit_glmm(
                 theta0,
                 method="L-BFGS-B",
                 bounds=theta_bounds,
+                # Loosened ftol/gtol vs scipy defaults to align with lme4's
+                # nloptr convergence regime (see interlace-tfrg).
+                options={"ftol": 1e-8, "gtol": 1e-4},
             )
             theta_hat = res.x
             opt_converged = bool(res.success)
