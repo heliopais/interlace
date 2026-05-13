@@ -425,6 +425,7 @@ def _glmm_to_lme(
         + int(np.asarray(glmm_res.theta).size)
         + int(glmm_res.disp_params.size if glmm_res.disp_params is not None else 0),
         _primary_group_col=primary_group_col,
+        _secondary_group_cols=[s.group for s in specs[1:]],
         _random_specs=list(specs),
         df_method=df_method,
         disp_params=glmm_res.disp_params,

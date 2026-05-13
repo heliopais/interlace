@@ -71,15 +71,36 @@ def predict(
     if not include_re:
         return np.asarray(pred)
 
-    # Add BLUP contribution for each grouping factor
-    group_cols = [result._primary_group_col] + list(result._secondary_group_cols)
-    for col in group_cols:
-        if col not in nw_new.columns:
+    # Add BLUP contribution for each grouping factor. Walk ``_random_specs``
+    # when available so we can derive interaction columns ('main:sub', etc.)
+    # from the underlying ``interaction_cols`` rather than expecting the
+    # literal joined column name to exist in ``newdata``. Fall back to the
+    # group-col list for results constructed without specs.
+    import pandas as pd
+
+    specs = list(result._random_specs) if result._random_specs else []
+    if specs:
+        from interlace.sparse_z import group_array
+
+        spec_iter: list[tuple[str, np.ndarray]] = []
+        for spec in specs:
+            # Skip if none of the required columns are present in newdata.
+            req = spec.interaction_cols or [spec.group]
+            if not all(c in nw_new.columns for c in req):
+                continue
+            spec_iter.append((spec.group, group_array(spec, nw_new)))
+    else:
+        group_cols = [result._primary_group_col] + list(result._secondary_group_cols)
+        spec_iter = []
+        for col in group_cols:
+            if col not in nw_new.columns:
+                continue
+            spec_iter.append((col, nw_new[col].to_numpy()))
+
+    for col, col_vals in spec_iter:
+        if col not in result.random_effects:
             continue
         blup_re = result.random_effects[col]
-        col_vals = nw_new[col].to_numpy()
-
-        import pandas as pd
 
         if isinstance(blup_re, pd.DataFrame):
             # Random slopes: contribution = blup_intercept + sum(blup_slope_k * x_k)

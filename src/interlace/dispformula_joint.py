@@ -286,8 +286,8 @@ def fit_dispformula_joint(
     vc_d = _extract_vc(theta_d_hat, disp_re_specs)
 
     # --- 7. BLUPs per spec ---
-    mean_re = _split_blups(b_hat, specs_m, nlev_m, prefix="")
-    disp_re = _split_blups(u_d_hat, disp_re_specs, nlev_d, prefix="")
+    mean_re = _split_blups(b_hat, specs_m, nlev_m, prefix="", nw_data=nw_data)
+    disp_re = _split_blups(u_d_hat, disp_re_specs, nlev_d, prefix="", nw_data=nw_df_pd)
 
     # --- 8. Package ---
     import scipy.stats as stats
@@ -346,6 +346,7 @@ def fit_dispformula_joint(
         bic=float(bic),
         nparams=nparams,
         _primary_group_col=specs_m[0].group,
+        _secondary_group_cols=[s.group for s in specs_m[1:]],
         _random_specs=list(specs_m),
         df_method=df_method,
         disp_params=pd.Series(delta_hat, index=disp_term_names),
@@ -631,18 +632,30 @@ def _split_blups(
     specs: list[Any],
     n_levels: list[int],
     prefix: str = "",
+    nw_data: Any = None,
 ) -> dict[str, Any]:
-    """Slice a stacked BLUP vector into per-spec Series/DataFrames."""
+    """Slice a stacked BLUP vector into per-spec Series/DataFrames.
+
+    When ``nw_data`` is provided, each Series/DataFrame is indexed by the
+    sorted unique group labels (matching the plain-LMM result contract);
+    otherwise the index falls back to RangeIndex.
+    """
     out: dict[str, Any] = {}
     offset = 0
     for spec, q_j in zip(specs, n_levels, strict=True):
         n_blups_j = spec.n_terms * q_j
         block = blups[offset : offset + n_blups_j]
+        if nw_data is not None:
+            uniques: list[Any] = sorted(np.unique(group_array(spec, nw_data)).tolist())
+        else:
+            uniques = list(range(q_j))
         if spec.n_terms == 1:
-            out[f"{prefix}{spec.group}"] = pd.Series(block)
+            out[f"{prefix}{spec.group}"] = pd.Series(
+                block, index=uniques, name=spec.group
+            )
         else:
             out[f"{prefix}{spec.group}"] = pd.DataFrame(
-                block.reshape(q_j, spec.n_terms)
+                block.reshape(q_j, spec.n_terms), index=uniques
             )
         offset += n_blups_j
     return out
