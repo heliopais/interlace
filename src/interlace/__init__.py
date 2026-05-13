@@ -161,6 +161,7 @@ def fit(
     family: str | None = None,
     dispformula: str | None = None,
     dispformula_method: str | None = None,
+    nu: float | None = None,
 ) -> CrossedLMEResult:
     """Fit a linear mixed model with crossed random effects via profiled REML.
 
@@ -231,6 +232,29 @@ def fit(
             raise ValueError(
                 f"family must be None (Gaussian) or 'student_t'; got '{family}'."
             )
+        if dispformula is not None:
+            # Compose Student-t with dispformula. Only BCA is wired here; the
+            # joint-Laplace path under a t-likelihood is a follow-up (phase B).
+            if dispformula_method not in (None, "bca"):
+                raise NotImplementedError(
+                    "dispformula_method='joint_laplace' under family='student_t' "
+                    "is not yet implemented; pass dispformula_method='bca'."
+                )
+            from interlace.student_t_dispformula import (
+                fit_student_t_dispformula_bca,
+            )
+
+            return fit_student_t_dispformula_bca(  # type: ignore[return-value]
+                formula=formula,
+                data=data,
+                dispformula=dispformula,
+                groups=groups,
+                random=random,
+                nu=nu,
+                weights=weights,
+                method=method,
+                df_method=df_method,
+            )
         from interlace.student_t import student_t_fit
 
         return student_t_fit(  # type: ignore[return-value]
@@ -238,6 +262,7 @@ def fit(
             data=data,
             groups=groups,
             random=random,
+            nu=nu,
             weights=weights,
             method=method,
             df_method=df_method,
