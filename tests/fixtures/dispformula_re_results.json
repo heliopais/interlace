@@ -1,0 +1,18 @@
+{
+  "fixed_effects": {
+    "(Intercept)": 1.3861379349,
+    "x": 0.21777884521
+  },
+  "disp_params": {
+    "(Intercept)": -0.017329343278
+  },
+  "variance_components": {
+    "g_mean": 0.78271013045
+  },
+  "disp_variance_components": {
+    "g_disp": 0.19384777451
+  },
+  "loglik": -334.2194171996,
+  "aic": 678.4388343992,
+  "nobs": 200
+}

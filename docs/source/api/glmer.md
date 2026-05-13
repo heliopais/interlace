@@ -201,7 +201,45 @@ The dispersion sub-model coefficients are on the **log scale** (log link ensures
 $\phi > 0$).  They are stored in `result.disp_params` as a `pd.Series`.  The
 per-observation dispersion values are in `result.dispersion`.
 
+For Gaussian families, the reported coefficients match `glmmTMB`'s convention:
+`disp_params` is on the **log-σ scale** (so $\sigma_i = \exp(W_i \delta)$).
+For families like NB2 where the dispersion has a different natural scale
+(e.g., $\log \theta$), the coefficients are on that scale instead.
+
 `dispformula` cannot be combined with `nAGQ > 1`.
+
+#### Random effects on the dispersion side
+
+`dispformula` accepts lme4-style random effect terms, mirroring
+`glmmTMB(..., dispformula = ~ (1|g))`:
+
+```python
+result = interlace.fit(
+    formula="y ~ x",
+    data=df,
+    groups="g_mean",
+    dispformula="~ (1|g_disp)",          # random intercepts on log σ
+)
+# Nested shorthand also supported:
+result = interlace.fit(
+    formula="y ~ x", data=df, groups="g_mean",
+    dispformula="~ (1|g1/g2)",
+)
+
+print(result.disp_variance_components)   # τ²_g_disp etc.
+print(result.disp_random_effects)        # BLUPs on log-σ scale
+```
+
+When the dispformula contains random effects, `interlace.fit` switches from
+the joint-Laplace path (FE-only dispformula) to a **Block-Coordinate Ascent
+(BCA)** algorithm: the mean block is a weighted LMM with weights
+$1/\sigma_i^2$, and the dispersion block is a Gamma GLMM with log link on
+squared residuals. BCA converges to the joint mode but uses block-wise
+Laplace approximations for each side's variance components, so its
+dispersion-side variance components are biased vs the true joint MLE
+(typically within 10–20% in well-conditioned cases). Mean-side fixed effects
+match `glmmTMB` tightly. A future release will add a fully joint Laplace
+path for tighter parity (see issue `interlace-c803`).
 
 ### Prediction
 

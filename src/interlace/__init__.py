@@ -159,6 +159,7 @@ def fit(
     correlation: Any | None = None,
     df_method: str = "satterthwaite",
     family: str | None = None,
+    dispformula: str | None = None,
 ) -> CrossedLMEResult:
     """Fit a linear mixed model with crossed random effects via profiled REML.
 
@@ -238,6 +239,44 @@ def fit(
             random=random,
             weights=weights,
             method=method,
+            df_method=df_method,
+        )
+
+    if dispformula is not None:
+        # Heteroscedastic Gaussian LMM. Dispatch:
+        #  * Fixed-effects-only dispformula → joint Laplace via fit_glmm
+        #    (tighter parity with glmmTMB; identical to interlace.glmer with
+        #    family="gaussian" and dispformula=...).
+        #  * Dispformula with random effects → block-coordinate ascent (BCA),
+        #    since joint Laplace over (b_mean, d_disp) is deferred work.
+        from interlace.dispformula_bca import (
+            _parse_dispformula,
+            fit_dispformula_bca,
+            fit_dispformula_joint_laplace,
+        )
+
+        _, _disp_re_specs = _parse_dispformula(dispformula)
+        if _disp_re_specs:
+            return fit_dispformula_bca(  # type: ignore[no-any-return]
+                formula=formula,
+                data=data,
+                dispformula=dispformula,
+                groups=groups,
+                random=random,
+                method=method,
+                weights=weights,
+                offset=offset,
+                df_method=df_method,
+            )
+        return fit_dispformula_joint_laplace(  # type: ignore[no-any-return]
+            formula=formula,
+            data=data,
+            dispformula=dispformula,
+            groups=groups,
+            random=random,
+            method=method,
+            weights=weights,
+            offset=offset,
             df_method=df_method,
         )
     if method not in ("REML", "ML"):

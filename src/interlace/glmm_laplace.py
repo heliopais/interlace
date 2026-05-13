@@ -1966,6 +1966,12 @@ def fit_glmm(
         group_uniques = sorted(np.unique(group_codes).tolist())
         group_indices = [np.where(group_codes == lvl)[0] for lvl in group_uniques]
 
+    # Disp-coefficient scale factor: glmmTMB reports delta on log(sigma) for
+    # Gaussian and log(theta) for NB2.  Internally `phi` is the family-natural
+    # dispersion (variance for Gaussian, theta for NB2), so the exponent for
+    # Gaussian is 2*delta (since sigma^2 = exp(2*log_sigma)) and 1*delta for NB2.
+    disp_scale = 2.0 if isinstance(fam, GaussianFamily) else 1.0
+
     if X_d is not None:
         # Joint optimization over [theta | delta].
         # delta are the dispersion regression coefficients (log link, unbounded).
@@ -1976,7 +1982,7 @@ def fit_glmm(
         def joint_obj(params: np.ndarray) -> float:
             theta = params[:n_theta]
             delta = params[n_theta:]
-            phi = np.exp(X_d @ delta)
+            phi = np.exp(disp_scale * (X_d @ delta))
             return _laplace_objective(
                 theta,
                 y,
@@ -2018,7 +2024,7 @@ def fit_glmm(
 
         theta_hat = params_hat[:n_theta]
         delta_hat = params_hat[n_theta:]
-        phi_hat = np.exp(X_d @ delta_hat)
+        phi_hat = np.exp(disp_scale * (X_d @ delta_hat))
     else:
         # No dispformula — original optimization path
         delta_hat = None

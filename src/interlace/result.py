@@ -217,6 +217,13 @@ class CrossedLMEResult:
     # DF method used for inference ("satterthwaite" or "kenward-roger")
     df_method: str = "satterthwaite"
 
+    # Dispersion sub-model (None unless dispformula was supplied)
+    disp_params: Any = None  # pd.Series of FE coefs on log(sigma) scale
+    disp_random_effects: dict[str, Any] = field(default_factory=dict)
+    disp_variance_components: dict[str, float] = field(default_factory=dict)
+    dispersion: Any = None  # np.ndarray (n,) of per-obs sigma^2
+    disp_method: str | None = None  # "joint_laplace" or "bca"
+
     # ------------------------------------------------------------------
     # statsmodels-compatible aliases
     # ------------------------------------------------------------------

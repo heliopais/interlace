@@ -23,6 +23,7 @@ Works with any narwhals-compatible DataFrame (pandas, polars, etc.).
 | `correlation` | `AR1 \| CompoundSymmetry` | Residual correlation structure for longitudinal data |
 | `df_method` | `str` | `"satterthwaite"` (default) or `"kenward-roger"` for denominator DFs |
 | `theta0` | `ndarray` | Initial variance parameters; defaults to ones |
+| `dispformula` | `str` | Sub-model for observation-level dispersion; see Heteroscedastic LMM below |
 
 ## Examples
 
@@ -70,6 +71,39 @@ import scipy.stats
 lrt_stat = 2 * (m2.llf - m1.llf)
 p_value  = scipy.stats.chi2.sf(lrt_stat, df=1)
 ```
+
+### Heteroscedastic LMM (`dispformula`)
+
+Pass `dispformula=` to fit a Gaussian LMM whose residual SD varies across
+observations. Mirrors R `glmmTMB(..., dispformula = ...)`:
+
+```python
+# σ_i = exp(δ_0 + δ_1 · z_i)  (heteroscedastic by covariate)
+res = interlace.fit("y ~ x", data=df, groups="g", dispformula="~ z")
+print(res.disp_params)         # log-σ coefficients (Intercept, z)
+print(res.dispersion[:5])      # per-obs σ²
+
+# Random intercepts on log σ (salary-models style):
+res = interlace.fit(
+    "y ~ x", data=df, groups="g_mean",
+    dispformula="~ (1|g_disp)",
+)
+print(res.disp_variance_components)   # τ²_g_disp
+print(res.disp_random_effects)        # BLUPs on log-σ scale
+```
+
+`fit` dispatches automatically:
+
+* **FE-only dispformula** (`~1`, `~z`) → joint Laplace via the GLMM Laplace
+  machinery. Parity with `glmmTMB` is ~1e-6 on FE and disp coefficients.
+* **Random effects on dispformula side** (`~ (1|g)`, `~ (1|g/h)`) →
+  Block-Coordinate Ascent. Mean-side fixed effects match `glmmTMB`
+  tightly; dispersion-side variance components are biased by ~10–20%
+  due to the block-wise Laplace approximation. A future release will
+  add a joint Laplace path for tighter parity.
+
+The reported `disp_method` attribute on the result distinguishes the two
+paths: `"joint_laplace"` or `"bca"`.
 
 ## See also
 
