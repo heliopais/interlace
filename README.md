@@ -16,7 +16,7 @@ Designed as a drop-in replacement for `statsmodels.MixedLM` in diagnostics pipel
 pip install interlace-lme
 ```
 
-Requires Python ≥ 3.13.
+Requires Python ≥ 3.10.
 
 For materially faster random-slopes LMM and GLMM fits (~3-10x), install the `[fast]` extra to pull in `scikit-sparse` (CHOLMOD):
 

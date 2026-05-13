@@ -8,7 +8,17 @@ dynamic = ["version"]
 description = "Mixed-effects models in Python: LMM, GLMM, CLMM, and Cox frailty with crossed random effects, validated against R"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.13"
+requires-python = ">=3.10"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
 dependencies = [
     "statsmodels>=0.14",
     "formulaic>=0.6",
@@ -36,7 +46,10 @@ dev = [
     "ruff>=0.9",
     "mypy==1.19.1",
     "pandas>=2.0",
-    "pandas-stubs>=3.0.0.260204",
+    # pandas-stubs >=3.0 requires Python >=3.11; for 3.10 dev environments,
+    # fall back to the latest 2.x line (mypy authoritatively runs on 3.13 in CI).
+    "pandas-stubs>=3.0.0.260204; python_version >= '3.11'",
+    "pandas-stubs>=2.2,<3.0; python_version < '3.11'",
     "types-tqdm>=4.67.0",
     "polars>=1.0",
     "narwhals>=1.0",
@@ -80,6 +93,9 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = []
 
 [tool.mypy]
+# mypy runs on the highest supported Python in CI (3.13). The runtime
+# floor is 3.10 (see ``requires-python``); per-version compatibility is
+# verified by running the actual test suite on the CI matrix instead.
 python_version = "3.13"
 strict = true
 files = ["src"]

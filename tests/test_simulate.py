@@ -264,7 +264,16 @@ class TestReplaceColInFrame:
                 pass
             return orig(obj, cls)
 
-        with patch("interlace.simulate.isinstance", side_effect=fake_isinstance):
+        # Patch via the module object so resolution doesn't trip over the
+        # ``simulate`` function shadowing the submodule in ``interlace``'s
+        # public namespace (the dotted-string form is brittle across
+        # Python versions; cf. unittest.mock._get_target).
+        import sys
+
+        sim_module = sys.modules["interlace.simulate"]
+        with patch.object(
+            sim_module, "isinstance", side_effect=fake_isinstance, create=True
+        ):
             out = _replace_col_in_frame(frame, "a", new_vals)
         assert list(out["a"]) == [10, 20, 30]
 

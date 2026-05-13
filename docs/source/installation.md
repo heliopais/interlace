@@ -6,7 +6,7 @@
 pip install interlace-lme
 ```
 
-Requires **Python ≥ 3.13**.
+Requires **Python ≥ 3.10**.
 
 ## Which extras do I need?
 
