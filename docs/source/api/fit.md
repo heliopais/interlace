@@ -96,14 +96,16 @@ print(res.disp_random_effects)        # BLUPs on log-σ scale
 
 * **FE-only dispformula** (`~1`, `~z`) → joint Laplace via the GLMM Laplace
   machinery. Parity with `glmmTMB` is ~1e-6 on FE and disp coefficients.
-* **Random effects on dispformula side** (`~ (1|g)`, `~ (1|g/h)`) →
-  Block-Coordinate Ascent. Mean-side fixed effects match `glmmTMB`
-  tightly; dispersion-side variance components are biased by ~10–20%
-  due to the block-wise Laplace approximation. A future release will
-  add a joint Laplace path for tighter parity.
+* **Random effects on dispformula side** (`~ (1|g)`, `~ (1|g/h)`) → joint
+  Laplace over both random-effect blocks (β, b, u_d). For nested designs
+  (the salary-models target), disp variance components match `glmmTMB`
+  within ~1%; mean-side FE within 1e-3.
 
-The reported `disp_method` attribute on the result distinguishes the two
-paths: `"joint_laplace"` or `"bca"`.
+The reported `disp_method` attribute on the result distinguishes the
+paths: `"joint_laplace"` (default) or `"bca"`. Pass
+`dispformula_method="bca"` to opt in to the legacy Block-Coordinate Ascent
+path (faster but biased disp varcomps by 15–80%; kept available for
+cross-comparison).
 
 ## See also
 

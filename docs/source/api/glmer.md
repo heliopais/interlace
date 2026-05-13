@@ -230,16 +230,13 @@ print(result.disp_variance_components)   # τ²_g_disp etc.
 print(result.disp_random_effects)        # BLUPs on log-σ scale
 ```
 
-When the dispformula contains random effects, `interlace.fit` switches from
-the joint-Laplace path (FE-only dispformula) to a **Block-Coordinate Ascent
-(BCA)** algorithm: the mean block is a weighted LMM with weights
-$1/\sigma_i^2$, and the dispersion block is a Gamma GLMM with log link on
-squared residuals. BCA converges to the joint mode but uses block-wise
-Laplace approximations for each side's variance components, so its
-dispersion-side variance components are biased vs the true joint MLE
-(typically within 10–20% in well-conditioned cases). Mean-side fixed effects
-match `glmmTMB` tightly. A future release will add a fully joint Laplace
-path for tighter parity (see issue `interlace-c803`).
+When the dispformula contains random effects, `interlace.fit` runs a
+joint-Laplace fit over both random-effect blocks $(b, u_d)$, optimising
+the unified marginal log-likelihood
+$\ell_{marg}(\theta_m, \theta_d, \delta)$ via Nelder-Mead → L-BFGS-B with
+a BCA warm-start. For nested designs disp variance components match
+`glmmTMB` within ~1%. The legacy Block-Coordinate Ascent path remains
+available via `dispformula_method="bca"` for cross-comparison.
 
 ### Prediction
 

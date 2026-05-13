@@ -160,6 +160,7 @@ def fit(
     df_method: str = "satterthwaite",
     family: str | None = None,
     dispformula: str | None = None,
+    dispformula_method: str | None = None,
 ) -> CrossedLMEResult:
     """Fit a linear mixed model with crossed random effects via profiled REML.
 
@@ -243,21 +244,46 @@ def fit(
         )
 
     if dispformula is not None:
-        # Heteroscedastic Gaussian LMM. Dispatch:
-        #  * Fixed-effects-only dispformula → joint Laplace via fit_glmm
-        #    (tighter parity with glmmTMB; identical to interlace.glmer with
-        #    family="gaussian" and dispformula=...).
-        #  * Dispformula with random effects → block-coordinate ascent (BCA),
-        #    since joint Laplace over (b_mean, d_disp) is deferred work.
+        # Heteroscedastic Gaussian LMM. Method selection:
+        #  * "joint_laplace" (default for both FE-only and RE-on-disp):
+        #     FE-only routes to fit_glmm; RE-on-disp routes to
+        #     fit_dispformula_joint (proper joint Laplace marginalisation).
+        #  * "bca": force the Block-Coordinate Ascent path (biased disp
+        #     varcomps for RE-on-disp; available for comparison).
         from interlace.dispformula_bca import (
             _parse_dispformula,
             fit_dispformula_bca,
             fit_dispformula_joint_laplace,
         )
 
+        if dispformula_method not in (None, "joint_laplace", "bca"):
+            raise ValueError(
+                "dispformula_method must be None, 'joint_laplace', or 'bca'; "
+                f"got {dispformula_method!r}"
+            )
+
         _, _disp_re_specs = _parse_dispformula(dispformula)
-        if _disp_re_specs:
+        has_disp_re = bool(_disp_re_specs)
+        chosen = dispformula_method or "joint_laplace"
+
+        if chosen == "bca":
             return fit_dispformula_bca(  # type: ignore[no-any-return]
+                formula=formula,
+                data=data,
+                dispformula=dispformula,
+                groups=groups,
+                random=random,
+                method=method,
+                weights=weights,
+                offset=offset,
+                df_method=df_method,
+            )
+
+        # joint_laplace
+        if has_disp_re:
+            from interlace.dispformula_joint import fit_dispformula_joint
+
+            return fit_dispformula_joint(  # type: ignore[no-any-return]
                 formula=formula,
                 data=data,
                 dispformula=dispformula,
