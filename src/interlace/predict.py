@@ -48,7 +48,7 @@ def predict(
 
     # Build fixed-effects design matrix using formulaic (same as fitting path).
     fe_formula = result.model.formula.split("~", 1)[1].strip()
-    X_new_mm = formulaic.model_matrix(fe_formula, nw_new)
+    X_new_mm = formulaic.model_matrix(fe_formula, newdata)
     # Convert to numpy first — avoids narwhals/polars __getitem__ path which can
     # raise ColumnNotFoundError on some version combinations (GitHub issue #12).
     mm_cols = list(X_new_mm.columns)

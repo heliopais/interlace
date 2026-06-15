@@ -251,7 +251,7 @@ def parse_formula(
         groups_arr = np.asarray(groups)
 
     # formulaic accepts narwhals DataFrames natively
-    matrices = formulaic.model_matrix(formula, nw_data)
+    matrices = formulaic.model_matrix(formula, data)
 
     term_names = list(matrices.rhs.columns)
 

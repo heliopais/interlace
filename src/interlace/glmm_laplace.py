@@ -216,7 +216,7 @@ class GLMMResult:
 
         # Build X from formula
         fe_formula = self._formula.split("~", 1)[1].strip()
-        X_mm = formulaic.model_matrix(fe_formula, nw_new)
+        X_mm = formulaic.model_matrix(fe_formula, newdata)
         mm_cols = list(X_mm.columns)
         mm_arr = np.asarray(X_mm)
 
@@ -1905,7 +1905,7 @@ def fit_glmm(
         disp_formula_rhs = dispformula.lstrip("~").strip()
         if not disp_formula_rhs:
             disp_formula_rhs = "1"
-        X_d_mm = formulaic.model_matrix("~ " + disp_formula_rhs, nw_data)
+        X_d_mm = formulaic.model_matrix("~ " + disp_formula_rhs, data)
         disp_term_names = list(X_d_mm.columns)
         X_d = np.asarray(X_d_mm, dtype=np.float64)
         n_disp = X_d.shape[1]
