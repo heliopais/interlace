@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import formulaic
-import narwhals as nw
 import numpy as np
 import pandas as pd
 
@@ -129,7 +128,6 @@ class OLSResult:
         -------
         np.ndarray, shape (n,)
         """
-        nw_data = nw.from_native(data, eager_only=True)
         rhs_spec = self.model._rhs_model_spec.update(materializer=None)
         X_new = np.asarray(formulaic.model_matrix(rhs_spec, data), dtype=float)
         return np.asarray(X_new @ self.params.values, dtype=float)
@@ -157,8 +155,6 @@ def ols(formula: str, data: Any) -> OLSResult:
     >>> result = interlace.ols("y ~ x1 + x2", df)
     >>> result.params
     """
-    nw_data = nw.from_native(data, eager_only=True)
-
     matrices = formulaic.model_matrix(formula, data)
     X = np.asarray(matrices.rhs, dtype=float)
     y = np.asarray(matrices.lhs, dtype=float).squeeze()

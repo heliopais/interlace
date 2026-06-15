@@ -32,7 +32,6 @@ from __future__ import annotations
 from typing import Any
 
 import formulaic
-import narwhals as nw
 import numpy as np
 import pandas as pd
 import scipy.optimize as opt
@@ -220,7 +219,6 @@ class QuantRegResult:
         -------
         np.ndarray, shape (n,)
         """
-        nw_data = nw.from_native(data, eager_only=True)
         rhs_spec = self._rhs_model_spec.update(materializer=None)
         X_new = np.asarray(
             formulaic.model_matrix(rhs_spec, data), dtype=float
@@ -259,8 +257,6 @@ def quantreg(formula: str, data: Any, tau: float = 0.5) -> QuantRegResult:
     >>> qr = interlace.quantreg("y ~ x1 + x2", df, tau=0.75)
     >>> qr.params
     """
-    nw_data = nw.from_native(data, eager_only=True)
-
     matrices = formulaic.model_matrix(formula, data)
     X = np.asarray(matrices.rhs, dtype=float)
     y = np.asarray(matrices.lhs, dtype=float).squeeze()
