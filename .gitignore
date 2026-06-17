@@ -228,3 +228,28 @@ ported_examples/hlm/*.pdf
 # AI assistant instructions
 CLAUDE.md
 AGENTS.md
+
+# Claude Code local settings
+.claude/
+
+# tldr cache / index (regenerable)
+.tldr/
+src/interlace/.tldr/
+
+# Sphinx jupyter-book execution artifacts (regenerable from docs build)
+docs/jupyter_execute/
+
+# graphify output (large generated graph reports)
+graphify-out/
+
+# beads local export state
+.beads/export-state.json
+
+# OpenWolf — track only the shared protocol/docs, ignore local runtime state
+.wolf/*
+!.wolf/OPENWOLF.md
+!.wolf/anatomy.md
+!.wolf/cerebrum.md
+!.wolf/memory.md
+!.wolf/identity.md
+!.wolf/reframe-frameworks.md

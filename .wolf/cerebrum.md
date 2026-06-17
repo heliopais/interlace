@@ -51,6 +51,8 @@
 - [2026-05-08] `scipy.sparse.linalg.spsolve(A, B)` silently squeezes a (q, 1) 2D dense rhs to a (q,) 1D output, breaking 2D shape contracts. Any wrapper that promises (q, p) output for 2D rhs must reshape: `if rhs.ndim == 2 and out.ndim == 1: out = out.reshape(rhs.shape[0], -1)`. This bit `_sparse_solve` in profiled_reml.py for intercept-only X (p=1) + crossed RE in `reml_gradient`.
 - [2026-05-08] The current `reml_gradient` is correct (passes check_grad) but **slower than forward-difference** at q ≥ ~80 because it computes a dense `A11_inv = lu.solve(np.eye(q))` per call (O(q³)). Obj-call count drops 50–75% but wall time is flat-to-negative on multi-factor diagonal fits. Don't flip `use_gradient=True` as the default until the gradient body uses selective inverse / Hutchinson estimators (tracked as interlace-mxzk). Counter-intuitive: an analytic gradient that's mathematically correct can still lose to FD if its per-call cost dominates.
 
+- [2026-06-13] Phase B.0 of interlace-f0x1: no C-speed selected inverse is reachable as a dep on macOS/Linux. `sksparse v0.5.0`'s `Factor.inv()` returns the full P^T L^-T L^-1 P inverse (dense q×q), not a selected one. libcholmod 5.3.4 (SuiteSparse 7.12.2) does NOT export `cholmod_spinv` / sparseinv / takahashi — Tim Davis ships `sparseinv` separately under `SuiteSparse/MATLAB_Tools/sparseinv` and it is not compiled into any installed library. `scipy.sparse.linalg` has no Takahashi routine. Remaining paths: Numba (issue's planned B.1) or vendor `sparseinv.c` via cffi (out of issue scope).
+
 ## Decision Log
 
 <!-- Significant technical decisions with rationale. Why X was chosen over Y. -->

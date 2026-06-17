@@ -4,6 +4,7 @@
 > Old sessions are consolidated by the daemon weekly.
 
 | 05:00 | created ordinal CLMM case study notebook | docs/source/case-study-ordinal.ipynb | created | ~800 |
+| 2026-06-13 | f0x1 Phase B.0 probe: no C-speed selected inverse | .wolf/cerebrum.md, .beads (f0x1 notes) | sksparse.Factor.inv() returns full inverse; libcholmod 5.3.4 has no cholmod_spinv; next: Numba or vendor sparseinv.c | ~3k tok |
 
 | 16:00 | Fixed BLUP/residual whitening bug in fit() for correlation structures | src/interlace/__init__.py | AR1 BLUP MAE 0.083→0.000001 | ~4000 |
 | 16:15 | Tightened AR1 parity tolerances 50x (FE 0.05→1e-4, rho 0.05→1e-4, loglik 0.1→1e-6, BLUP 0.99→0.9999) | tests/test_parity_ar1.py, tests/test_parity_cs.py | 17/17 pass | ~2000 |
@@ -999,3 +1000,236 @@
 | 18:17 | Edited docs/source/_toc.yml | 1→2 lines | ~15 |
 | 18:18 | interlace-8tna Student-t LMM via EM | src/interlace/student_t.py, tests/test_student_t.py, src/interlace/__init__.py, docs/source/api/student_t.md, docs/source/_toc.yml | 8 tests pass; full suite 1558 pass | ~3000 |
 | 18:18 | Session end: 17 writes across 5 files (test_student_t.py, student_t.py, __init__.py, student_t.md, _toc.yml) | 7 reads | ~20899 tok |
+| 19:35 | Session end: 17 writes across 5 files (test_student_t.py, student_t.py, __init__.py, student_t.md, _toc.yml) | 7 reads | ~20899 tok |
+
+## Session: 2026-05-12 19:39
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 08:39 | Edited src/interlace/glmm_laplace.py | modified joint_obj() | ~249 |
+| 08:39 | Edited src/interlace/glmm_laplace.py | 3→3 lines | ~40 |
+| 08:40 | Edited tests/test_dispformula.py | modified test_fixed_effects_close() | ~326 |
+| 08:40 | Edited src/interlace/__init__.py | modified fit() | ~131 |
+| 08:40 | Edited src/interlace/__init__.py | expanded (+19 lines) | ~342 |
+| 08:59 | Edited src/interlace/result.py | expanded (+7 lines) | ~150 |
+| 09:00 | Created src/interlace/dispformula_bca.py | — | ~3608 |
+| 09:04 | Edited src/interlace/__init__.py | expanded (+19 lines) | ~387 |
+| 09:04 | Edited src/interlace/dispformula_bca.py | modified fit_dispformula_joint_laplace() | ~1270 |
+| 09:05 | Created tests/fixtures/gen_dispformula_re.R | — | ~990 |
+| 09:06 | Edited src/interlace/dispformula_bca.py | 12→14 lines | ~211 |
+| 09:09 | Edited src/interlace/dispformula_bca.py | expanded (+11 lines) | ~270 |
+| 09:10 | Edited src/interlace/dispformula_bca.py | reduced (-11 lines) | ~77 |
+| 09:11 | Edited src/interlace/dispformula_bca.py | modified _parse_dispformula_raw() | ~237 |
+| 09:11 | Edited src/interlace/dispformula_bca.py | 2→3 lines | ~47 |
+| 09:11 | Edited src/interlace/dispformula_bca.py | 8→7 lines | ~75 |
+| 09:12 | Edited tests/test_dispformula.py | added 2 condition(s) | ~1838 |
+| 09:19 | Edited docs/source/api/glmer.md | expanded (+38 lines) | ~492 |
+| 09:19 | Edited docs/source/api/fit.md | 1→2 lines | ~47 |
+| 09:19 | Edited docs/source/api/fit.md | expanded (+33 lines) | ~351 |
+| 09:19 | Edited src/interlace/dispformula_bca.py | modified _to_pandas() | ~78 |
+| 09:20 | Edited src/interlace/dispformula_bca.py | modified fit_dispformula_bca() | ~106 |
+| 09:20 | Edited src/interlace/dispformula_bca.py | modified fit_dispformula_joint_laplace() | ~92 |
+| 09:20 | Edited src/interlace/dispformula_bca.py | modified _glmm_to_lme() | ~43 |
+| 09:20 | Edited src/interlace/__init__.py | 14→14 lines | ~155 |
+| 09:21 | Edited src/interlace/__init__.py | 11→11 lines | ~99 |
+| 09:21 | Edited src/interlace/__init__.py | inline fix | ~20 |
+| 09:26 | Session end: 27 writes across 8 files (glmm_laplace.py, test_dispformula.py, __init__.py, result.py, dispformula_bca.py) | 11 reads | ~58000 tok |
+| 09:28 | Edited tests/test_dispformula.py | added 1 condition(s) | ~610 |
+| 09:31 | Edited src/interlace/__init__.py | 3→4 lines | ~38 |
+| 09:31 | Edited src/interlace/__init__.py | modified in() | ~647 |
+| 09:32 | Created src/interlace/dispformula_joint.py | — | ~5794 |
+| 09:33 | Edited src/interlace/dispformula_joint.py | 3→7 lines | ~80 |
+| 09:33 | Edited src/interlace/dispformula_joint.py | 7→12 lines | ~131 |
+| 09:33 | Edited src/interlace/dispformula_joint.py | 6→10 lines | ~107 |
+| 09:33 | Edited src/interlace/dispformula_joint.py | expanded (+10 lines) | ~181 |
+| 09:35 | Edited src/interlace/dispformula_joint.py | expanded (+27 lines) | ~356 |
+| 09:36 | Edited tests/test_dispformula.py | added 1 condition(s) | ~910 |
+| 09:36 | Edited tests/test_dispformula.py | modified test_joint_laplace_disp_intercept() | ~483 |
+| 09:38 | Edited src/interlace/dispformula_joint.py | 8→9 lines | ~91 |
+| 09:38 | Edited src/interlace/dispformula_joint.py | 3→3 lines | ~24 |
+| 09:38 | Edited src/interlace/dispformula_joint.py | modified _scale_rows_csc() | ~92 |
+| 09:38 | Edited src/interlace/dispformula_joint.py | inline fix | ~21 |
+| 09:39 | Edited src/interlace/dispformula_joint.py | modified _split_blups() | ~38 |
+| 09:39 | Edited src/interlace/dispformula_joint.py | 5→7 lines | ~74 |
+| 09:44 | Edited docs/source/api/fit.md | 12→14 lines | ~193 |
+| 09:44 | Edited docs/source/api/glmer.md | 10→7 lines | ~121 |
+| 09:49 | Session end: 46 writes across 9 files (glmm_laplace.py, test_dispformula.py, __init__.py, result.py, dispformula_bca.py) | 13 reads | ~93241 tok |
+| 09:51 | Session end: 46 writes across 9 files (glmm_laplace.py, test_dispformula.py, __init__.py, result.py, dispformula_bca.py) | 13 reads | ~93241 tok |
+| 09:52 | Session end: 46 writes across 9 files (glmm_laplace.py, test_dispformula.py, __init__.py, result.py, dispformula_bca.py) | 13 reads | ~93241 tok |
+| 09:56 | Session end: 46 writes across 9 files (glmm_laplace.py, test_dispformula.py, __init__.py, result.py, dispformula_bca.py) | 14 reads | ~93628 tok |
+| 09:57 | Session end: 46 writes across 9 files (glmm_laplace.py, test_dispformula.py, __init__.py, result.py, dispformula_bca.py) | 14 reads | ~93628 tok |
+| 09:57 | Session end: 46 writes across 9 files (glmm_laplace.py, test_dispformula.py, __init__.py, result.py, dispformula_bca.py) | 14 reads | ~93628 tok |
+| 10:00 | Session end: 46 writes across 9 files (glmm_laplace.py, test_dispformula.py, __init__.py, result.py, dispformula_bca.py) | 14 reads | ~93628 tok |
+| 10:03 | Session end: 46 writes across 9 files (glmm_laplace.py, test_dispformula.py, __init__.py, result.py, dispformula_bca.py) | 14 reads | ~93628 tok |
+| 10:04 | Session end: 46 writes across 9 files (glmm_laplace.py, test_dispformula.py, __init__.py, result.py, dispformula_bca.py) | 14 reads | ~93628 tok |
+| 10:05 | Session end: 46 writes across 9 files (glmm_laplace.py, test_dispformula.py, __init__.py, result.py, dispformula_bca.py) | 14 reads | ~93628 tok |
+
+## Session: 2026-05-13 10:57
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 11:02 | Created tests/test_student_t_dispformula.py | — | ~2778 |
+| 11:04 | Created src/interlace/student_t_dispformula.py | — | ~2779 |
+| 11:04 | Edited src/interlace/__init__.py | 4→5 lines | ~46 |
+| 11:04 | Edited src/interlace/__init__.py | modified in() | ~428 |
+| 11:08 | Session end: 4 writes across 3 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py) | 6 reads | ~35409 tok |
+| 11:12 | Session end: 4 writes across 3 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py) | 7 reads | ~35409 tok |
+| 11:13 | Session end: 4 writes across 3 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py) | 7 reads | ~35409 tok |
+| 11:32 | Created tests/test_student_t_dispformula_joint.py | — | ~2556 |
+| 11:33 | Created src/interlace/student_t_dispformula_joint.py | — | ~1700 |
+| 11:33 | Edited src/interlace/__init__.py | modified in() | ~420 |
+| 11:34 | Session end: 7 writes across 5 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 8 reads | ~63099 tok |
+| 11:35 | Session end: 7 writes across 5 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 10 reads | ~63099 tok |
+| 11:36 | Session end: 7 writes across 5 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 10 reads | ~63099 tok |
+| 11:40 | Edited pyproject.toml | expanded (+10 lines) | ~108 |
+| 11:40 | Edited pyproject.toml | 2→2 lines | ~10 |
+| 11:40 | Edited .github/workflows/ci.yml | 3→3 lines | ~24 |
+| 11:40 | Edited README.md | 3.13 → 3.10 | ~7 |
+| 11:41 | Edited docs/source/installation.md | 3.13 → 3.10 | ~8 |
+| 11:42 | Session end: 12 writes across 9 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 16 reads | ~73981 tok |
+| 11:42 | Session end: 12 writes across 9 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 16 reads | ~73981 tok |
+| 11:42 | Session end: 12 writes across 9 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 16 reads | ~73981 tok |
+| 11:43 | Session end: 12 writes across 9 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 17 reads | ~73981 tok |
+| 11:47 | Edited tests/test_simulate.py | modified shadowing() | ~152 |
+| 11:47 | Edited pyproject.toml | "pandas-stubs>=3.0.0.26020" → "pandas-stubs>=2.2" | ~7 |
+| 11:49 | Edited pyproject.toml | "pandas-stubs>=2.2" → "pandas-stubs>=3.0.0.26020" | ~9 |
+| 11:49 | Edited pyproject.toml | 2→5 lines | ~66 |
+| 11:50 | Edited pyproject.toml | 1→4 lines | ~73 |
+| 11:50 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 18 reads | ~74299 tok |
+| 11:50 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 18 reads | ~74299 tok |
+| 11:52 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 18 reads | ~74299 tok |
+| 11:52 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 18 reads | ~74299 tok |
+| 11:55 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 19 reads | ~74299 tok |
+| 11:56 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 19 reads | ~74299 tok |
+| 12:01 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 19 reads | ~74299 tok |
+| 12:02 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 19 reads | ~74299 tok |
+| 12:02 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 19 reads | ~74299 tok |
+| 12:03 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 19 reads | ~74299 tok |
+| 12:15 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 19 reads | ~74299 tok |
+| 12:19 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 19 reads | ~74299 tok |
+| 12:22 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 19 reads | ~74299 tok |
+| 12:43 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 19 reads | ~74299 tok |
+| 16:10 | Session end: 17 writes across 10 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 19 reads | ~74299 tok |
+| 16:14 | Created tests/test_student_t_dispformula_joint_re.py | — | ~1473 |
+| 16:15 | Edited src/interlace/dispformula_joint.py | modified _split_blups() | ~325 |
+| 16:15 | Edited src/interlace/dispformula_joint.py | 3→5 lines | ~61 |
+| 16:15 | Edited src/interlace/dispformula_joint.py | 2→3 lines | ~41 |
+| 16:15 | Edited src/interlace/dispformula_bca.py | 2→3 lines | ~40 |
+| 16:16 | Edited src/interlace/predict.py | modified all() | ~391 |
+| 16:18 | Session end: 23 writes across 14 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 21 reads | ~78037 tok |
+| 16:21 | Session end: 23 writes across 14 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 21 reads | ~78037 tok |
+| 16:24 | Session end: 23 writes across 14 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 23 reads | ~78037 tok |
+| 16:25 | Session end: 23 writes across 14 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 23 reads | ~78037 tok |
+| 16:27 | Session end: 23 writes across 14 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 23 reads | ~78037 tok |
+| 16:28 | Session end: 23 writes across 14 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 23 reads | ~78037 tok |
+| 16:32 | Edited src/interlace/profiled_reml.py | expanded (+10 lines) | ~297 |
+| 16:32 | Edited src/interlace/profiled_reml.py | 11→15 lines | ~121 |
+| 16:33 | Edited src/interlace/profiled_reml.py | expanded (+6 lines) | ~52 |
+| 16:33 | Edited src/interlace/glmm_laplace.py | 8→11 lines | ~127 |
+| 16:33 | Edited src/interlace/glmm_laplace.py | 8→11 lines | ~124 |
+| 16:34 | Session end: 28 writes across 16 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 24 reads | ~97944 tok |
+| 16:34 | Session end: 28 writes across 16 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 24 reads | ~97944 tok |
+| 16:34 | Session end: 28 writes across 16 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 24 reads | ~97944 tok |
+| 16:38 | Session end: 28 writes across 16 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 24 reads | ~97944 tok |
+| 16:39 | Session end: 28 writes across 16 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 24 reads | ~97944 tok |
+| 16:42 | Session end: 28 writes across 16 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 24 reads | ~97944 tok |
+| 16:45 | Session end: 28 writes across 16 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 24 reads | ~97944 tok |
+| 17:56 | Session end: 28 writes across 16 files (test_student_t_dispformula.py, student_t_dispformula.py, __init__.py, test_student_t_dispformula_joint.py, student_t_dispformula_joint.py) | 24 reads | ~97944 tok |
+
+## Session: 2026-05-13 18:41
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-06-09 16:48
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-06-09 16:55
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 16:56 | Created graphify-out/.graphify_chunk_02.json | — | ~28 |
+| 16:56 | Created graphify-out/.graphify_chunk_00.json | — | ~4080 |
+| 16:57 | Created graphify-out/.graphify_chunk_03.json | — | ~8766 |
+| 16:59 | Session end: 3 writes across 3 files (.graphify_chunk_02.json, .graphify_chunk_00.json, .graphify_chunk_03.json) | 1 reads | ~12874 tok |
+
+## Session: 2026-06-09 17:00
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 17:04 | Created graphify-out/_relabel.py | — | ~1564 |
+| 17:05 | Session end: 1 writes across 1 files (_relabel.py) | 1 reads | ~1564 tok |
+| 17:07 | Session end: 1 writes across 1 files (_relabel.py) | 2 reads | ~7982 tok |
+| 17:09 | Session end: 1 writes across 1 files (_relabel.py) | 2 reads | ~7982 tok |
+| 17:11 | Session end: 1 writes across 1 files (_relabel.py) | 3 reads | ~19759 tok |
+| 17:13 | Session end: 1 writes across 1 files (_relabel.py) | 3 reads | ~19759 tok |
+| 17:14 | Session end: 1 writes across 1 files (_relabel.py) | 4 reads | ~19759 tok |
+| 17:15 | Session end: 1 writes across 1 files (_relabel.py) | 4 reads | ~19759 tok |
+| 17:17 | Session end: 1 writes across 1 files (_relabel.py) | 44 reads | ~53297 tok |
+| 17:17 | Session end: 1 writes across 1 files (_relabel.py) | 54 reads | ~61847 tok |
+| 17:18 | Created graphify-out/.graphify_chunk_09.json | — | ~2494 |
+| 17:18 | Session end: 2 writes across 2 files (_relabel.py, .graphify_chunk_09.json) | 54 reads | ~64341 tok |
+| 17:18 | Created graphify-out/.graphify_chunk_10.json | — | ~4070 |
+| 17:18 | Session end: 3 writes across 3 files (_relabel.py, .graphify_chunk_09.json, .graphify_chunk_10.json) | 54 reads | ~68411 tok |
+| 17:18 | Created graphify-out/.graphify_chunk_05.json | — | ~6944 |
+| 17:18 | Session end: 4 writes across 4 files (_relabel.py, .graphify_chunk_09.json, .graphify_chunk_10.json, .graphify_chunk_05.json) | 54 reads | ~75355 tok |
+| 17:18 | Created graphify-out/.graphify_chunk_07.json | — | ~5302 |
+| 17:19 | Created graphify-out/.graphify_chunk_04.json | — | ~11873 |
+| 17:19 | Created graphify-out/.graphify_chunk_11.json | — | ~3499 |
+| 17:19 | Session end: 7 writes across 7 files (_relabel.py, .graphify_chunk_09.json, .graphify_chunk_10.json, .graphify_chunk_05.json, .graphify_chunk_07.json) | 54 reads | ~96029 tok |
+| 17:19 | Session end: 7 writes across 7 files (_relabel.py, .graphify_chunk_09.json, .graphify_chunk_10.json, .graphify_chunk_05.json, .graphify_chunk_07.json) | 54 reads | ~96029 tok |
+| 17:19 | Session end: 7 writes across 7 files (_relabel.py, .graphify_chunk_09.json, .graphify_chunk_10.json, .graphify_chunk_05.json, .graphify_chunk_07.json) | 54 reads | ~96029 tok |
+| 17:20 | Created graphify-out/.graphify_chunk_03.json | — | ~13090 |
+| 17:20 | Session end: 8 writes across 8 files (_relabel.py, .graphify_chunk_09.json, .graphify_chunk_10.json, .graphify_chunk_05.json, .graphify_chunk_07.json) | 54 reads | ~109119 tok |
+| 17:23 | Created graphify-out/_relabel_directed.py | — | ~1032 |
+| 17:24 | Session end: 9 writes across 9 files (_relabel.py, .graphify_chunk_09.json, .graphify_chunk_10.json, .graphify_chunk_05.json, .graphify_chunk_07.json) | 54 reads | ~110151 tok |
+| 17:26 | Session end: 9 writes across 9 files (_relabel.py, .graphify_chunk_09.json, .graphify_chunk_10.json, .graphify_chunk_05.json, .graphify_chunk_07.json) | 54 reads | ~110151 tok |
+
+## Session: 2026-06-12 18:32
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 18:43 | Created ../../../../../tmp/f0x1-body.md | — | ~1272 |
+| 18:43 | Session end: 1 writes across 1 files (f0x1-body.md) | 1 reads | ~20580 tok |
+
+## Session: 2026-06-12 18:44
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-06-15 13:14
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-06-15 13:37
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 13:37 | Created ../../../.claude/plans/based-on-the-recent-tidy-brook.md | — | ~1055 |
+| 13:38 | Session end: 1 writes across 1 files (based-on-the-recent-tidy-brook.md) | 0 reads | ~1130 tok |
+
+## Session: 2026-06-15 13:38
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 13:39 | Created ../../../.claude/plans/based-on-the-recent-tingly-allen.md | — | ~1104 |
+| 13:39 | Session end: 1 writes across 1 files (based-on-the-recent-tingly-allen.md) | 0 reads | ~1183 tok |
+
+## Session: 2026-06-15 13:39
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-06-15 13:54
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+
+## Session: 2026-06-17 09:46
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 09:49 | Edited .gitignore | expanded (+25 lines) | ~152 |

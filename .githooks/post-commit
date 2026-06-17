@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Notify tldr daemon of changed files so indexes stay fresh.
+# The daemon auto-rebuilds after its dirty threshold (default: 20 files).
+if command -v tldr >/dev/null 2>&1; then
+  git diff --name-only HEAD~1 2>/dev/null | xargs -I{} tldr daemon notify {} --project .
+fi
