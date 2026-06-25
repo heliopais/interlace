@@ -27,7 +27,14 @@ jobs:
       - name: Lint
         run: uv run ruff check src tests
 
+      # mypy is configured for python_version = "3.13" (see [tool.mypy]) and
+      # type-checks against the numpy stubs installed in the active env. On the
+      # 3.10 matrix leg the resolved numpy (2.2.6) ships ndarray TypeVars
+      # without PEP 696 defaults, so bare `np.ndarray` trips disallow_any_generics.
+      # Run mypy once on 3.13 (numpy 2.4.3, stubs with defaults); runtime
+      # behaviour on older Pythons is covered by the test step below.
       - name: Type check
+        if: matrix.python-version == '3.13'
         run: uv run mypy
 
       - name: Test
