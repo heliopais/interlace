@@ -52,6 +52,7 @@ dev = [
     "pandas-stubs>=2.2,<3.0; python_version < '3.11'",
     "types-tqdm>=4.67.0",
     "polars>=1.0",
+    "pyarrow>=14.0",
     "narwhals>=1.0",
     "pytest-cov>=7.1.0",
     "nbconvert>=7.17.1",

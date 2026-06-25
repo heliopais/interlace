@@ -1003,7 +1003,7 @@ def fit_clmm(
 
     # --- Build X (with intercept for proper contrast coding, then drop it) ---
     rhs_formula = rhs.strip()
-    mm_full = formulaic.model_matrix("~ " + rhs_formula, nw_data)
+    mm_full = formulaic.model_matrix("~ " + rhs_formula, data)
     full_cols = list(mm_full.columns)
     # Drop the Intercept column — thresholds absorb it
     if "Intercept" in full_cols:
