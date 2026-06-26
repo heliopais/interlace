@@ -41,6 +41,9 @@ ogp_image = "https://heliopais.github.io/interlace/_static/interlace.png"
 # MyST-NB (notebook execution + Markdown support)
 myst_enable_extensions = ["colon_fence"]
 nb_execution_timeout = 300  # seconds; hlm_influence runs n refits
+# Fail the build on notebook execution errors instead of rendering a stale
+# traceback into the published site (regression guard for interlace-15fx).
+nb_execution_raise_on_error = True
 
 # autodoc
 autodoc_typehints = "description"
