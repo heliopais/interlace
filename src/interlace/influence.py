@@ -848,16 +848,18 @@ def lmer_influence_measures(
 
     Returns
     -------
-    dict with keys:
-        ``cooks``   — Cook's D (case-deletion or GLS-LOO depending on ``analytical``)
-        ``hat``     — leverage used for threshold flagging (``overall`` for
-                      single-RE, ``fixef`` for crossed multi-RE — mirrors R)
-        ``hat_overall``  — full leverage H1+H2
-        ``hat_fixef``    — fixed-effects leverage H1 only
-        ``dfbetas`` — DFBETAS matrix (analytical, same formula as R)
-        ``dffits``  — mdffits (case-deletion) or GLS-LOO MDFFITS
-        ``residuals``  — conditional residuals
-        ``sigma``      — residual standard deviation sqrt(scale)
+    dict
+        Dictionary of influence measures with keys:
+
+        - ``cooks`` — Cook's D (case-deletion or GLS-LOO depending on ``analytical``)
+        - ``hat`` — leverage used for threshold flagging (``overall`` for
+          single-RE, ``fixef`` for crossed multi-RE — mirrors R)
+        - ``hat_overall`` — full leverage H1+H2
+        - ``hat_fixef`` — fixed-effects leverage H1 only
+        - ``dfbetas`` — DFBETAS matrix (analytical, same formula as R)
+        - ``dffits`` — mdffits (case-deletion) or GLS-LOO MDFFITS
+        - ``residuals`` — conditional residuals
+        - ``sigma`` — residual standard deviation sqrt(scale)
 
     Notes
     -----

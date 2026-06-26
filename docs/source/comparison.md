@@ -64,6 +64,7 @@ that most often determine library choice.
 
 ## Notes on key rows
 
+(crossed-random-effects-statsmodels-workaround)=
 ### Crossed random effects — statsmodels workaround
 
 `statsmodels.MixedLM` accepts only a single grouping column. To approximate crossed

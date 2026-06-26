@@ -25,8 +25,7 @@ links to the full reference page for that function or class.
 | Function / class | Description |
 |---|---|
 | {doc}`result` | `CrossedLMEResult` — the object returned by `fit()` |
-| {doc}`summary` | `summary()` — formatted coefficient table |
-| {doc}`varcorr` | `VarCorr()` — variance component table |
+| {doc}`summary` | `summary()` — formatted coefficient table; `VarCorr()` — variance component table |
 | {doc}`predict` | `predict()` — fitted values and out-of-sample predictions |
 
 ---

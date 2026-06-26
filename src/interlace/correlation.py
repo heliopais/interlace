@@ -387,8 +387,10 @@ class CompoundSymmetry(CorStruct):
     ) -> tuple[np.ndarray, np.ndarray, sp.csc_matrix]:
         """Apply compound symmetry whitening to (y, X, Z).
 
-        For a group of size n_g with correlation rho:
+        For a group of size n_g with correlation rho::
+
             R^{-1/2} v  =  v / a  -  c * sum(v) * 1
+
         where a = sqrt(1 - rho), c = (1/a - 1/sqrt(1 + (n_g-1)*rho)) / n_g.
         """
         assert self._is_setup, "Call setup() before whiten_data()"
@@ -433,8 +435,10 @@ class CompoundSymmetry(CorStruct):
     ) -> float:
         """Compute log|R(rho)| for compound symmetry.
 
-        For a group of size n_g:
+        For a group of size n_g::
+
             log|R_g| = (n_g - 1) * log(1 - rho) + log(1 + (n_g - 1) * rho)
+
         Total is the sum over all groups.
         """
         assert self._is_setup, "Call setup() before log_det_R()"

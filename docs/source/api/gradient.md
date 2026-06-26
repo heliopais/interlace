@@ -61,4 +61,4 @@ crossed intercept models.
 ## See also
 
 - {doc}`fit` — high-level `interlace.fit()` API
-- {doc}`performance` — general performance guidance
+- {doc}`../performance` — general performance guidance

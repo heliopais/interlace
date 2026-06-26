@@ -40,6 +40,9 @@ ogp_image = "https://heliopais.github.io/interlace/_static/interlace.png"
 
 # MyST-NB (notebook execution + Markdown support)
 myst_enable_extensions = ["colon_fence"]
+# Auto-generate slug anchors for headings up to level 3 so that
+# ``{doc}``/``path#slug`` cross-references resolve to section ids.
+myst_heading_anchors = 3
 nb_execution_timeout = 300  # seconds; hlm_influence runs n refits
 # Fail the build on notebook execution errors instead of rendering a stale
 # traceback into the published site (regression guard for interlace-15fx).
@@ -55,6 +58,11 @@ napoleon_numpy_docstring = True
 napoleon_google_docstring = False
 napoleon_use_param = False
 napoleon_use_rtype = False
+# Render ``Attributes`` sections as ``:ivar:`` field lists rather than
+# standalone ``py:attribute`` directives.  This avoids duplicate object
+# descriptions when a documented attribute also appears via autodoc's
+# ``:members:`` (e.g. dataclass fields documented in the class docstring).
+napoleon_use_ivar = True
 
 # -- HTML output ---------------------------------------------------------------
 html_theme = "furo"

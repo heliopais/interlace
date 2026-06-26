@@ -98,15 +98,6 @@ class CrossedLMEResult:
         Predicted random intercepts (BLUPs) keyed by grouping-factor name.
         Each value is a ``pd.Series`` (intercept-only) or ``pd.DataFrame``
         (random slopes).  Always pandas regardless of input backend.
-
-    Notes
-    -----
-    **Backend behaviour**: interlace accepts any narwhals-compatible frame
-    (pandas, polars, …) as input.  Augmented and diagnostic frames
-    (:func:`~interlace.hlm_augment`, :func:`~interlace.hlm_resid`,
-    :func:`~interlace.hlm_influence`, :func:`~interlace.hlm_leverage`)
-    are returned in the same native type as the input.  Fit-result
-    attributes listed above are always pandas objects.
     variance_components : dict[str, Any]
         Estimated variance components keyed by grouping-factor name.
     theta : np.ndarray
@@ -141,6 +132,15 @@ class CrossedLMEResult:
     nparams : int
         Total number of free parameters (fixed effects ``p`` + variance
         components ``n_theta`` + residual variance ``1``).
+
+    Notes
+    -----
+    **Backend behaviour**: interlace accepts any narwhals-compatible frame
+    (pandas, polars, …) as input.  Augmented and diagnostic frames
+    (:func:`~interlace.hlm_augment`, :func:`~interlace.hlm_resid`,
+    :func:`~interlace.hlm_influence`, :func:`~interlace.hlm_leverage`)
+    are returned in the same native type as the input.  Fit-result
+    attributes listed above are always pandas objects.
 
     Examples
     --------
