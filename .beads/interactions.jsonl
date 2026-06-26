@@ -1,0 +1,1 @@
+{"id":"int-0646ddcd","kind":"field_change","created_at":"2026-06-26T12:24:07.840899Z","actor":"Helio Pais","issue_id":"interlace-x3iv","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Not a bug: uv.lock is uniform on pypi.org/simple; pyarrow matches all other entries. No pyarrow-specific CodeArtifact inconsistency exists. See notes."}}
