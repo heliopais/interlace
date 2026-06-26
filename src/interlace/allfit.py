@@ -5,6 +5,29 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+# Tolerances for flagging optimizer disagreement.
+_LLF_TOL = 0.001  # absolute |Δllf|
+_THETA_TOL = 0.01  # relative Δtheta (1 %)
+
+
+def _flag_possible_issue(
+    llf_diffs: dict[str, float],
+    theta_diffs: dict[str, float],
+    llf_tol: float = _LLF_TOL,
+    theta_tol: float = _THETA_TOL,
+) -> bool:
+    """Return True if any optimizer pair disagrees beyond tolerance.
+
+    A disagreement is flagged when a pairwise absolute log-likelihood
+    difference exceeds ``llf_tol`` or a pairwise relative theta difference
+    exceeds ``theta_tol``. Comparisons are strict (``>``), so values exactly
+    at the tolerance are not flagged. Empty diff dicts (e.g. a single
+    optimizer, hence no pairs) never flag.
+    """
+    return any(abs(v) > llf_tol for v in llf_diffs.values()) or any(
+        v > theta_tol for v in theta_diffs.values()
+    )
+
 
 @dataclass
 class AllFitResult:
@@ -176,11 +199,7 @@ def allFit(
             theta_diffs[key] = rel_diff
 
     # Flag if any pair disagrees beyond tolerance.
-    llf_threshold = 0.001
-    theta_threshold = 0.01  # 1 %
-    possible_issue = any(abs(v) > llf_threshold for v in llf_diffs.values()) or any(
-        v > theta_threshold for v in theta_diffs.values()
-    )
+    possible_issue = _flag_possible_issue(llf_diffs, theta_diffs)
 
     return AllFitResult(
         results=results,

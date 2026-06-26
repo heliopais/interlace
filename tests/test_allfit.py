@@ -29,23 +29,6 @@ def simple_data() -> pd.DataFrame:
     return pd.DataFrame({"y": y, "x": x, "subject": subjects})
 
 
-@pytest.fixture
-def flat_likelihood_data() -> pd.DataFrame:
-    """One observation per group — random intercept not identifiable from residual."""
-    # Seed chosen so optimizers reliably disagree on theta by >1% (the
-    # possible_issue threshold).  With 1 obs per group the likelihood is
-    # genuinely flat near the boundary, but the magnitude of optimizer
-    # disagreement is seed-dependent.  After interlace-72oc landed the dense
-    # kernel for small q, the previous seed=5 (5% disagreement on sparse)
-    # converged tightly to 0.6% on dense.  seed=27 lands at ~7% on dense.
-    rng = np.random.default_rng(27)
-    n_groups = 20
-    groups = np.arange(n_groups)
-    x = rng.normal(size=n_groups)
-    y = 1.0 + 0.3 * x + rng.normal(scale=0.1, size=n_groups)
-    return pd.DataFrame({"y": y, "x": x, "group": groups})
-
-
 # ---------------------------------------------------------------------------
 # Test 1: allFit() returns results for all available optimizers without error
 # ---------------------------------------------------------------------------
@@ -151,17 +134,56 @@ def test_allfit_summary_no_flag_on_agreement(simple_data: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_allfit_flat_likelihood_triggers_possible_issue(
-    flat_likelihood_data: pd.DataFrame,
-) -> None:
-    """One obs per group → variance near-unidentified → possible_issue=True."""
-    result = allFit("y ~ x", flat_likelihood_data, groups="group")
-    # The result should flag a possible issue (optimizers disagree on theta)
-    assert result.possible_issue, (
-        "Expected possible_issue=True for near-unidentified model; "
-        f"got possible_issue={result.possible_issue}, "
-        f"llf_diffs={result._llf_diffs}, theta_diffs={result._theta_diffs}"
+def test_flag_possible_issue_clean_when_diffs_below_tolerance() -> None:
+    """No flag when every pairwise diff is within tolerance."""
+    from interlace.allfit import _flag_possible_issue
+
+    assert not _flag_possible_issue(
+        llf_diffs={"a_vs_b": 1e-4, "a_vs_c": -5e-4},
+        theta_diffs={"a_vs_b": 5e-3, "a_vs_c": 9e-3},
     )
+
+
+def test_flag_possible_issue_on_llf_disagreement() -> None:
+    """Flag when any pairwise |Δllf| exceeds the LLF tolerance (1e-3)."""
+    from interlace.allfit import _flag_possible_issue
+
+    assert _flag_possible_issue(
+        llf_diffs={"a_vs_b": 2e-3},  # > 1e-3
+        theta_diffs={"a_vs_b": 0.0},
+    )
+    # Sign must not matter — it's an absolute comparison.
+    assert _flag_possible_issue(
+        llf_diffs={"a_vs_b": -2e-3},
+        theta_diffs={"a_vs_b": 0.0},
+    )
+
+
+def test_flag_possible_issue_on_theta_disagreement() -> None:
+    """Flag when any pairwise relative Δtheta exceeds the theta tolerance (1 %)."""
+    from interlace.allfit import _flag_possible_issue
+
+    assert _flag_possible_issue(
+        llf_diffs={"a_vs_b": 0.0},
+        theta_diffs={"a_vs_b": 0.02},  # 2 % > 1 %
+    )
+
+
+def test_flag_possible_issue_at_threshold_boundary() -> None:
+    """Exactly at tolerance is not a disagreement (strict >)."""
+    from interlace.allfit import _flag_possible_issue
+
+    assert not _flag_possible_issue(
+        llf_diffs={"a_vs_b": 1e-3},  # == tol, not >
+        theta_diffs={"a_vs_b": 0.01},  # == tol, not >
+    )
+
+
+def test_flag_possible_issue_empty_diffs() -> None:
+    """A single optimizer (no pairs) cannot disagree → no flag."""
+    from interlace.allfit import _flag_possible_issue
+
+    assert not _flag_possible_issue(llf_diffs={}, theta_diffs={})
 
 
 def test_allfit_possible_issue_is_bool(simple_data: pd.DataFrame) -> None:
